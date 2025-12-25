@@ -1,5 +1,5 @@
 app_name = "trustbit_school_book_seller"
-app_title = "Trustbit School Book Seller"
+app_title = "Trustbit School Book"
 app_publisher = "Trustbit"
 app_description = "Advanced Item Creation System for School Book Shops"
 app_email = "info@trustbit.com"
