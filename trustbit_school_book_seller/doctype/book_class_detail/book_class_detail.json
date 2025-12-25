@@ -1,0 +1,128 @@
+{
+    "actions": [],
+    "creation": "2024-01-01 00:00:00.000000",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "class",
+        "rate",
+        "valuation_rate",
+        "isbn_barcode",
+        "opening_stock",
+        "column_break_status",
+        "generated_item_code",
+        "item_link",
+        "creation_status",
+        "item_created",
+        "stock_entry_created",
+        "creation_timestamp",
+        "remarks"
+    ],
+    "fields": [
+        {
+            "fieldname": "class",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Class",
+            "options": "Class Master",
+            "reqd": 1
+        },
+        {
+            "fieldname": "rate",
+            "fieldtype": "Currency",
+            "in_list_view": 1,
+            "label": "Selling Rate",
+            "reqd": 1,
+            "description": "Selling price of the book"
+        },
+        {
+            "fieldname": "valuation_rate",
+            "fieldtype": "Currency",
+            "in_list_view": 1,
+            "label": "Valuation Rate",
+            "reqd": 1,
+            "description": "Purchase/Cost price of the book"
+        },
+        {
+            "fieldname": "isbn_barcode",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "ISBN/Barcode",
+            "reqd": 1,
+            "unique": 1
+        },
+        {
+            "fieldname": "opening_stock",
+            "fieldtype": "Float",
+            "in_list_view": 1,
+            "label": "Opening Stock",
+            "default": "0"
+        },
+        {
+            "fieldname": "column_break_status",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "generated_item_code",
+            "fieldtype": "Data",
+            "label": "Item Code",
+            "read_only": 1
+        },
+        {
+            "fieldname": "item_link",
+            "fieldtype": "Link",
+            "label": "Item",
+            "options": "Item",
+            "read_only": 1
+        },
+        {
+            "fieldname": "creation_status",
+            "fieldtype": "Select",
+            "label": "Status",
+            "options": "\nPending\nCreating\nCreated\nFailed",
+            "default": "Pending",
+            "read_only": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "item_created",
+            "fieldtype": "Check",
+            "label": "Item Created",
+            "read_only": 1,
+            "hidden": 1
+        },
+        {
+            "fieldname": "stock_entry_created",
+            "fieldtype": "Check",
+            "label": "Stock Entry Created",
+            "read_only": 1,
+            "hidden": 1
+        },
+        {
+            "fieldname": "creation_timestamp",
+            "fieldtype": "Datetime",
+            "label": "Created At",
+            "read_only": 1
+        },
+        {
+            "fieldname": "remarks",
+            "fieldtype": "Small Text",
+            "label": "Remarks",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "istable": 1,
+    "links": [],
+    "modified": "2024-01-01 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Trustbit School Book Seller",
+    "name": "Book Class Detail",
+    "owner": "Administrator",
+    "permissions": [],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
+}

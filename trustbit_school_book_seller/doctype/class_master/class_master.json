@@ -1,0 +1,98 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "field:class_name",
+    "creation": "2024-01-01 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "class_name",
+        "short_code",
+        "display_order",
+        "disabled"
+    ],
+    "fields": [
+        {
+            "fieldname": "class_name",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Class Name",
+            "reqd": 1,
+            "unique": 1
+        },
+        {
+            "fieldname": "short_code",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Short Code",
+            "reqd": 1,
+            "unique": 1,
+            "description": "Short code for reference (e.g., 01, 02, NUR)"
+        },
+        {
+            "fieldname": "display_order",
+            "fieldtype": "Int",
+            "in_list_view": 1,
+            "label": "Display Order",
+            "description": "Order for sorting in dropdowns"
+        },
+        {
+            "fieldname": "disabled",
+            "fieldtype": "Check",
+            "label": "Disabled",
+            "default": 0
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "links": [],
+    "modified": "2024-01-01 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Trustbit School Book Seller",
+    "name": "Class Master",
+    "naming_rule": "By fieldname",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Stock Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Stock User",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "quick_entry": 1,
+    "search_fields": "class_name, short_code",
+    "sort_field": "display_order",
+    "sort_order": "ASC",
+    "states": [],
+    "title_field": "class_name",
+    "track_changes": 1
+}

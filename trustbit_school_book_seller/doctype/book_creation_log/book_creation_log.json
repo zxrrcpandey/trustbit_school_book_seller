@@ -1,0 +1,95 @@
+{
+    "actions": [],
+    "creation": "2024-01-01 00:00:00.000000",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "class",
+        "item_code",
+        "item_creation_status",
+        "stock_entry_status",
+        "stock_entry_link",
+        "column_break_log",
+        "price_list_status",
+        "timestamp",
+        "remarks"
+    ],
+    "fields": [
+        {
+            "fieldname": "class",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Class",
+            "options": "Class Master",
+            "read_only": 1
+        },
+        {
+            "fieldname": "item_code",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Item Code",
+            "read_only": 1
+        },
+        {
+            "fieldname": "item_creation_status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Item Status",
+            "options": "\nPending\nCreated\nFailed",
+            "read_only": 1
+        },
+        {
+            "fieldname": "stock_entry_status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Stock Entry",
+            "options": "\nPending\nCreated\nFailed\nSkipped",
+            "read_only": 1
+        },
+        {
+            "fieldname": "stock_entry_link",
+            "fieldtype": "Link",
+            "label": "Stock Entry",
+            "options": "Stock Entry",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_log",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "price_list_status",
+            "fieldtype": "Select",
+            "label": "Price List",
+            "options": "\nPending\nCreated\nFailed",
+            "read_only": 1
+        },
+        {
+            "fieldname": "timestamp",
+            "fieldtype": "Datetime",
+            "in_list_view": 1,
+            "label": "Timestamp",
+            "read_only": 1
+        },
+        {
+            "fieldname": "remarks",
+            "fieldtype": "Small Text",
+            "label": "Remarks",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "istable": 1,
+    "links": [],
+    "modified": "2024-01-01 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Trustbit School Book Seller",
+    "name": "Book Creation Log",
+    "owner": "Administrator",
+    "permissions": [],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
+}

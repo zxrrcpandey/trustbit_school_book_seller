@@ -1,0 +1,122 @@
+[
+    {
+        "doctype": "Subject",
+        "subject_name": "Mathematics",
+        "short_code": "MATH",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "English",
+        "short_code": "ENG",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Hindi",
+        "short_code": "HIN",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Science",
+        "short_code": "SCI",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Social Science",
+        "short_code": "SST",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Physics",
+        "short_code": "PHY",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Chemistry",
+        "short_code": "CHEM",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Biology",
+        "short_code": "BIO",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Computer Science",
+        "short_code": "CS",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Economics",
+        "short_code": "ECO",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Accountancy",
+        "short_code": "ACC",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Business Studies",
+        "short_code": "BST",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "History",
+        "short_code": "HIST",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Geography",
+        "short_code": "GEO",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Political Science",
+        "short_code": "POL",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Sanskrit",
+        "short_code": "SAN",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Environmental Studies",
+        "short_code": "EVS",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "General Knowledge",
+        "short_code": "GK",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Art & Craft",
+        "short_code": "ART",
+        "disabled": 0
+    },
+    {
+        "doctype": "Subject",
+        "subject_name": "Physical Education",
+        "short_code": "PE",
+        "disabled": 0
+    }
+]
