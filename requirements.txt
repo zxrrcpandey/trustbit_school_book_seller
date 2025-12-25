@@ -1,2 +1,1 @@
-# ERPNext dependency
-erpnext
+# No additional requirements - uses frappe/erpnext dependencies

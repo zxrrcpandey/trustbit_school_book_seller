@@ -1,107 +1,17 @@
 [
-    {
-        "doctype": "Class Master",
-        "class_name": "Nursery",
-        "short_code": "NUR",
-        "display_order": 1,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "LKG",
-        "short_code": "LKG",
-        "display_order": 2,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "UKG",
-        "short_code": "UKG",
-        "display_order": 3,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 1",
-        "short_code": "01",
-        "display_order": 4,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 2",
-        "short_code": "02",
-        "display_order": 5,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 3",
-        "short_code": "03",
-        "display_order": 6,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 4",
-        "short_code": "04",
-        "display_order": 7,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 5",
-        "short_code": "05",
-        "display_order": 8,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 6",
-        "short_code": "06",
-        "display_order": 9,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 7",
-        "short_code": "07",
-        "display_order": 10,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 8",
-        "short_code": "08",
-        "display_order": 11,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 9",
-        "short_code": "09",
-        "display_order": 12,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 10",
-        "short_code": "10",
-        "display_order": 13,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 11",
-        "short_code": "11",
-        "display_order": 14,
-        "disabled": 0
-    },
-    {
-        "doctype": "Class Master",
-        "class_name": "Class 12",
-        "short_code": "12",
-        "display_order": 15,
-        "disabled": 0
-    }
+    {"doctype": "Class Master", "name": "Nursery", "class_name": "Nursery", "short_code": "NUR", "sort_order": 1, "disabled": 0},
+    {"doctype": "Class Master", "name": "LKG", "class_name": "LKG", "short_code": "LKG", "sort_order": 2, "disabled": 0},
+    {"doctype": "Class Master", "name": "UKG", "class_name": "UKG", "short_code": "UKG", "sort_order": 3, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 1", "class_name": "Class 1", "short_code": "C1", "sort_order": 4, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 2", "class_name": "Class 2", "short_code": "C2", "sort_order": 5, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 3", "class_name": "Class 3", "short_code": "C3", "sort_order": 6, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 4", "class_name": "Class 4", "short_code": "C4", "sort_order": 7, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 5", "class_name": "Class 5", "short_code": "C5", "sort_order": 8, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 6", "class_name": "Class 6", "short_code": "C6", "sort_order": 9, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 7", "class_name": "Class 7", "short_code": "C7", "sort_order": 10, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 8", "class_name": "Class 8", "short_code": "C8", "sort_order": 11, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 9", "class_name": "Class 9", "short_code": "C9", "sort_order": 12, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 10", "class_name": "Class 10", "short_code": "C10", "sort_order": 13, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 11", "class_name": "Class 11", "short_code": "C11", "sort_order": 14, "disabled": 0},
+    {"doctype": "Class Master", "name": "Class 12", "class_name": "Class 12", "short_code": "C12", "sort_order": 15, "disabled": 0}
 ]

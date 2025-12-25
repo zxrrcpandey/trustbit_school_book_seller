@@ -1,9 +1,9 @@
 [project]
 name = "trustbit_school_book_seller"
 authors = [
-    { name = "Trustbit", email = "info@trustbit.com"}
+    { name = "Trustbit", email = "info@trustbit.in"}
 ]
-description = "Advanced Item Creation System for School Book Shops"
+description = "School Book Seller App for ERPNext - Bulk Book Item Creation"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
@@ -12,6 +12,6 @@ dynamic = ["version"]
 requires = ["flit_core >=3.4,<4"]
 build-backend = "flit_core.buildapi"
 
-[tool.bench.frappe-dependencies]
-erpnext = ">=14.0.0"
-frappe = ">=14.0.0"
+[tool.bench.dev-dependencies]
+frappe = "https://github.com/frappe/frappe"
+erpnext = "https://github.com/frappe/erpnext"

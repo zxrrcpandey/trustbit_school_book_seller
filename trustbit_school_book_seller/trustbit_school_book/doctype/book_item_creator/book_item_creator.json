@@ -1,0 +1,314 @@
+{
+    "actions": [],
+    "autoname": "naming_series:",
+    "creation": "2024-12-25 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "naming_series",
+        "publication",
+        "subject",
+        "book_name",
+        "author",
+        "column_break_1",
+        "edition",
+        "publication_year",
+        "uom",
+        "section_break_discount",
+        "sales_discount_percent",
+        "purchase_discount_percent",
+        "column_break_discount",
+        "selling_price_list",
+        "buying_price_list",
+        "section_break_config",
+        "item_group",
+        "hsn_sac_code",
+        "column_break_config",
+        "default_warehouse",
+        "section_break_class",
+        "class_details",
+        "section_break_summary",
+        "status",
+        "items_created",
+        "column_break_summary",
+        "total_items_to_create",
+        "total_opening_stock",
+        "total_stock_value",
+        "section_break_log",
+        "creation_log",
+        "amended_from"
+    ],
+    "fields": [
+        {
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Series",
+            "options": "BOOK-ENTRY-.#####",
+            "reqd": 1
+        },
+        {
+            "fieldname": "publication",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Publication",
+            "options": "Publication",
+            "reqd": 1
+        },
+        {
+            "fieldname": "subject",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Subject",
+            "options": "Subject",
+            "reqd": 1
+        },
+        {
+            "fieldname": "book_name",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Book Name",
+            "reqd": 1
+        },
+        {
+            "fieldname": "author",
+            "fieldtype": "Data",
+            "label": "Author"
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "edition",
+            "fieldtype": "Data",
+            "label": "Edition"
+        },
+        {
+            "fieldname": "publication_year",
+            "fieldtype": "Data",
+            "label": "Publication Year"
+        },
+        {
+            "default": "Nos",
+            "fieldname": "uom",
+            "fieldtype": "Link",
+            "label": "UOM",
+            "options": "UOM",
+            "reqd": 1
+        },
+        {
+            "fieldname": "section_break_discount",
+            "fieldtype": "Section Break",
+            "label": "Discount & Pricing"
+        },
+        {
+            "default": "0",
+            "fieldname": "sales_discount_percent",
+            "fieldtype": "Percent",
+            "label": "Sales Discount %"
+        },
+        {
+            "default": "0",
+            "fieldname": "purchase_discount_percent",
+            "fieldtype": "Percent",
+            "label": "Purchase Discount %"
+        },
+        {
+            "fieldname": "column_break_discount",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "selling_price_list",
+            "fieldtype": "Link",
+            "label": "Selling Price List",
+            "options": "Price List",
+            "reqd": 1
+        },
+        {
+            "fieldname": "buying_price_list",
+            "fieldtype": "Link",
+            "label": "Buying Price List",
+            "options": "Price List",
+            "reqd": 1
+        },
+        {
+            "fieldname": "section_break_config",
+            "fieldtype": "Section Break",
+            "label": "Item Configuration"
+        },
+        {
+            "fieldname": "item_group",
+            "fieldtype": "Link",
+            "label": "Item Group",
+            "options": "Item Group",
+            "reqd": 1
+        },
+        {
+            "fieldname": "hsn_sac_code",
+            "fieldtype": "Data",
+            "label": "HSN/SAC Code"
+        },
+        {
+            "fieldname": "column_break_config",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "default_warehouse",
+            "fieldtype": "Link",
+            "label": "Default Warehouse",
+            "options": "Warehouse",
+            "reqd": 1
+        },
+        {
+            "fieldname": "section_break_class",
+            "fieldtype": "Section Break",
+            "label": "Class-wise Book Details"
+        },
+        {
+            "fieldname": "class_details",
+            "fieldtype": "Table",
+            "label": "Class Details",
+            "options": "Book Class Detail",
+            "reqd": 1
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "section_break_summary",
+            "fieldtype": "Section Break",
+            "label": "Summary"
+        },
+        {
+            "default": "Draft",
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Status",
+            "options": "Draft\nIn Progress\nCompleted\nPartially Created\nFailed\nCancelled",
+            "read_only": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "items_created",
+            "fieldtype": "Int",
+            "label": "Items Created",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_summary",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "fieldname": "total_items_to_create",
+            "fieldtype": "Int",
+            "label": "Total Items to Create",
+            "read_only": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "total_opening_stock",
+            "fieldtype": "Float",
+            "label": "Total Opening Stock",
+            "read_only": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "total_stock_value",
+            "fieldtype": "Currency",
+            "label": "Total Stock Value",
+            "read_only": 1
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "section_break_log",
+            "fieldtype": "Section Break",
+            "label": "Creation Log"
+        },
+        {
+            "fieldname": "creation_log",
+            "fieldtype": "Table",
+            "label": "Creation Log",
+            "options": "Book Creation Log",
+            "read_only": 1
+        },
+        {
+            "fieldname": "amended_from",
+            "fieldtype": "Link",
+            "label": "Amended From",
+            "no_copy": 1,
+            "options": "Book Item Creator",
+            "print_hide": 1,
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "is_submittable": 1,
+    "links": [
+        {
+            "link_doctype": "Item",
+            "link_fieldname": "custom_book_item_creator",
+            "group": "Created Items"
+        }
+    ],
+    "modified": "2024-12-25 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Trustbit School Book",
+    "name": "Book Item Creator",
+    "naming_rule": "By \"Naming Series\" field",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "amend": 1,
+            "cancel": 1,
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "submit": 1,
+            "write": 1
+        },
+        {
+            "amend": 1,
+            "cancel": 1,
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Stock Manager",
+            "share": 1,
+            "submit": 1,
+            "write": 1
+        },
+        {
+            "amend": 1,
+            "cancel": 1,
+            "create": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Stock User",
+            "share": 1,
+            "submit": 1,
+            "write": 1
+        }
+    ],
+    "search_fields": "publication, subject, book_name",
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "title_field": "book_name",
+    "track_changes": 1
+}
