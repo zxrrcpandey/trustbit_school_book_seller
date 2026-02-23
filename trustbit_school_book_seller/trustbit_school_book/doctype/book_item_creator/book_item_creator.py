@@ -306,18 +306,20 @@ def create_items_background(docname):
 @frappe.whitelist()
 def get_classes_for_quick_add(class_type="all"):
     """Get classes for quick add button"""
-    filters = {"disabled": 0}
+    filters = [["disabled", "=", 0]]
 
-    if class_type == "pre_primary":
-        filters["sort_order"] = ["between", [1, 3]]
-    elif class_type == "primary":
-        filters["sort_order"] = ["between", [4, 8]]
-    elif class_type == "middle":
-        filters["sort_order"] = ["between", [9, 11]]
-    elif class_type == "high":
-        filters["sort_order"] = ["between", [12, 13]]
-    elif class_type == "hr_sec":
-        filters["sort_order"] = ["between", [14, 15]]
+    range_map = {
+        "pre_primary": (1, 3),
+        "primary": (4, 8),
+        "middle": (9, 11),
+        "high": (12, 13),
+        "hr_sec": (14, 15),
+    }
+
+    if class_type in range_map:
+        low, high = range_map[class_type]
+        filters.append(["sort_order", ">=", low])
+        filters.append(["sort_order", "<=", high])
 
     classes = frappe.get_all(
         "Class Master",
