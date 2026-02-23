@@ -45,6 +45,17 @@ jobs:
             echo "=== Running migrate ==="
             su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE migrate"
 
+            echo "=== Cleaning stale app references ==="
+            cd "$BENCH_PATH"
+            for stale_app in apps/*_backup_*; do
+              if [ -d "$stale_app" ]; then
+                stale_name=$(basename "$stale_app")
+                echo "Removing stale app: $stale_name"
+                rm -rf "$stale_app"
+                su - frappe_user -c "cd $BENCH_PATH && sed -i '/$stale_name/d' sites/apps.txt" 2>/dev/null || true
+              fi
+            done
+
             echo "=== Building assets ==="
             su - frappe_user -c "cd $BENCH_PATH && bench build --app $APP"
 
