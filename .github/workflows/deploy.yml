@@ -1,0 +1,51 @@
+name: Deploy to Production (kgs.trustbit.cloud)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            BENCH_PATH="/home/frappe_user/frappe-bench"
+            SITE="kgs.trustbit.cloud"
+            APP="trustbit_school_book_seller"
+
+            echo "=== Taking backup ==="
+            cd "$BENCH_PATH"
+            su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE backup"
+
+            echo "=== Pulling latest code ==="
+            cd "$BENCH_PATH/apps/$APP"
+            git config --global --add safe.directory "$BENCH_PATH/apps/$APP"
+            git pull origin main
+
+            echo "=== Fixing permissions ==="
+            chown -R frappe_user:frappe_user "$BENCH_PATH/apps/$APP"
+            chmod 755 "$BENCH_PATH/apps/$APP"
+            chmod -R o+rX "$BENCH_PATH/apps/$APP"
+
+            echo "=== Running migrate ==="
+            su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE migrate"
+
+            echo "=== Building assets ==="
+            su - frappe_user -c "cd $BENCH_PATH && bench build --app $APP"
+
+            echo "=== Clearing cache ==="
+            su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE clear-cache"
+
+            echo "=== Restarting services ==="
+            supervisorctl restart all 2>/dev/null || su - frappe_user -c "cd $BENCH_PATH && bench restart"
+
+            echo "=== Deployment complete! ==="
