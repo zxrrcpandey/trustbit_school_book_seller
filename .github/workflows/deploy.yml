@@ -26,10 +26,16 @@ jobs:
             cd "$BENCH_PATH"
             su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE backup"
 
-            echo "=== Pulling latest code ==="
-            cd "$BENCH_PATH/apps/$APP"
-            git config --global --add safe.directory "$BENCH_PATH/apps/$APP"
-            git pull origin main
+            echo "=== Installing/Updating app ==="
+            if [ ! -d "$BENCH_PATH/apps/$APP" ]; then
+              echo "App not found, installing for the first time..."
+              su - frappe_user -c "cd $BENCH_PATH && bench get-app https://github.com/zxrrcpandey/trustbit_school_book_seller.git"
+              su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE install-app $APP"
+            else
+              cd "$BENCH_PATH/apps/$APP"
+              git config --global --add safe.directory "$BENCH_PATH/apps/$APP"
+              git pull origin main
+            fi
 
             echo "=== Fixing permissions ==="
             chown -R frappe_user:frappe_user "$BENCH_PATH/apps/$APP"
