@@ -34,8 +34,6 @@
         "total_items_to_create",
         "total_opening_stock",
         "total_stock_value",
-        "section_break_log",
-        "creation_log",
         "amended_from"
     ],
     "fields": [
@@ -222,19 +220,6 @@
             "read_only": 1
         },
         {
-            "collapsible": 1,
-            "fieldname": "section_break_log",
-            "fieldtype": "Section Break",
-            "label": "Creation Log"
-        },
-        {
-            "fieldname": "creation_log",
-            "fieldtype": "Table",
-            "label": "Creation Log",
-            "options": "Book Creation Log",
-            "read_only": 1
-        },
-        {
             "fieldname": "amended_from",
             "fieldtype": "Link",
             "label": "Amended From",
@@ -294,6 +279,7 @@
             "amend": 1,
             "cancel": 1,
             "create": 1,
+            "delete": 1,
             "email": 1,
             "export": 1,
             "print": 1,

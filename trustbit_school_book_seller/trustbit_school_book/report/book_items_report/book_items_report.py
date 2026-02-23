@@ -33,21 +33,29 @@ def get_columns():
 
 
 def get_data(filters):
-    conditions = "WHERE i.custom_book_item_creator IS NOT NULL"
-    
+    conditions = ["i.custom_book_item_creator IS NOT NULL"]
+    values = {}
+
     if filters.get("publication"):
-        conditions += f" AND i.custom_publication = '{filters.get('publication')}'"
+        conditions.append("i.custom_publication = %(publication)s")
+        values["publication"] = filters.get("publication")
     if filters.get("subject"):
-        conditions += f" AND i.custom_subject = '{filters.get('subject')}'"
+        conditions.append("i.custom_subject = %(subject)s")
+        values["subject"] = filters.get("subject")
     if filters.get("class"):
-        conditions += f" AND i.custom_class = '{filters.get('class')}'"
+        conditions.append("i.custom_class = %(class)s")
+        values["class"] = filters.get("class")
     if filters.get("from_date"):
-        conditions += f" AND i.creation >= '{filters.get('from_date')}'"
+        conditions.append("i.creation >= %(from_date)s")
+        values["from_date"] = filters.get("from_date")
     if filters.get("to_date"):
-        conditions += f" AND i.creation <= '{filters.get('to_date')}'"
-    
-    data = frappe.db.sql(f"""
-        SELECT 
+        conditions.append("i.creation <= %(to_date)s")
+        values["to_date"] = filters.get("to_date")
+
+    where_clause = " AND ".join(conditions)
+
+    data = frappe.db.sql("""
+        SELECT
             i.name as item_code,
             i.item_name,
             i.custom_publication as publication,
@@ -59,14 +67,14 @@ def get_data(filters):
             i.creation,
             COALESCE(bin.actual_qty, 0) as actual_qty,
             COALESCE(bin.stock_value, 0) as stock_value,
-            (SELECT price_list_rate FROM `tabItem Price` 
+            (SELECT price_list_rate FROM `tabItem Price`
              WHERE item_code = i.name AND selling = 1 LIMIT 1) as selling_rate
         FROM `tabItem` i
         LEFT JOIN `tabBin` bin ON bin.item_code = i.name
-        {conditions}
+        WHERE {where_clause}
         ORDER BY i.creation DESC
-    """, as_dict=True)
-    
+    """.format(where_clause=where_clause), values, as_dict=True)
+
     return data
 
 

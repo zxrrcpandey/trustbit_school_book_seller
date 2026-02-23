@@ -317,10 +317,7 @@ function submit_with_progress(frm) {
             frappe.throw(__('Valuation Rate must be greater than 0 in Row {0}', [row.idx]));
             return;
         }
-        if (!row.isbn_barcode) {
-            frappe.throw(__('ISBN/Barcode is mandatory in Row {0}', [row.idx]));
-            return;
-        }
+        // ISBN/Barcode is optional
     }
     
     let total = frm.doc.class_details.length;

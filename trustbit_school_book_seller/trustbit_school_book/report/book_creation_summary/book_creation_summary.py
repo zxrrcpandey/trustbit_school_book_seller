@@ -33,21 +33,29 @@ def get_columns():
 
 
 def get_data(filters):
-    conditions = "WHERE docstatus = 1"
-    
+    conditions = ["docstatus = 1"]
+    values = {}
+
     if filters.get("publication"):
-        conditions += f" AND publication = '{filters.get('publication')}'"
+        conditions.append("publication = %(publication)s")
+        values["publication"] = filters.get("publication")
     if filters.get("subject"):
-        conditions += f" AND subject = '{filters.get('subject')}'"
+        conditions.append("subject = %(subject)s")
+        values["subject"] = filters.get("subject")
     if filters.get("status"):
-        conditions += f" AND status = '{filters.get('status')}'"
+        conditions.append("status = %(status)s")
+        values["status"] = filters.get("status")
     if filters.get("from_date"):
-        conditions += f" AND creation >= '{filters.get('from_date')}'"
+        conditions.append("creation >= %(from_date)s")
+        values["from_date"] = filters.get("from_date")
     if filters.get("to_date"):
-        conditions += f" AND creation <= '{filters.get('to_date')}'"
-    
-    data = frappe.db.sql(f"""
-        SELECT 
+        conditions.append("creation <= %(to_date)s")
+        values["to_date"] = filters.get("to_date")
+
+    where_clause = " AND ".join(conditions)
+
+    data = frappe.db.sql("""
+        SELECT
             name,
             publication,
             book_name,
@@ -61,10 +69,10 @@ def get_data(filters):
             owner,
             creation
         FROM `tabBook Item Creator`
-        {conditions}
+        WHERE {where_clause}
         ORDER BY creation DESC
-    """, as_dict=True)
-    
+    """.format(where_clause=where_clause), values, as_dict=True)
+
     return data
 
 

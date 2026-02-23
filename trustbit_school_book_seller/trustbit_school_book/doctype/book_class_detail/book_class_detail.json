@@ -47,8 +47,7 @@
             "fieldname": "isbn_barcode",
             "fieldtype": "Data",
             "in_list_view": 1,
-            "label": "ISBN/Barcode",
-            "reqd": 1
+            "label": "ISBN/Barcode"
         },
         {
             "default": "0",
