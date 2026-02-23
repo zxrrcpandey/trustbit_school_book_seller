@@ -22,8 +22,18 @@ jobs:
             SITE="kgs.trustbit.cloud"
             APP="trustbit_school_book_seller"
 
-            echo "=== Taking backup ==="
+            echo "=== Cleaning stale app references ==="
             cd "$BENCH_PATH"
+            for stale_app in apps/*_backup_*; do
+              if [ -d "$stale_app" ]; then
+                stale_name=$(basename "$stale_app")
+                echo "Removing stale app: $stale_name"
+                rm -rf "$stale_app"
+                sed -i "/$stale_name/d" sites/apps.txt 2>/dev/null || true
+              fi
+            done
+
+            echo "=== Taking backup ==="
             su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE backup"
 
             echo "=== Installing/Updating app ==="
@@ -34,7 +44,10 @@ jobs:
             else
               cd "$BENCH_PATH/apps/$APP"
               git config --global --add safe.directory "$BENCH_PATH/apps/$APP"
-              git pull origin main
+              # bench get-app uses 'upstream' as remote name
+              REMOTE=$(git remote | head -1)
+              git fetch "$REMOTE" main
+              git reset --hard "$REMOTE/main"
             fi
 
             echo "=== Fixing permissions ==="
@@ -44,17 +57,6 @@ jobs:
 
             echo "=== Running migrate ==="
             su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE migrate"
-
-            echo "=== Cleaning stale app references ==="
-            cd "$BENCH_PATH"
-            for stale_app in apps/*_backup_*; do
-              if [ -d "$stale_app" ]; then
-                stale_name=$(basename "$stale_app")
-                echo "Removing stale app: $stale_name"
-                rm -rf "$stale_app"
-                su - frappe_user -c "cd $BENCH_PATH && sed -i '/$stale_name/d' sites/apps.txt" 2>/dev/null || true
-              fi
-            done
 
             echo "=== Building assets ==="
             su - frappe_user -c "cd $BENCH_PATH && bench build --app $APP"
