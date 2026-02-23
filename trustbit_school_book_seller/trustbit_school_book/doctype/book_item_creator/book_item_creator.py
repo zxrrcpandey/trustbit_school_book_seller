@@ -308,12 +308,16 @@ def get_classes_for_quick_add(class_type="all"):
     """Get classes for quick add button"""
     filters = {"disabled": 0}
 
-    if class_type == "primary":
-        filters["sort_order"] = ["<=", 8]
+    if class_type == "pre_primary":
+        filters["sort_order"] = ["between", [1, 3]]
+    elif class_type == "primary":
+        filters["sort_order"] = ["between", [4, 8]]
     elif class_type == "middle":
-        filters["sort_order"] = ["between", [9, 13]]
-    elif class_type == "senior":
-        filters["sort_order"] = [">=", 14]
+        filters["sort_order"] = ["between", [9, 11]]
+    elif class_type == "high":
+        filters["sort_order"] = ["between", [12, 13]]
+    elif class_type == "hr_sec":
+        filters["sort_order"] = ["between", [14, 15]]
 
     classes = frappe.get_all(
         "Class Master",

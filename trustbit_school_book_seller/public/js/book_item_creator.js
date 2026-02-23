@@ -461,17 +461,25 @@ function add_quick_add_buttons(frm) {
     frm.add_custom_button(__('All Classes'), function() {
         quick_add_classes(frm, 'all');
     }, __('Quick Add Classes'));
-    
-    frm.add_custom_button(__('Primary (Nursery-5)'), function() {
+
+    frm.add_custom_button(__('Pre-Primary (Nur, LKG, UKG)'), function() {
+        quick_add_classes(frm, 'pre_primary');
+    }, __('Quick Add Classes'));
+
+    frm.add_custom_button(__('Primary (1-5)'), function() {
         quick_add_classes(frm, 'primary');
     }, __('Quick Add Classes'));
-    
-    frm.add_custom_button(__('Middle (6-10)'), function() {
+
+    frm.add_custom_button(__('Middle (6-8)'), function() {
         quick_add_classes(frm, 'middle');
     }, __('Quick Add Classes'));
-    
-    frm.add_custom_button(__('Senior (11-12)'), function() {
-        quick_add_classes(frm, 'senior');
+
+    frm.add_custom_button(__('High (9-10)'), function() {
+        quick_add_classes(frm, 'high');
+    }, __('Quick Add Classes'));
+
+    frm.add_custom_button(__('Hr. Sec. (11-12)'), function() {
+        quick_add_classes(frm, 'hr_sec');
     }, __('Quick Add Classes'));
 }
 
