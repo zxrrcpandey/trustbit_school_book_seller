@@ -4,6 +4,15 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.2.0] - 2026-02-26
+
+### New Features
+- **Sales Order to Purchase Order (Supplier Wise):** Custom "Create > PO (Supplier Wise)" button on submitted Sales Orders. Opens a dialog showing all pending items with their default suppliers (editable). Creates one Purchase Order per supplier. Items without a default supplier are grouped under a "No Supplier" placeholder PO
+- **Auto-populate supplier on Sales Order items:** Book Item Creator now sets `default_supplier` in the Item Default table (in addition to Item Supplier table). This allows ERPNext to auto-fill the supplier when items are added to Sales Orders
+- **Backfill item default suppliers:** One-time utility API (`backfill_item_default_suppliers`) to populate `Item Default.default_supplier` from `Item Supplier` table for all existing items
+
+---
+
 ## [1.1.0] - 2026-02-26
 
 ### Bug Fixes

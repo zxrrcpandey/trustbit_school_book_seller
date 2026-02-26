@@ -5,7 +5,7 @@ Custom ERPNext app for **bulk book item creation** for school book sellers. Allo
 
 **GitHub:** https://github.com/zxrrcpandey/trustbit_school_book_seller
 **Production:** kgs.trustbit.cloud
-**Version:** 1.1.0
+**Version:** 1.2.0
 
 ---
 
@@ -49,7 +49,9 @@ Custom ERPNext app for **bulk book item creation** for school book sellers. Allo
 |------|---------|
 | `hooks.py` | App config — fixtures, after_install, doctype_js |
 | `install.py` | Post-install — creates custom fields, default classes & subjects |
+| `api.py` | SO to PO Supplier Wise APIs — create POs grouped by supplier, backfill suppliers |
 | `public/js/book_item_creator.js` | Client-side logic — progress dialog, CSV import, quick add, etc. |
+| `public/js/sales_order.js` | Sales Order customization — "PO (Supplier Wise)" button and dialog |
 | `doctype/book_item_creator/book_item_creator.py` | Server-side — item creation, price lists, stock entries, whitelisted APIs |
 | `doctype/book_class_detail/` | Child table for class-wise book details |
 | `doctype/book_creation_log/` | Child table reserved for future audit trail |

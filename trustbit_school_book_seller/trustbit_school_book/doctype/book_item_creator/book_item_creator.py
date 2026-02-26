@@ -239,8 +239,13 @@ class BookItemCreator(Document):
 
         # Add default supplier if set
         if self.default_supplier:
+            company = frappe.db.get_value("Warehouse", self.default_warehouse, "company")
             item_data["supplier_items"] = [{
                 "supplier": self.default_supplier
+            }]
+            item_data["item_defaults"] = [{
+                "company": company,
+                "default_supplier": self.default_supplier,
             }]
 
         item = frappe.get_doc(item_data)
