@@ -7,12 +7,7 @@ frappe.ui.form.on('Sales Order', {
 	refresh: function(frm) {
 		if (frm.doc.docstatus !== 1) return;
 
-		// Check if there are pending items (not fully ordered)
-		let has_pending = frm.doc.items.some(function(item) {
-			return (flt(item.stock_qty) - flt(item.ordered_qty)) > 0;
-		});
-
-		if (has_pending && frappe.model.can_create("Purchase Order")) {
+		if (frappe.model.can_create("Purchase Order")) {
 			frm.add_custom_button(__('PO (Supplier Wise)'), function() {
 				create_po_supplier_wise(frm);
 			}, __('Create'));
