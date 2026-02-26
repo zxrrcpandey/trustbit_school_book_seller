@@ -101,6 +101,17 @@ def setup_school_fields():
 			cf.label = "Remark & Requisitioner"
 			cf.save(ignore_permissions=True)
 
+	# Upgrade PO custom_school_name from Data to Link if School DocType exists
+	if frappe.db.exists("DocType", "School"):
+		po_cf = frappe.db.exists("Custom Field", {"dt": "Purchase Order", "fieldname": "custom_school_name"})
+		if po_cf:
+			cf = frappe.get_doc("Custom Field", po_cf)
+			if cf.fieldtype != "Link" or cf.options != "School":
+				cf.fieldtype = "Link"
+				cf.options = "School"
+				cf.save(ignore_permissions=True)
+				frappe.msgprint("Upgraded PO School Name field to Link → School")
+
 	frappe.db.commit()
 	return "Custom fields created/updated successfully"
 

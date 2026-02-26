@@ -161,16 +161,29 @@ def create_school_custom_fields():
         })
         print("Warning: School DocType not found. Using Data field instead of Link for Sales Order.")
 
+    # Purchase Order also gets Link field if School DocType exists
+    if frappe.db.exists("DocType", "School"):
+        po_school_fieldtype = "Link"
+        po_school_options = "School"
+    else:
+        po_school_fieldtype = "Data"
+        po_school_options = None
+        print("Warning: School DocType not found. Using Data field instead of Link for Purchase Order.")
+
+    po_school_field = {
+        "doctype": "Custom Field",
+        "dt": "Purchase Order",
+        "fieldname": "custom_school_name",
+        "fieldtype": po_school_fieldtype,
+        "label": "School Name",
+        "insert_after": "supplier_name",
+    }
+    if po_school_options:
+        po_school_field["options"] = po_school_options
+
     school_fields.extend([
         # Purchase Order
-        {
-            "doctype": "Custom Field",
-            "dt": "Purchase Order",
-            "fieldname": "custom_school_name",
-            "fieldtype": "Data",
-            "label": "School Name",
-            "insert_after": "supplier_name",
-        },
+        po_school_field,
         {
             "doctype": "Custom Field",
             "dt": "Purchase Order",
