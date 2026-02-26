@@ -6,7 +6,7 @@
 **GitHub:** https://github.com/zxrrcpandey/trustbit_school_book_seller
 **Production:** kgs.trustbit.cloud (82.25.105.136)
 **Work Period:** February 2026
-**Starting Version:** 1.0.0 | **Final Version:** 1.4.0
+**Starting Version:** 1.0.0 | **Final Version:** 1.5.0
 
 ---
 
@@ -218,19 +218,20 @@ doctype_js = {
 
 **Request:** "In Sales Order I need School Name as a Remark (Master). That Remark should show in Purchase Order, Invoice and Print format. I also need a Purchase Order Print format."
 
-### Custom Fields Created (v1.3.0)
+### Custom Fields Created (v1.3.0 → upgraded v1.5.0)
 
 | DocType | Fieldname | Type | Label | Placement |
 |---------|-----------|------|-------|-----------|
 | Sales Order | `custom_school_name` | Link (School) | School Name | After `customer_name` |
-| Purchase Order | `custom_school_name` | Data | School Name | After `supplier_name` |
-| Purchase Order | `custom_remark` | Small Text | Remark | After `custom_school_name` |
-| Sales Invoice | `custom_school_name` | Data | School Name | After `customer_name` |
+| Purchase Order | `custom_school_name` | Link (School) | School Name | After `supplier_name` |
+| Purchase Order | `custom_remark` | Small Text | Remark & Requisitioner | After `custom_school_name` |
+| Purchase Order | `custom_transport_name` | Data | Transport Name | After `custom_remark` |
+| Sales Invoice | `custom_school_name` | Link (School) | School Name | After `customer_name` |
 
 **Notes:**
-- Sales Order uses **Link** field to `School` DocType (from `trustbit_school_pro` app) — user picks from the School master
-- PO and SI use **Data** fields — stores the school name text, auto-copied from SO
+- All three DocTypes (SO, PO, SI) use **Link** fields to `School` DocType (from `trustbit_school_pro` app) — user picks from the School master
 - Falls back to Data field if School DocType is not installed
+- **v1.5.0 upgrade:** PO and SI school fields changed from Data → Link. Frappe doesn't allow fieldtype change via save, so the upgrade deletes the old Custom Field and recreates it as Link
 
 ### Data Propagation
 
@@ -265,6 +266,8 @@ Created a Jinja HTML print format for Purchase Order matching the company's stan
 | 5 | Fixed `s_addr is undefined` error when no supplier address | `71277fb` |
 | 6 | Hardened template against missing data (None checks, `doc.get()` for custom fields, `or 0` for numerics) | `cbaf919` |
 | 7 | Added hardcoded Purchase Manager contact: `8989434243` and `info@khandelwalgeneralstores.com` | `1927dac` |
+| 8 | Updated footer to two-column bordered table: Terms & Conditions (left), Receiver's Signature + Authorised Signatory (right) | `6edc548` |
+| 9 | Reduced footer vertical spacing — fewer `<br>` tags, smaller padding/margin | `ff70ea1` |
 
 ### Deployment Method
 
@@ -340,9 +343,58 @@ fi
 
 ---
 
+## Task 11: Fix Email Sending Issues
+
+**Problem:** Emails not sending from ERPNext. Queue stuck with errors.
+
+### Root Causes Found
+
+| # | Issue | Cause | Fix |
+|---|-------|-------|-----|
+| 1 | 4 stuck emails with wrong senders | Senders `admin@example.com` and `saransh42@yahoo.in` not authorized on Zoho SMTP | Deleted stuck emails from queue |
+| 2 | Zoho relay rejection (`553 Sender not allowed to relay`) | ERPNext was using the triggering user's email as sender instead of the account email | Enabled `always_use_account_email_id_as_sender` on KGS Support email account |
+| 3 | Emails stuck as "Not Sent" after Redis restart | Background workers lost job queue after Redis restart | Manually flushed with `frappe.email.queue.flush()` and restarted workers |
+
+### Result
+All outgoing emails now use `info@khandelwalgeneralstores.com` as sender regardless of which user triggers them.
+
+---
+
+## Task 12: Upgrade School Name Fields to Link Type (v1.5.0)
+
+**Request:** "In Purchase Order school section should be fetch from master"
+
+### Problem
+The `custom_school_name` field on Purchase Order and Sales Invoice was a **Data** (plain text) field. Users wanted it to be a **Link** field to the `School` DocType so they can select from the School master (dropdown/search).
+
+### Solution
+
+1. Updated `install.py` — PO and SI school fields now use `Link` type with `options: "School"` (guarded by `frappe.db.exists("DocType", "School")`)
+2. Updated `api.py` `setup_school_fields()` — Added upgrade logic that **deletes** old Data custom field and **recreates** as Link (Frappe doesn't allow fieldtype change via save)
+3. Deployed and ran `setup_school_fields()` on production via `bench execute`
+
+### Verification
+All three DocTypes confirmed as Link → School:
+```
+Sales Order:     fieldtype=Link, options=School
+Purchase Order:  fieldtype=Link, options=School
+Sales Invoice:   fieldtype=Link, options=School
+```
+
+### Files Modified
+- `install.py` — Changed PO and SI field definitions from Data to Link
+- `api.py` — Added delete-and-recreate upgrade logic in `setup_school_fields()`
+
+---
+
 ## Complete Commit History
 
 ```
+84d855a Fix: delete and recreate custom fields to change Data→Link type
+8d5db34 Change PO School Name field from Data to Link (School master)
+ff70ea1 Reduce footer vertical spacing in PO print format
+6edc548 Update PO print format footer to match company standard layout
+8f86fda Update work log with Tasks 9-10: wkhtmltopdf fix, Redis watchdog
 1927dac Add purchase manager contact info to PO print format header
 cbaf919 Harden print format against missing data
 71277fb Fix print format error: s_addr undefined when no supplier address
@@ -388,12 +440,14 @@ frappe, erpnext, payments, webshop, india_compliance, hrms, posawesome, trustbit
 
 ---
 
+## Completed Previously Pending Items
+
+| Item | Status | Details |
+|------|--------|---------|
+| Run backfill for default suppliers | Done | 3907 out of 3919 items updated |
+| Change server root password | Done | Password changed |
+| Investigate Redis crashes | Done | Fixed 3 root causes: `vm.overcommit_memory=1`, Redis queue maxmemory limit, THP disabled. Watchdog cron runs every 1 minute for auto-recovery. |
+
 ## Pending / Recommended Actions
 
-1. **Run backfill** to set default suppliers for existing 277 items:
-   ```
-   bench --site kgs.trustbit.cloud console
-   >>> frappe.call("trustbit_school_book_seller.api.backfill_item_default_suppliers")
-   ```
-2. **Change server root password** (was shared in conversation)
-3. **Investigate Redis crashes** — Redis keeps crashing intermittently; watchdog cron auto-restarts but root cause (likely memory) should be investigated
+_(None at this time — all tasks completed)_
