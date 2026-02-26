@@ -8,6 +8,7 @@ from frappe import _
 def after_install():
     """Run after app installation"""
     create_custom_fields()
+    create_school_custom_fields()
     create_default_classes()
     create_default_subjects()
     frappe.db.commit()
@@ -130,6 +131,70 @@ def create_custom_fields():
             doc = frappe.get_doc(field)
             doc.insert(ignore_permissions=True)
             print(f"Created custom field: {field['fieldname']}")
+
+
+def create_school_custom_fields():
+    """Create School Name custom fields on Sales Order, Purchase Order, Sales Invoice"""
+    # Sales Order gets a Link field to School master (from trustbit_school_pro app)
+    # PO and SI get Data fields (stores the school name text, copied from SO)
+    school_fields = []
+
+    # Only create Link field if School DocType exists (from trustbit_school_pro)
+    if frappe.db.exists("DocType", "School"):
+        school_fields.append({
+            "doctype": "Custom Field",
+            "dt": "Sales Order",
+            "fieldname": "custom_school_name",
+            "fieldtype": "Link",
+            "label": "School Name",
+            "options": "School",
+            "insert_after": "customer_name",
+        })
+    else:
+        school_fields.append({
+            "doctype": "Custom Field",
+            "dt": "Sales Order",
+            "fieldname": "custom_school_name",
+            "fieldtype": "Data",
+            "label": "School Name",
+            "insert_after": "customer_name",
+        })
+        print("Warning: School DocType not found. Using Data field instead of Link for Sales Order.")
+
+    school_fields.extend([
+        # Purchase Order
+        {
+            "doctype": "Custom Field",
+            "dt": "Purchase Order",
+            "fieldname": "custom_school_name",
+            "fieldtype": "Data",
+            "label": "School Name",
+            "insert_after": "supplier_name",
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Purchase Order",
+            "fieldname": "custom_remark",
+            "fieldtype": "Small Text",
+            "label": "Remark",
+            "insert_after": "custom_school_name",
+        },
+        # Sales Invoice
+        {
+            "doctype": "Custom Field",
+            "dt": "Sales Invoice",
+            "fieldname": "custom_school_name",
+            "fieldtype": "Data",
+            "label": "School Name",
+            "insert_after": "customer_name",
+        },
+    ])
+
+    for field in school_fields:
+        if not frappe.db.exists("Custom Field", {"dt": field["dt"], "fieldname": field["fieldname"]}):
+            doc = frappe.get_doc(field)
+            doc.insert(ignore_permissions=True)
+            print(f"Created custom field: {field['dt']}-{field['fieldname']}")
 
 
 def create_default_classes():

@@ -95,13 +95,11 @@ after_install = "trustbit_school_book_seller.install.after_install"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-#	}
-# }
+doc_events = {
+	"Sales Invoice": {
+		"before_save": "trustbit_school_book_seller.api.copy_school_name_to_invoice"
+	}
+}
 
 # Scheduled Tasks
 # ---------------
@@ -203,8 +201,18 @@ fixtures = [
                 "Item-custom_discount_section",
                 "Item-custom_sales_discount_percent",
                 "Item-custom_purchase_discount_percent",
-                "Item-custom_book_item_creator"
+                "Item-custom_book_item_creator",
+                "Sales Order-custom_school_name",
+                "Purchase Order-custom_school_name",
+                "Purchase Order-custom_remark",
+                "Sales Invoice-custom_school_name"
             ]]
+        ]
+    },
+    {
+        "doctype": "Print Format",
+        "filters": [
+            ["name", "in", ["KGS Purchase Order"]]
         ]
     }
 ]

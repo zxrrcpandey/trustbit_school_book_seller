@@ -192,6 +192,12 @@ def _create_po_for_supplier(so, supplier, items):
 	po.company = so.company
 	po.schedule_date = so.delivery_date
 
+	# Copy school name from Sales Order
+	if so.get("custom_school_name"):
+		po.custom_school_name = so.custom_school_name
+	if so.get("custom_remark"):
+		po.custom_remark = so.custom_remark
+
 	# Set supplier defaults
 	supplier_defaults = frappe.db.get_value(
 		"Supplier", supplier,
@@ -238,3 +244,19 @@ def _create_po_for_supplier(so, supplier, items):
 	return po
 
 
+def copy_school_name_to_invoice(doc, method):
+	"""Copy School Name from linked Sales Order to Sales Invoice.
+
+	Called via doc_events hook on Sales Invoice before_save.
+	"""
+	if doc.get("custom_school_name"):
+		return  # Already set, don't overwrite
+
+	for item in doc.items:
+		if item.sales_order:
+			school_name = frappe.db.get_value(
+				"Sales Order", item.sales_order, "custom_school_name"
+			)
+			if school_name:
+				doc.custom_school_name = school_name
+				break
