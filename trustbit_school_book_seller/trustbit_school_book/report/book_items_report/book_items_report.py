@@ -33,6 +33,9 @@ def get_columns():
 
 
 def get_data(filters):
+    if not filters:
+        filters = {}
+
     conditions = ["i.custom_book_item_creator IS NOT NULL"]
     values = {}
 
@@ -50,7 +53,7 @@ def get_data(filters):
         values["from_date"] = filters.get("from_date")
     if filters.get("to_date"):
         conditions.append("i.creation <= %(to_date)s")
-        values["to_date"] = filters.get("to_date")
+        values["to_date"] = str(filters.get("to_date")) + " 23:59:59"
 
     where_clause = " AND ".join(conditions)
 
@@ -65,13 +68,14 @@ def get_data(filters):
             i.custom_isbn_barcode as isbn_barcode,
             i.valuation_rate,
             i.creation,
-            COALESCE(bin.actual_qty, 0) as actual_qty,
-            COALESCE(bin.stock_value, 0) as stock_value,
+            COALESCE(SUM(bin.actual_qty), 0) as actual_qty,
+            COALESCE(SUM(bin.stock_value), 0) as stock_value,
             (SELECT price_list_rate FROM `tabItem Price`
              WHERE item_code = i.name AND selling = 1 LIMIT 1) as selling_rate
         FROM `tabItem` i
         LEFT JOIN `tabBin` bin ON bin.item_code = i.name
         WHERE {where_clause}
+        GROUP BY i.name
         ORDER BY i.creation DESC
     """.format(where_clause=where_clause), values, as_dict=True)
 

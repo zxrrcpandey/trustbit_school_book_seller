@@ -21,6 +21,8 @@ jobs:
             BENCH_PATH="/home/frappe_user/frappe-bench"
             SITE="kgs.trustbit.cloud"
             APP="trustbit_school_book_seller"
+            BACKUP_DIR="$BENCH_PATH/sites/$SITE/private/backups"
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
             echo "=== Cleaning stale app references ==="
             cd "$BENCH_PATH"
@@ -33,10 +35,42 @@ jobs:
               fi
             done
 
-            echo "=== Taking backup ==="
-            su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE backup"
+            echo "=========================================="
+            echo "=== STEP 1: TAKING FULL BACKUP ==="
+            echo "=========================================="
+            echo "Backup timestamp: $TIMESTAMP"
+            su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE backup --with-files"
 
-            echo "=== Installing/Updating app ==="
+            # Verify backup was created successfully
+            LATEST_BACKUP=$(ls -t "$BACKUP_DIR"/*-database.sql.gz 2>/dev/null | head -1)
+            if [ -z "$LATEST_BACKUP" ]; then
+              echo "ERROR: Backup verification failed - no backup file found!"
+              echo "ABORTING deployment to protect production data."
+              exit 1
+            fi
+
+            BACKUP_SIZE=$(stat -c%s "$LATEST_BACKUP" 2>/dev/null || stat -f%z "$LATEST_BACKUP" 2>/dev/null)
+            if [ "$BACKUP_SIZE" -lt 1000 ]; then
+              echo "ERROR: Backup file is suspiciously small ($BACKUP_SIZE bytes)!"
+              echo "ABORTING deployment to protect production data."
+              exit 1
+            fi
+
+            echo "Backup verified: $LATEST_BACKUP ($BACKUP_SIZE bytes)"
+
+            # Clean up old backups - keep last 10
+            echo "=== Cleaning old backups (keeping last 10) ==="
+            cd "$BACKUP_DIR"
+            ls -t *-database.sql.gz 2>/dev/null | tail -n +11 | while read f; do
+              base="${f%-database.sql.gz}"
+              echo "Removing old backup: $base"
+              rm -f "${base}"*
+            done
+            cd "$BENCH_PATH"
+
+            echo "=========================================="
+            echo "=== STEP 2: INSTALLING/UPDATING APP ==="
+            echo "=========================================="
             if [ ! -d "$BENCH_PATH/apps/$APP" ]; then
               echo "App not found, installing for the first time..."
               su - frappe_user -c "cd $BENCH_PATH && bench get-app https://github.com/zxrrcpandey/trustbit_school_book_seller.git"
@@ -44,7 +78,6 @@ jobs:
             else
               cd "$BENCH_PATH/apps/$APP"
               git config --global --add safe.directory "$BENCH_PATH/apps/$APP"
-              # bench get-app uses 'upstream' as remote name
               REMOTE=$(git remote | head -1)
               git fetch "$REMOTE" main
               git reset --hard "$REMOTE/main"
@@ -55,16 +88,27 @@ jobs:
             chmod 755 "$BENCH_PATH/apps/$APP"
             chmod -R o+rX "$BENCH_PATH/apps/$APP"
 
-            echo "=== Running migrate ==="
+            echo "=========================================="
+            echo "=== STEP 3: RUNNING MIGRATE ==="
+            echo "=========================================="
             su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE migrate"
 
-            echo "=== Building assets ==="
+            echo "=========================================="
+            echo "=== STEP 4: BUILDING ASSETS ==="
+            echo "=========================================="
             su - frappe_user -c "cd $BENCH_PATH && bench build --app $APP"
 
             echo "=== Clearing cache ==="
             su - frappe_user -c "cd $BENCH_PATH && bench --site $SITE clear-cache"
 
-            echo "=== Restarting services ==="
+            echo "=========================================="
+            echo "=== STEP 5: RESTARTING SERVICES ==="
+            echo "=========================================="
             supervisorctl restart all 2>/dev/null || su - frappe_user -c "cd $BENCH_PATH && bench restart"
 
-            echo "=== Deployment complete! ==="
+            echo "=========================================="
+            echo "=== DEPLOYMENT COMPLETE! ==="
+            echo "=========================================="
+            echo "Site: $SITE"
+            echo "Backup: $LATEST_BACKUP"
+            echo "Timestamp: $TIMESTAMP"

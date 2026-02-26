@@ -204,10 +204,12 @@ function download_csv_template() {
     csv_content += "Class 3,170,120,9781234567003,40\n";
     
     let blob = new Blob([csv_content], { type: 'text/csv;charset=utf-8;' });
+    let url = URL.createObjectURL(blob);
     let link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
+    link.href = url;
     link.download = 'book_class_details_template.csv';
     link.click();
+    URL.revokeObjectURL(url);
     
     frappe.show_alert({
         message: __('Template downloaded!'),
@@ -252,7 +254,11 @@ function process_csv_import(frm, file_url, dialog) {
                 
                 let msg = `<strong>${added} rows imported successfully!</strong>`;
                 if (errors.length > 0) {
-                    msg += `<br><br><strong>Skipped:</strong><br>` + errors.join('<br>');
+                    msg += `<br><br><strong>Skipped (duplicate in form):</strong><br>` + errors.join('<br>');
+                }
+                let skipped = r.message.skipped || [];
+                if (skipped.length > 0) {
+                    msg += `<br><br><strong>Skipped (invalid data):</strong><br>` + skipped.join('<br>');
                 }
                 
                 frappe.msgprint({
@@ -493,22 +499,31 @@ function quick_add_classes(frm, class_type) {
         callback: function(r) {
             if (r.message && r.message.length > 0) {
                 let existing_classes = (frm.doc.class_details || []).map(row => row.class);
-                
+                let added_count = 0;
+
                 r.message.forEach(function(cls) {
                     if (!existing_classes.includes(cls.name)) {
                         let row = frm.add_child('class_details');
                         row.class = cls.name;
                         row.creation_status = 'Pending';
+                        added_count++;
                     }
                 });
-                
+
                 frm.refresh_field('class_details');
                 calculate_totals(frm);
-                
-                frappe.show_alert({
-                    message: __('Added {0} classes', [r.message.length]),
-                    indicator: 'green'
-                });
+
+                if (added_count > 0) {
+                    frappe.show_alert({
+                        message: __('Added {0} classes', [added_count]),
+                        indicator: 'green'
+                    });
+                } else {
+                    frappe.show_alert({
+                        message: __('All classes already added'),
+                        indicator: 'orange'
+                    });
+                }
             }
         }
     });

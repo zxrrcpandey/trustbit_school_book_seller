@@ -33,6 +33,9 @@ def get_columns():
 
 
 def get_data(filters):
+    if not filters:
+        filters = {}
+
     conditions = ["docstatus = 1"]
     values = {}
 
@@ -50,7 +53,7 @@ def get_data(filters):
         values["from_date"] = filters.get("from_date")
     if filters.get("to_date"):
         conditions.append("creation <= %(to_date)s")
-        values["to_date"] = filters.get("to_date")
+        values["to_date"] = str(filters.get("to_date")) + " 23:59:59"
 
     where_clause = " AND ".join(conditions)
 

@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import now_datetime, flt, cint
+from frappe.utils import now_datetime, flt
 import csv
 import os
 
@@ -65,21 +65,21 @@ class BookItemCreator(Document):
                 )
 
         # Check for duplicate ISBNs within the same document
-        seen_isbns = []
+        seen_isbns = set()
         for row in self.class_details:
             if row.isbn_barcode:
                 if row.isbn_barcode in seen_isbns:
                     frappe.throw(_("Duplicate ISBN/Barcode {0} in Row {1}").format(row.isbn_barcode, row.idx))
-                seen_isbns.append(row.isbn_barcode)
+                seen_isbns.add(row.isbn_barcode)
 
     def check_duplicate_class(self):
         """Check for duplicate classes in the same document"""
-        classes = []
+        classes = set()
         for row in self.class_details:
             class_name = row.get('class')
             if class_name in classes:
                 frappe.throw(_("Duplicate Class {0} in Row {1}").format(class_name, row.idx))
-            classes.append(class_name)
+            classes.add(class_name)
 
     def calculate_totals(self):
         """Calculate summary totals"""
@@ -407,16 +407,24 @@ def retry_failed_items(docname):
                 }, update_modified=False)
 
                 # Create price list entries
-                doc.create_price_list_entries(item.name, row)
+                try:
+                    doc.create_price_list_entries(item.name, row)
+                except Exception as e:
+                    frappe.log_error(f"Price List Error on retry for {item.name}: {str(e)}")
 
                 # Create stock entry if needed
                 if flt(row.opening_stock) > 0:
-                    doc.create_stock_entry(item.name, row)
-                    frappe.db.set_value("Book Class Detail", row.name, "stock_entry_created", 1, update_modified=False)
+                    try:
+                        doc.create_stock_entry(item.name, row)
+                        frappe.db.set_value("Book Class Detail", row.name, "stock_entry_created", 1, update_modified=False)
+                    except Exception as e:
+                        frappe.log_error(f"Stock Entry Error on retry for {item.name}: {str(e)}")
 
                 success_count += 1
         except Exception as e:
             frappe.db.set_value("Book Class Detail", row.name, "remarks", f"Retry failed: {str(e)[:150]}", update_modified=False)
+
+        frappe.db.commit()
 
     # Update counts
     total_created = frappe.db.count("Book Class Detail", {"parent": docname, "creation_status": "Created"})
@@ -490,7 +498,7 @@ def export_items_to_excel(docname):
         file_content,
         "Book Item Creator",
         docname,
-        is_private=0
+        is_private=1
     )
 
     return {"file_url": file_doc.file_url, "file_name": file_name}
@@ -508,12 +516,15 @@ def parse_csv_file(file_url):
             return {"success": False, "error": "File not found"}
 
         data = []
+        skipped = []
         with open(file_path, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
-            for row in reader:
+            for row_num, row in enumerate(reader, start=2):
                 # Normalize column names
                 normalized = {}
                 for key, value in row.items():
+                    if not key:
+                        continue
                     key_lower = key.lower().strip()
                     if 'class' in key_lower:
                         normalized['class'] = value.strip() if value else ''
@@ -531,9 +542,11 @@ def parse_csv_file(file_url):
                     if frappe.db.exists("Class Master", normalized['class']):
                         data.append(normalized)
                     else:
-                        frappe.log_error(f"Class not found: {normalized['class']}")
+                        skipped.append(f"Row {row_num}: Class '{normalized['class']}' not found in Class Master")
+                else:
+                    skipped.append(f"Row {row_num}: Missing class name")
 
-        return {"success": True, "data": data}
+        return {"success": True, "data": data, "skipped": skipped}
 
     except Exception as e:
         frappe.log_error(title="CSV Parse Error", message=str(e))
