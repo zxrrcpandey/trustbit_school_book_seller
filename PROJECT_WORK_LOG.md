@@ -6,7 +6,7 @@
 **GitHub:** https://github.com/zxrrcpandey/trustbit_school_book_seller
 **Production:** kgs.trustbit.cloud (82.25.105.136)
 **Work Period:** February 2026
-**Starting Version:** 1.0.0 | **Final Version:** 1.2.0
+**Starting Version:** 1.0.0 | **Final Version:** 1.3.0
 
 ---
 
@@ -214,9 +214,78 @@ doctype_js = {
 
 ---
 
+## Task 8: School Name (Remark) Field + PO Print Format
+
+**Request:** "In Sales Order I need School Name as a Remark (Master). That Remark should show in Purchase Order, Invoice and Print format. I also need a Purchase Order Print format."
+
+### Custom Fields Created (v1.3.0)
+
+| DocType | Fieldname | Type | Label | Placement |
+|---------|-----------|------|-------|-----------|
+| Sales Order | `custom_school_name` | Link (School) | School Name | After `customer_name` |
+| Purchase Order | `custom_school_name` | Data | School Name | After `supplier_name` |
+| Purchase Order | `custom_remark` | Small Text | Remark | After `custom_school_name` |
+| Sales Invoice | `custom_school_name` | Data | School Name | After `customer_name` |
+
+**Notes:**
+- Sales Order uses **Link** field to `School` DocType (from `trustbit_school_pro` app) — user picks from the School master
+- PO and SI use **Data** fields — stores the school name text, auto-copied from SO
+- Falls back to Data field if School DocType is not installed
+
+### Data Propagation
+
+| Flow | Mechanism |
+|------|-----------|
+| SO → PO (via "PO Supplier Wise") | `_create_po_for_supplier()` in `api.py` copies `custom_school_name` and `custom_remark` |
+| SO → Sales Invoice | `doc_events` hook on Sales Invoice `before_save` — `copy_school_name_to_invoice()` finds linked SO and copies school name |
+
+### KGS Purchase Order Print Format
+
+Created a Jinja HTML print format for Purchase Order matching the company's standard layout:
+
+| Section | Content |
+|---------|---------|
+| **Company Header** | Company name (uppercase), address, GSTIN |
+| **Title** | "PURCHASE ORDER" with border lines |
+| **Left Column** | Party Details — supplier name and address |
+| **Right Column** | Order No, Date, Remark/School, Shipping Address |
+| **Items Table** | S.NO, Description, REMARK (item's class), Rate, Qty, Amount |
+| **Grand Total** | Total qty and total amount |
+| **Terms & Conditions** | From PO's terms field |
+| **Signatures** | Authorised Signatory (left), Receiver Name/Date (right) |
+
+### Deployment Method
+
+SSH port 22 was blocked on the server, so deployment was done via:
+1. **GitHub Actions** — auto-deploy on push to `main` (pulls code, runs `bench migrate`, builds assets, restarts services)
+2. **Frappe REST API** — called `setup_school_fields` API via HTTP to create custom fields without SSH access
+3. **Frappe REST API** — updated print format HTML directly via `PUT /api/resource/Print Format/KGS Purchase Order`
+
+### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `install.py` | Modified | Added `create_school_custom_fields()` function |
+| `hooks.py` | Modified | Added 4 custom field fixtures, `doc_events` for Sales Invoice, Print Format fixture |
+| `api.py` | Modified | Added school field copy in `_create_po_for_supplier()`, new `copy_school_name_to_invoice()`, new `setup_school_fields()` API |
+| `fixtures/print_format.json` | Created | KGS Purchase Order Jinja HTML print format |
+
+### Bugs Encountered
+
+| # | Bug | Cause | Fix |
+|---|-----|-------|-----|
+| 1 | Custom fields not appearing after deploy | `install.py`'s `after_install` only runs on first app install, not on `bench migrate` | Created whitelisted `setup_school_fields()` API endpoint callable via HTTP |
+| 2 | SSH port 22 blocked | Server firewall blocks SSH from external networks | Used Frappe REST API + GitHub Actions (which has SSH access via secrets) |
+
+---
+
 ## Complete Commit History
 
 ```
+24e6cef Add Rate and Amount columns to KGS Purchase Order print format
+a8d4b28 Add setup_school_fields API for remote deployment
+ed81015 Add School Name field to SO/PO/Invoice and KGS Purchase Order print format
+81e96d0 Add complete project work log with all tasks, bugs, and solutions
 dd8335b Allow creating POs for already ordered items
 1d33261 Show PO (Supplier Wise) button on all submitted Sales Orders
 cfe917a Add Sales Order to Purchase Order (Supplier Wise) feature
@@ -260,6 +329,5 @@ frappe, erpnext, payments, webshop, india_compliance, hrms, posawesome, trustbit
    bench --site kgs.trustbit.cloud console
    >>> frappe.call("trustbit_school_book_seller.api.backfill_item_default_suppliers")
    ```
-2. **Configure GitHub Secrets** for automated deployment: `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY`
-3. **Add server SSH public key** to `/root/.ssh/authorized_keys`
-4. **Change server root password** (was shared in conversation)
+2. **Open SSH port 22** on server firewall for direct access
+3. **Change server root password** (was shared in conversation)
