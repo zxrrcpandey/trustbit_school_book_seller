@@ -6,7 +6,7 @@
 **GitHub:** https://github.com/zxrrcpandey/trustbit_school_book_seller
 **Production:** kgs.trustbit.cloud (82.25.105.136)
 **Work Period:** February 2026
-**Starting Version:** 1.0.0 | **Final Version:** 1.3.0
+**Starting Version:** 1.0.0 | **Final Version:** 1.4.0
 
 ---
 
@@ -245,14 +245,26 @@ Created a Jinja HTML print format for Purchase Order matching the company's stan
 
 | Section | Content |
 |---------|---------|
-| **Company Header** | Company name (uppercase), address, GSTIN |
+| **Company Header** | Company name (uppercase), Purchase Manager mobile & email, address, GSTIN |
 | **Title** | "PURCHASE ORDER" with border lines |
-| **Left Column** | Party Details — supplier name and address |
-| **Right Column** | Order No, Date, Remark/School, Shipping Address |
+| **Left Column** | Party Details — supplier name, address, email, mobile |
+| **Right Column** | Order No, Date, Transport, Remark/School, Shipping Address |
 | **Items Table** | S.NO, Description, REMARK (item's class), Rate, Qty, Amount |
 | **Grand Total** | Total qty and total amount |
 | **Terms & Conditions** | From PO's terms field |
 | **Signatures** | Authorised Signatory (left), Receiver Name/Date (right) |
+
+### Print Format Enhancements (Multiple Iterations)
+
+| # | Enhancement | Commit |
+|---|-------------|--------|
+| 1 | Added Rate and Amount columns to items table | `24e6cef` |
+| 2 | Added Transport Name field, renamed Remark to "Remark & Requisitioner" | `45c871f` |
+| 3 | Added supplier email/mobile from Address or Contact fallback | `45c871f` |
+| 4 | Added company GSTIN, email, and phone from Company doc | `45c871f` |
+| 5 | Fixed `s_addr is undefined` error when no supplier address | `71277fb` |
+| 6 | Hardened template against missing data (None checks, `doc.get()` for custom fields, `or 0` for numerics) | `cbaf919` |
+| 7 | Added hardcoded Purchase Manager contact: `8989434243` and `info@khandelwalgeneralstores.com` | `1927dac` |
 
 ### Deployment Method
 
@@ -276,12 +288,66 @@ SSH port 22 was blocked on the server, so deployment was done via:
 |---|-----|-------|-----|
 | 1 | Custom fields not appearing after deploy | `install.py`'s `after_install` only runs on first app install, not on `bench migrate` | Created whitelisted `setup_school_fields()` API endpoint callable via HTTP |
 | 2 | SSH port 22 blocked | Server firewall blocks SSH from external networks | Used Frappe REST API + GitHub Actions (which has SSH access via secrets) |
+| 3 | Print format error: `s_addr is undefined` (line 71) | `s_addr` defined inside `{% if %}` block but referenced outside | Moved variable definitions outside conditionals, set to `None` first |
+| 4 | Intermittent Internal Server Error in print format | Missing data: no supplier address, no contact, None values for rate/qty on older POs | Hardened template with explicit None checks, `doc.get()` for custom fields, `or 0` fallback for numerics |
+
+---
+
+## Task 9: Fix wkhtmltopdf on Production
+
+**Bug:** `Invalid wkhtmltopdf version: 'wkhtmltopdf 0.12.6-2 (with unpatched Qt)'`
+
+### Root Cause
+ERPNext requires the **patched Qt** version of wkhtmltopdf (0.12.6.1) for PDF generation. The server had the standard Ubuntu package (0.12.6-2 with unpatched Qt).
+
+### Fix
+```bash
+wget -O /tmp/wkhtmltox.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.jammy_amd64.deb
+apt-get install -y -f /tmp/wkhtmltox.deb
+```
+
+### Verification
+```
+wkhtmltopdf 0.12.6.1 (with patched qt)
+```
+
+---
+
+## Task 10: Redis Auto-Recovery Watchdog
+
+**Problem:** Redis cache service (port 13000) keeps crashing intermittently, taking down the entire site with `ConnectionRefusedError: Error 111 connecting to 127.0.0.1:13000`.
+
+### Solution
+Set up a cron-based watchdog on the production server:
+
+**Script:** `/usr/local/bin/check_redis.sh`
+```bash
+#!/bin/bash
+if ! redis-cli -p 13000 ping > /dev/null 2>&1; then
+    echo "$(date): Redis cache down, restarting all services" >> /var/log/redis_watchdog.log
+    supervisorctl restart all >> /var/log/redis_watchdog.log 2>&1
+fi
+```
+
+**Cron:** Runs every 1 minute
+```
+* * * * * /usr/local/bin/check_redis.sh
+```
+
+**Log:** `/var/log/redis_watchdog.log` — logs each auto-restart with timestamp
+
+**Result:** If Redis crashes, the site auto-recovers within ~1 minute without manual intervention.
 
 ---
 
 ## Complete Commit History
 
 ```
+1927dac Add purchase manager contact info to PO print format header
+cbaf919 Harden print format against missing data
+71277fb Fix print format error: s_addr undefined when no supplier address
+45c871f Add Transport Name field, rename Remark, enhance PO print format
+a30360f Update work log with Task 8: School Name field and PO print format
 24e6cef Add Rate and Amount columns to KGS Purchase Order print format
 a8d4b28 Add setup_school_fields API for remote deployment
 ed81015 Add School Name field to SO/PO/Invoice and KGS Purchase Order print format
@@ -329,5 +395,5 @@ frappe, erpnext, payments, webshop, india_compliance, hrms, posawesome, trustbit
    bench --site kgs.trustbit.cloud console
    >>> frappe.call("trustbit_school_book_seller.api.backfill_item_default_suppliers")
    ```
-2. **Open SSH port 22** on server firewall for direct access
-3. **Change server root password** (was shared in conversation)
+2. **Change server root password** (was shared in conversation)
+3. **Investigate Redis crashes** — Redis keeps crashing intermittently; watchdog cron auto-restarts but root cause (likely memory) should be investigated
