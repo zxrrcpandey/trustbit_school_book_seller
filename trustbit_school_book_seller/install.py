@@ -200,14 +200,15 @@ def create_school_custom_fields():
             "label": "Transport Name",
             "insert_after": "custom_remark",
         },
-        # Sales Invoice
+        # Sales Invoice — also Link to School if available
         {
             "doctype": "Custom Field",
             "dt": "Sales Invoice",
             "fieldname": "custom_school_name",
-            "fieldtype": "Data",
+            "fieldtype": po_school_fieldtype,
             "label": "School Name",
             "insert_after": "customer_name",
+            **({"options": "School"} if po_school_options else {}),
         },
     ])
 

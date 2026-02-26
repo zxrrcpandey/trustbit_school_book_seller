@@ -107,10 +107,37 @@ def setup_school_fields():
 		if po_cf:
 			cf = frappe.get_doc("Custom Field", po_cf)
 			if cf.fieldtype != "Link" or cf.options != "School":
-				cf.fieldtype = "Link"
-				cf.options = "School"
-				cf.save(ignore_permissions=True)
-				frappe.msgprint("Upgraded PO School Name field to Link → School")
+				# Frappe doesn't allow fieldtype change via save, so delete and recreate
+				frappe.delete_doc("Custom Field", po_cf, ignore_permissions=True)
+				frappe.db.commit()
+				new_cf = frappe.get_doc({
+					"doctype": "Custom Field",
+					"dt": "Purchase Order",
+					"fieldname": "custom_school_name",
+					"fieldtype": "Link",
+					"label": "School Name",
+					"options": "School",
+					"insert_after": "supplier_name",
+				})
+				new_cf.insert(ignore_permissions=True)
+
+		# Also upgrade SI custom_school_name from Data to Link
+		si_cf = frappe.db.exists("Custom Field", {"dt": "Sales Invoice", "fieldname": "custom_school_name"})
+		if si_cf:
+			cf = frappe.get_doc("Custom Field", si_cf)
+			if cf.fieldtype != "Link" or cf.options != "School":
+				frappe.delete_doc("Custom Field", si_cf, ignore_permissions=True)
+				frappe.db.commit()
+				new_cf = frappe.get_doc({
+					"doctype": "Custom Field",
+					"dt": "Sales Invoice",
+					"fieldname": "custom_school_name",
+					"fieldtype": "Link",
+					"label": "School Name",
+					"options": "School",
+					"insert_after": "customer_name",
+				})
+				new_cf.insert(ignore_permissions=True)
 
 	frappe.db.commit()
 	return "Custom fields created/updated successfully"
