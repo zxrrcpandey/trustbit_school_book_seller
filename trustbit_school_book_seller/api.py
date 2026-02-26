@@ -93,8 +93,16 @@ def setup_school_fields():
 	"""
 	from trustbit_school_book_seller.install import create_school_custom_fields
 	create_school_custom_fields()
+
+	# Rename Remark to "Remark & Requisitioner" if it exists with old label
+	if frappe.db.exists("Custom Field", {"dt": "Purchase Order", "fieldname": "custom_remark"}):
+		cf = frappe.get_doc("Custom Field", {"dt": "Purchase Order", "fieldname": "custom_remark"})
+		if cf.label != "Remark & Requisitioner":
+			cf.label = "Remark & Requisitioner"
+			cf.save(ignore_permissions=True)
+
 	frappe.db.commit()
-	return "School Name custom fields created successfully"
+	return "Custom fields created/updated successfully"
 
 
 @frappe.whitelist()

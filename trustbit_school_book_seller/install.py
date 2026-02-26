@@ -176,8 +176,16 @@ def create_school_custom_fields():
             "dt": "Purchase Order",
             "fieldname": "custom_remark",
             "fieldtype": "Small Text",
-            "label": "Remark",
+            "label": "Remark & Requisitioner",
             "insert_after": "custom_school_name",
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Purchase Order",
+            "fieldname": "custom_transport_name",
+            "fieldtype": "Data",
+            "label": "Transport Name",
+            "insert_after": "custom_remark",
         },
         # Sales Invoice
         {

@@ -205,6 +205,7 @@ fixtures = [
                 "Sales Order-custom_school_name",
                 "Purchase Order-custom_school_name",
                 "Purchase Order-custom_remark",
+                "Purchase Order-custom_transport_name",
                 "Sales Invoice-custom_school_name"
             ]]
         ]
