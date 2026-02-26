@@ -85,6 +85,19 @@ def create_po_supplier_wise(sales_order, items):
 
 
 @frappe.whitelist()
+def setup_school_fields():
+	"""One-time setup: Create School Name custom fields on SO, PO, SI.
+
+	Call from browser console:
+	frappe.call({method: 'trustbit_school_book_seller.api.setup_school_fields', callback: function(r) { console.log(r.message); }})
+	"""
+	from trustbit_school_book_seller.install import create_school_custom_fields
+	create_school_custom_fields()
+	frappe.db.commit()
+	return "School Name custom fields created successfully"
+
+
+@frappe.whitelist()
 def backfill_item_default_suppliers():
 	"""One-time utility: populate Item Default.default_supplier from Item Supplier table.
 
