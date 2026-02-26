@@ -237,6 +237,12 @@ class BookItemCreator(Document):
                 "barcode_type": ""
             }]
 
+        # Add default supplier if set
+        if self.default_supplier:
+            item_data["supplier_items"] = [{
+                "supplier": self.default_supplier
+            }]
+
         item = frappe.get_doc(item_data)
 
         # Add HSN code if provided
@@ -565,7 +571,7 @@ def duplicate_book_item_creator(docname):
         'publication', 'subject', 'book_name', 'author', 'edition',
         'publication_year', 'sales_discount_percent', 'purchase_discount_percent',
         'selling_price_list', 'buying_price_list', 'item_group', 'hsn_sac_code',
-        'default_warehouse', 'uom'
+        'default_warehouse', 'default_supplier', 'uom'
     ]
 
     for field in fields_to_copy:

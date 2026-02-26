@@ -25,6 +25,7 @@
         "hsn_sac_code",
         "column_break_config",
         "default_warehouse",
+        "default_supplier",
         "section_break_class",
         "class_details",
         "section_break_summary",
@@ -158,6 +159,12 @@
             "label": "Default Warehouse",
             "options": "Warehouse",
             "reqd": 1
+        },
+        {
+            "fieldname": "default_supplier",
+            "fieldtype": "Link",
+            "label": "Default Supplier",
+            "options": "Supplier"
         },
         {
             "fieldname": "section_break_class",
