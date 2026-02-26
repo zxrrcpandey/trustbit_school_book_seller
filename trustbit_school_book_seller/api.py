@@ -5,17 +5,27 @@ import json
 
 
 @frappe.whitelist()
-def get_so_items_with_suppliers(sales_order):
-	"""Get pending Sales Order items with their default suppliers."""
+def get_so_items_with_suppliers(sales_order, include_ordered=0):
+	"""Get Sales Order items with their default suppliers.
+
+	Args:
+		sales_order: Sales Order name
+		include_ordered: If 1, include items that already have POs (uses original qty)
+	"""
 	so = frappe.get_doc("Sales Order", sales_order)
+	include_ordered = int(include_ordered)
 
 	if so.docstatus != 1:
 		frappe.throw(_("Sales Order must be submitted"))
 
 	items = []
 	for d in so.items:
-		pending_qty = (flt(d.stock_qty) - flt(d.ordered_qty)) / (flt(d.conversion_factor) or 1)
-		if pending_qty <= 0:
+		if include_ordered:
+			qty = flt(d.qty)
+		else:
+			qty = (flt(d.stock_qty) - flt(d.ordered_qty)) / (flt(d.conversion_factor) or 1)
+
+		if qty <= 0:
 			continue
 
 		supplier = d.supplier
@@ -26,7 +36,7 @@ def get_so_items_with_suppliers(sales_order):
 			"so_detail": d.name,
 			"item_code": d.item_code,
 			"item_name": d.item_name,
-			"pending_qty": pending_qty,
+			"pending_qty": qty,
 			"uom": d.uom,
 			"stock_uom": d.stock_uom,
 			"conversion_factor": d.conversion_factor,

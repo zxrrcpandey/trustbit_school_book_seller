@@ -19,12 +19,30 @@ frappe.ui.form.on('Sales Order', {
 function create_po_supplier_wise(frm) {
 	frappe.call({
 		method: 'trustbit_school_book_seller.api.get_so_items_with_suppliers',
-		args: { sales_order: frm.doc.name },
+		args: { sales_order: frm.doc.name, include_ordered: 0 },
 		freeze: true,
 		freeze_message: __('Fetching items and suppliers...'),
 		callback: function(r) {
 			if (!r.message || !r.message.length) {
-				frappe.msgprint(__('No pending items to order.'));
+				// No pending items — ask if they want to include already ordered items
+				frappe.confirm(
+					__('All items already have Purchase Orders. Do you want to create new Purchase Orders for all items again?'),
+					function() {
+						frappe.call({
+							method: 'trustbit_school_book_seller.api.get_so_items_with_suppliers',
+							args: { sales_order: frm.doc.name, include_ordered: 1 },
+							freeze: true,
+							freeze_message: __('Fetching all items...'),
+							callback: function(r2) {
+								if (!r2.message || !r2.message.length) {
+									frappe.msgprint(__('No items found.'));
+									return;
+								}
+								show_supplier_wise_dialog(frm, r2.message);
+							}
+						});
+					}
+				);
 				return;
 			}
 			show_supplier_wise_dialog(frm, r.message);
@@ -83,7 +101,6 @@ function show_supplier_wise_dialog(frm, items) {
 						fieldtype: 'Float',
 						fieldname: 'pending_qty',
 						label: __('Qty'),
-						read_only: 1,
 						in_list_view: 1,
 						columns: 1
 					},
