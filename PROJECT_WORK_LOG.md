@@ -8,6 +8,9 @@
 **Work Period:** February 2026
 **Starting Version:** 1.0.0 | **Final Version:** 1.5.0
 
+**POS Awesome App:**
+**GitHub:** https://github.com/zxrrcpandey/POS-Awesome-V15-trustbit-2
+
 ---
 
 ## Task 1: Full Codebase Audit & Bug Fixes
@@ -384,6 +387,84 @@ Sales Invoice:   fieldtype=Link, options=School
 ### Files Modified
 - `install.py` — Changed PO and SI field definitions from Data to Link
 - `api.py` — Added delete-and-recreate upgrade logic in `setup_school_fields()`
+
+---
+
+## Task 13: POS Awesome — Fix Discount System & Add Toggle
+
+**App:** POS Awesome (separate repo: `POS-Awesome-V15-trustbit-2`)
+**Request:** "Check carefully in this we have problem with discount not offers (offers is old option)" + "discount not showing in submit form after clicking Pay-> Proceed to pay" + "can we do something switch between old and new one in settings (POS Profile) where user can choose which one to use"
+
+### Background
+
+POS Awesome has **three discount systems**:
+1. **Item UOM Discount** (new Trustbit feature) — Auto-applies based on item UOM and quantity tiers, configured per item in `posa_uom_discounts` child table
+2. **POS Offers** (old) — Auto/manual offers with types: Item Price, Grand Total, Buy-Get-Free. 11 active offers existed on production (10%, 7%, 20%, 5%, 15%, 12.5%, 50%, 40%, 30%, 28%, 16%)
+3. **Manual Item Discount** — Cashier enters discount_percentage or discount_amount directly
+
+Both UOM Discount and POS Offers were running simultaneously, causing conflicts.
+
+### Bug 1: "Offer?" Column Instead of "Discount" Column
+
+**File:** `Invoice.vue`
+**Problem:** Items table showed an "Offer?" checkbox column (`posa_is_offer`) instead of showing the actual discount percentage.
+**Fix:** Replaced with "Disc%" column displaying `discount_percentage` value.
+
+### Bug 2: UOM Discount Not Recalculated on Repeat Scan
+
+**File:** `Invoice.vue` → `add_item()` method
+**Problem:** When the same item was scanned again (quantity incremented), `apply_item_uom_discount()` was only called for NEW items, not for existing items whose quantity changed. This meant quantity-tier discounts wouldn't update.
+**Fix:** Added `await this.apply_item_uom_discount(cur_item)` in the existing-item branch of `add_item()`.
+
+### Bug 3: Debug Console.logs Left in Code
+
+**File:** `Invoice.vue` → `calc_prices()` discount_amount handler
+**Problem:** 9 `console.log` debug statements left from development.
+**Fix:** Removed all 9 statements.
+
+### Bug 4: Discount Not Showing in Payment Screen
+
+**File:** `Payments.vue` → `total_items_discount_amount` computed property
+**Problem:** Used `this.items` which **doesn't exist** in Payments.vue scope. Payments.vue receives the invoice data via event bus as `this.invoice_doc`, and items are nested inside `this.invoice_doc.items`.
+Also had `!item.posa_is_offer` filter that excluded offer discounts unnecessarily.
+**Fix:** Changed `this.items` → `this.invoice_doc?.items` and removed the `posa_is_offer` filter.
+
+### Feature: Discount System Toggle (Offers vs UOM Discount)
+
+**Problem:** Both POS Offers (old) and UOM Discount (new) were running simultaneously. 11 auto-apply POS Offers were conflicting with UOM discounts.
+**Solution:** The existing `posa_use_item_uom_discount` checkbox in POS Profile now acts as a **switch** between the two systems:
+
+| Setting | Behavior |
+|---------|----------|
+| **Checked (ON)** | UOM Discount active, POS Offers **skipped** |
+| **Unchecked (OFF)** | POS Offers active, UOM Discounts **skipped** |
+
+**Implementation:** Added guards at the top of `handelOffers()` and `processBuyGetOffers()` in Invoice.vue:
+```javascript
+if (this.pos_profile && this.pos_profile.posa_use_item_uom_discount) {
+  return; // Skip POS Offers when UOM Discount is active
+}
+```
+
+Both POS Profiles on production ("CASH POS 80mm" and "A4 StandardPrint") have `posa_use_item_uom_discount = 1`, so old offers are now automatically skipped.
+
+### Production Stats
+- 6,464 Item UOM Discount records across 17,245 total items
+- 11 active POS Offers (all auto-apply) — now skipped when UOM Discount is ON
+
+### Files Modified
+- `posawesome/public/js/posapp/components/pos/Invoice.vue` — Bugs 1-3, discount toggle
+- `posawesome/public/js/posapp/components/pos/Payments.vue` — Bug 4 (payment screen discount)
+
+### POS Awesome Commit History
+```
+e46282e Remove temporary debug logging from Payments.vue
+469c178 Add temporary debug logging to Payments.vue discount computation
+02e3594 Add discount system toggle: skip POS Offers when UOM Discount is active
+1b83f0d Fix discount amount not showing in payment screen
+cf62fa1 Fix discount display and recalculation in POS
+ed72bf2 Fix 15 bugs: SQL injection, logic errors, race conditions, dead code
+```
 
 ---
 
