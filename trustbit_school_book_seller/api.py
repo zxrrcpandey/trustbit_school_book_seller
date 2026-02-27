@@ -319,3 +319,56 @@ def copy_school_name_to_invoice(doc, method):
 			if school_name:
 				doc.custom_school_name = school_name
 				break
+
+
+@frappe.whitelist()
+def get_product_bundle_items(product_bundle, qty_sets=1):
+	"""Get component items from a Product Bundle, multiplied by number of sets.
+
+	Args:
+		product_bundle: Name of the Product Bundle document
+		qty_sets: Number of sets (multiplier for component qty)
+
+	Returns:
+		List of dicts with item_code, item_name, description, qty, uom,
+		stock_uom, conversion_factor
+	"""
+	qty_sets = flt(qty_sets)
+	if qty_sets <= 0:
+		frappe.throw(_("Number of Sets must be greater than zero"))
+
+	if not frappe.db.exists("Product Bundle", product_bundle):
+		frappe.throw(_("Product Bundle {0} not found").format(product_bundle))
+
+	bundle = frappe.get_doc("Product Bundle", product_bundle)
+
+	if not bundle.items:
+		frappe.throw(_("Product Bundle {0} has no items").format(product_bundle))
+
+	items = []
+	for row in bundle.items:
+		item_details = frappe.db.get_value(
+			"Item",
+			row.item_code,
+			["item_name", "description", "stock_uom"],
+			as_dict=True,
+		)
+
+		if not item_details:
+			frappe.throw(
+				_("Item {0} in Product Bundle does not exist").format(row.item_code)
+			)
+
+		items.append(
+			{
+				"item_code": row.item_code,
+				"item_name": item_details.item_name or row.item_code,
+				"description": item_details.description or "",
+				"qty": flt(row.qty) * qty_sets,
+				"uom": row.uom or item_details.stock_uom,
+				"stock_uom": item_details.stock_uom,
+				"conversion_factor": 1,
+			}
+		)
+
+	return items
