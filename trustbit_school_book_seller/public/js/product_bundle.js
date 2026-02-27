@@ -40,23 +40,54 @@
 					change: function () {
 						var bundle = d.get_value("product_bundle");
 						if (bundle) {
+							// Fetch parent item name and bundle items in parallel
+							frappe.call({
+								method: "frappe.client.get_value",
+								args: {
+									doctype: "Item",
+									filters: { name: bundle },
+									fieldname: ["item_name", "description"]
+								},
+								async: false,
+								callback: function (p) {
+									var parent_info = p.message || {};
+									var parent_html = '<div style="margin-top:4px;margin-bottom:8px;padding:8px 10px;'
+										+ 'background:#f5f7fa;border-radius:4px;border-left:3px solid #5e64ff;">'
+										+ '<div style="font-size:13px;font-weight:600;color:#333;">'
+										+ frappe.utils.escape_html(bundle)
+										+ (parent_info.item_name ? ' — ' + frappe.utils.escape_html(parent_info.item_name) : '')
+										+ '</div>';
+									if (parent_info.description) {
+										var desc = frappe.utils.escape_html(
+											parent_info.description.replace(/<[^>]*>/g, '').substring(0, 150)
+										);
+										parent_html += '<div style="font-size:11px;color:#666;margin-top:2px;">' + desc + '</div>';
+									}
+									parent_html += '</div>';
+									d.fields_dict.bundle_preview.$wrapper.html(parent_html);
+								}
+							});
+
 							frappe.call({
 								method: "trustbit_school_book_seller.api.get_product_bundle_items",
 								args: { product_bundle: bundle, qty_sets: 1 },
 								callback: function (r) {
+									var existing = d.fields_dict.bundle_preview.$wrapper.html();
 									if (r.message && r.message.length) {
-										var html = '<div style="max-height:150px;overflow-y:auto;margin-top:4px;">'
+										var html = '<div style="max-height:150px;overflow-y:auto;">'
 											+ '<table class="table table-bordered table-condensed" style="margin-bottom:0;font-size:12px;">'
 											+ '<thead><tr><th>Item</th><th>Qty</th><th>UOM</th></tr></thead><tbody>';
 										r.message.forEach(function (item) {
-											html += '<tr><td>' + item.item_code + ' - ' + (item.item_name || '')
-												+ '</td><td>' + item.qty + '</td><td>' + (item.uom || '') + '</td></tr>';
+											html += '<tr><td>' + frappe.utils.escape_html(item.item_code)
+												+ ' - ' + frappe.utils.escape_html(item.item_name || '')
+												+ '</td><td>' + item.qty + '</td><td>'
+												+ frappe.utils.escape_html(item.uom || '') + '</td></tr>';
 										});
 										html += '</tbody></table></div>';
-										d.fields_dict.bundle_preview.$wrapper.html(html);
+										d.fields_dict.bundle_preview.$wrapper.html(existing + html);
 									} else {
 										d.fields_dict.bundle_preview.$wrapper.html(
-											'<p class="text-muted">' + __("No items in this bundle") + '</p>'
+											existing + '<p class="text-muted">' + __("No items in this bundle") + '</p>'
 										);
 									}
 								}
