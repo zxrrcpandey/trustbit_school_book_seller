@@ -468,6 +468,65 @@ ed72bf2 Fix 15 bugs: SQL injection, logic errors, race conditions, dead code
 
 ---
 
+## Task 14: POS Awesome — Fix UOM Dropdown Removing Discount & UI Improvements
+
+**App:** POS Awesome (separate repo: `POS-Awesome-V15-trustbit-2`)
+**Request:** "new bug when i add item into cart its applies uom discount but when use dropdown its remove the discount" + "can we add something in sales invoice to how much discount given" + "what we do to prevent or not show internal server message if connection loses"
+
+### Bug Fix: UOM Dropdown Removing Applied Discount
+
+**File:** `Invoice.vue` → `update_item_detail()`, `apply_item_uom_discount()`, `calc_uom()`
+
+**Problem:** When user changed the UOM dropdown on an item, the UOM discount was correctly re-applied by `apply_item_uom_discount()` via `calc_prices()`, but then `update_item_detail()` would fire (triggered by Vuetify data table expand events or async callbacks) and unconditionally reset `item.rate = item.price_list_rate`, wiping out the discount. The only existing guard was `!item.posa_offer_applied`, which didn't protect UOM discounts.
+
+**Root Cause Analysis:**
+1. `calc_uom()` resets discount → fetches new UOM price → calls `apply_item_uom_discount()`
+2. `apply_item_uom_discount()` applies discount via `calc_prices()` and does `this.items = [...this.items]` for Vue reactivity
+3. Array reassignment triggers Vuetify's `@update:expanded` → `handleExpandedUpdate()` → schedules `update_item_detail()` via `$nextTick`
+4. `update_item_detail()` synchronously resets `item.rate = item.price_list_rate` (line 2352) → **discount wiped out**
+5. Its async callback also overwrites `item.rate = data.price_list_rate` (line 2416) → **discount wiped out again**
+
+**Fix (4 changes in `update_item_detail`):**
+- Added `!item.posa_uom_discount_applied` guard to synchronous rate reset (line 2351)
+- Added same guard to async callback rate overwrite (line 2406)
+- Added guard to customer discount section to not override UOM discount (line 2431)
+- Added `posa_uom_discount_applied = false` reset in `calc_uom()` before re-applying (clean slate)
+
+### Feature: Sales Invoice Discount Column Visibility
+
+**Problem:** Discount information (price_list_rate, discount_percentage, discount_amount) was saved on Sales Invoice items but not visible in the items table on the form.
+
+**Solution:** Created 3 Property Setters via Frappe REST API to set `in_list_view = 1` on Sales Invoice Item fields:
+- `price_list_rate` — shows original price before discount
+- `discount_percentage` — shows discount % applied
+- `discount_amount` — shows discount amount per item
+
+### Feature: Connection Error Handler (Suppress 502/Internal Server Error Dialogs)
+
+**File:** `posapp.js`
+
+**Problem:** During server restarts or network issues, Frappe's default error handler showed ugly "Internal Server Error" dialog boxes that confused POS users and required manual dismissal.
+
+**Solution:** Added global AJAX error interceptor in `posapp.js`:
+- Intercepts HTTP 502, 503, and 0 (network loss) errors
+- Shows friendly "Connection lost. Reconnecting..." orange toast
+- Auto-retries every 3 seconds (max 30 retries)
+- Shows "Connection restored!" green toast when connection returns
+- Also patches `frappe.request.report_error` to skip connection errors
+
+### Files Modified
+- `posawesome/public/js/posapp/components/pos/Invoice.vue` — UOM discount fix
+- `posawesome/public/js/posapp/posapp.js` — Connection error handler
+
+### POS Awesome Commit History (Task 14)
+```
+bdd1e63 Restore items array reassignment for Vue reactivity on add-item discount
+ad21e5e Fix UOM dropdown removing discount: guard update_item_detail from overwriting UOM discount
+7afb79e Add connection error handler to suppress Internal Server Error dialogs
+```
+
+---
+
 ## Complete Commit History
 
 ```
