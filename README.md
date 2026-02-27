@@ -183,22 +183,44 @@ A dedicated **"School Book Seller"** workspace with:
 
 ## Custom Fields on Item
 
-The app adds 12 custom fields to the standard ERPNext **Item** doctype:
+The app adds 17 custom fields to the standard ERPNext **Item** doctype:
 
 | Field | Type | Section | Options |
 |-------|------|---------|---------|
 | `custom_book_details_section` | Section Break | Book Details | Collapsible |
 | `custom_publication` | Link | Book Details | Publication |
-| `custom_subject` | Link | Book Details | Subject |
-| `custom_class` | Link | Book Details | Class Master |
+| `custom_subject` | Data | Book Details | — |
+| `custom_class` | Data | Book Details | — |
+| `custom_class_grades` | Table MultiSelect | Book Details | Item Class Grade |
+| `custom_column_break_book` | Column Break | Book Details | — |
 | `custom_author` | Data | Book Details | — |
 | `custom_edition` | Data | Book Details | — |
+| `custom_edition_year` | Data | Book Details | — |
 | `custom_publication_year` | Data | Book Details | — |
+| `custom_isbn` | Data (unique) | Book Details | — |
 | `custom_isbn_barcode` | Data (unique) | Book Details | DB unique constraint |
+| `custom_publisher` | Link | Book Details | Supplier |
 | `custom_discount_section` | Section Break | Discount | Collapsible |
 | `custom_sales_discount_percent` | Percent | Discount | — |
 | `custom_purchase_discount_percent` | Percent | Discount | — |
 | `custom_book_item_creator` | Link (read-only) | Discount | Book Item Creator |
+
+### Custom Fields on Other DocTypes
+
+| DocType | Field | Type | Options |
+|---------|-------|------|---------|
+| Sales Order | `custom_school_name` | Link | School |
+| Purchase Order | `custom_school_name` | Link | School |
+| Purchase Order | `custom_remark` | Small Text | — |
+| Purchase Order | `custom_transport_name` | Data | — |
+| Sales Invoice | `custom_school_name` | Link | School |
+
+**School Name Propagation:**
+- Sales Order → Set School Name (linked to School master)
+- "PO (Supplier Wise)" button → School Name copied to Purchase Order
+- "Make Sales Invoice" → School Name copied to Sales Invoice (via `before_save` hook)
+
+> **Dependency:** School Name fields require the `trustbit_school_pro` app (provides the `School` DocType). If not installed, these fields are created as Data type instead of Link.
 
 ---
 
@@ -410,7 +432,7 @@ sudo supervisorctl restart all
 | **Background Jobs** | `frappe.enqueue()` on `default` queue, 600s timeout |
 | **Realtime Event** | `book_item_creation_progress` |
 | **Barcode Type** | Empty string (accepts any format) |
-| **Fixtures** | Subject, Class Master, Custom Field (exported via `bench export-fixtures`) |
+| **Fixtures** | Subject, Class Master, Custom Field (22 fields), Print Format (KGS Purchase Order) |
 | **Build System** | Flit (`flit_core >= 3.4, < 4`) |
 
 ### File Structure
@@ -433,7 +455,9 @@ trustbit_school_book_seller/
     ├── patches.txt
     ├── fixtures/
     │   ├── class_master.json           # 15 default classes
-    │   └── subject.json                # 20 default subjects
+    │   ├── subject.json                # 20 default subjects
+    │   ├── custom_field.json           # 22 custom field definitions (Item, SO, PO, SI)
+    │   └── print_format.json           # KGS Purchase Order print format
     ├── public/js/
     │   └── book_item_creator.js        # Client-side logic (649 lines)
     └── trustbit_school_book/
@@ -464,6 +488,30 @@ from trustbit_school_book_seller.install import after_install
 after_install()
 ```
 
+### Fields showing in wrong order or hidden
+This is usually caused by a `field_order` Property Setter created by Customize Form:
+```bash
+# Check for dangerous Property Setter
+bench --site [your-site] execute frappe.get_all --args '["Property Setter", {"filters": {"doc_type": "Item", "property": "field_order"}, "fields": ["name"]}]'
+
+# Delete it if found
+bench --site [your-site] execute frappe.delete_doc --args '["Property Setter", "Item-main-field_order"]'
+
+# Flush cache
+redis-cli -p 11000 FLUSHALL && redis-cli -p 13000 FLUSHALL
+sudo supervisorctl restart all
+```
+
+**Important:** NEVER use the Customize Form UI to reorder fields — it creates a permanent field position lock that overrides all `insert_after` settings.
+
+### Brand field disappeared
+Brand may be trapped inside the `book_sample_section` (which is hidden unless "Is Sample Book" is checked). Fix:
+```bash
+bench --site [your-site] execute frappe.db.set_value --args '["Custom Field", "Item-book_sample_section", "insert_after", "brand"]'
+redis-cli -p 11000 FLUSHALL && redis-cli -p 13000 FLUSHALL
+sudo supervisorctl restart all
+```
+
 ### JavaScript not loading
 ```bash
 bench build --app trustbit_school_book_seller --force
@@ -472,17 +520,15 @@ sudo supervisorctl restart all
 ```
 
 ### App not found in apps.txt
+**NEVER manually edit apps.txt.** Use bench commands:
 ```bash
-cat ~/frappe-bench/sites/apps.txt
-echo "trustbit_school_book_seller" >> ~/frappe-bench/sites/apps.txt
 bench --site [your-site] install-app trustbit_school_book_seller
 ```
 
-### Module not found error
+### Re-export fixtures after field changes
+After fixing any custom field settings in the DB, re-export to prevent regression on next migrate:
 ```bash
-bench --site [your-site] migrate
-bench --site [your-site] clear-cache
-sudo supervisorctl restart all
+bench --site [your-site] export-fixtures --app trustbit_school_book_seller
 ```
 
 ### Uninstallation
