@@ -37,6 +37,38 @@
 					label: __("Product Bundle"),
 					options: "Product Bundle",
 					reqd: 1,
+					change: function () {
+						var bundle = d.get_value("product_bundle");
+						if (bundle) {
+							frappe.call({
+								method: "trustbit_school_book_seller.api.get_product_bundle_items",
+								args: { product_bundle: bundle, qty_sets: 1 },
+								callback: function (r) {
+									if (r.message && r.message.length) {
+										var html = '<div style="max-height:150px;overflow-y:auto;margin-top:4px;">'
+											+ '<table class="table table-bordered table-condensed" style="margin-bottom:0;font-size:12px;">'
+											+ '<thead><tr><th>Item</th><th>Qty</th><th>UOM</th></tr></thead><tbody>';
+										r.message.forEach(function (item) {
+											html += '<tr><td>' + item.item_code + ' - ' + (item.item_name || '')
+												+ '</td><td>' + item.qty + '</td><td>' + (item.uom || '') + '</td></tr>';
+										});
+										html += '</tbody></table></div>';
+										d.fields_dict.bundle_preview.$wrapper.html(html);
+									} else {
+										d.fields_dict.bundle_preview.$wrapper.html(
+											'<p class="text-muted">' + __("No items in this bundle") + '</p>'
+										);
+									}
+								}
+							});
+						} else {
+							d.fields_dict.bundle_preview.$wrapper.html("");
+						}
+					},
+				},
+				{
+					fieldname: "bundle_preview",
+					fieldtype: "HTML",
 				},
 				{
 					fieldname: "qty",
