@@ -580,6 +580,45 @@ ad21e5e Fix UOM dropdown removing discount: guard update_item_detail from overwr
 
 ---
 
+## Task 16: New 80MM Print Format with Larger Fonts — "80MMNewPrint"
+
+**Request:** "now on print format 80MMPrint — don't change format and design — just want to work with font and sizes"
+
+### Background
+
+The existing "80MMPrint" Sales Invoice print format for 80mm thermal printers had small font sizes (9px base) that were hard to read on thermal paper. User requested a new version with larger fonts, keeping the exact same layout and design.
+
+### New Print Format: "80MMNewPrint"
+
+Created as a new Print Format (not modifying the original) so both are available. All font sizes increased by +5px from original, with shop address and GSTIN kept at original sizes per user preference.
+
+| Element | Original (80MMPrint) | New (80MMNewPrint) |
+|---|---|---|
+| Base body | 9px | **14px** |
+| Shop name (h2) | 16px | **21px** |
+| Shop address/phone | 13px | **14px** |
+| GSTIN / TAX INVOICE | 6.5px | **8px** |
+| Cashier/POS header | 8.5px | **13px** |
+| Customer details | 8.5px | **13px** |
+| Date | 7.5px | **12px** |
+| Items header (MRP/Qty/etc) | 8.5px | **13px** |
+| Item name | 9px | **14px** |
+| Item details row | 8.5px | **13px** |
+| Amount column | 10.5px | **15px** |
+| Amount details table | 9px | **14px** |
+| Scan & Pay | 8px | **13px** |
+| UPI text | 7px | **11.5px** |
+| You Saved | 10px | **15px** |
+| Footer | 7px | **11.5px** |
+
+### Implementation
+
+- Created directly on production server via Python script (`frappe.get_doc` → `insert`)
+- Same Jinja template, same HTML structure, only CSS `font-size` values changed
+- Original "80MMPrint" preserved unchanged as fallback
+
+---
+
 ## Complete Commit History
 
 ```
