@@ -527,6 +527,59 @@ ad21e5e Fix UOM dropdown removing discount: guard update_item_detail from overwr
 
 ---
 
+## Task 15: POS Awesome — Harden UOM Discount System
+
+**App:** POS Awesome (separate repo: `POS-Awesome-V15-trustbit-2`)
+**Request:** "again verify is there anything we can improve or we should implement please check properly"
+
+### Comprehensive code review of the discount system identified and fixed 3 issues:
+
+### Fix 1: Missing `posa_uom_discount_applied` Initialization
+
+**File:** `Invoice.vue` → `get_new_item()`
+**Problem:** `get_new_item()` initialized 31 item properties (`posa_offer_applied`, `posa_is_offer`, `discount_amount`, etc.) but never initialized `posa_uom_discount_applied`. It was left as `undefined`, which works as falsy in boolean checks but could cause unpredictable behavior in edge cases.
+**Fix:** Added `new_item.posa_uom_discount_applied = false;` alongside the other flag initializations.
+
+### Fix 2: Race Condition Between `update_item_detail()` and `apply_item_uom_discount()`
+
+**File:** `Invoice.vue` → `update_item_detail()`, `add_item()`
+**Problem:** `update_item_detail()` used a fire-and-forget callback pattern (`frappe.call` with `callback:`). In `add_item()`, it was called without `await`, meaning its async callback could arrive AFTER `apply_item_uom_discount()` had already applied the discount, overwriting it with `item.rate = data.price_list_rate`.
+
+**Timeline of failure:**
+```
+1. add_item() calls update_item_detail(item) — fires API call (not awaited)
+2. add_item() calls await apply_item_uom_discount(item) — applies discount ✓
+3. update_item_detail callback arrives — overwrites rate = price_list_rate ✗
+```
+
+**Fix:**
+- Converted `update_item_detail()` from callback-based to `async/await` pattern (returns Promise)
+- Changed `add_item()` to `await this.update_item_detail(new_item)` before calling `apply_item_uom_discount()`
+- Replaced all `var vm = this` closure references with direct `this` references
+
+**Corrected timeline:**
+```
+1. add_item() awaits update_item_detail(item) — completes, sets correct price_list_rate
+2. add_item() awaits apply_item_uom_discount(item) — applies discount on correct base price ✓
+3. No more race condition — operations are sequential
+```
+
+### Fix 3: Discount Lost on API Error in `calc_uom()`
+
+**File:** `Invoice.vue` → `calc_uom()`
+**Problem:** When user changed the UOM dropdown, `calc_uom()` immediately reset `discount_amount=0`, `discount_percentage=0`, `posa_uom_discount_applied=false` BEFORE making the async API call to fetch the new UOM price. If the API call failed (network error, server 502, timeout), the discount was already gone with no recovery.
+**Fix:** Save original discount values before resetting. In the `catch` block, restore them so the user doesn't silently lose their discount.
+
+### Files Modified
+- `posawesome/public/js/posapp/components/pos/Invoice.vue` — All 3 fixes
+
+### POS Awesome Commit History (Task 15)
+```
+19f6e8e Harden UOM discount: init flag, fix race condition, add error recovery
+```
+
+---
+
 ## Complete Commit History
 
 ```
