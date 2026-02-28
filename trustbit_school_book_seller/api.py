@@ -322,6 +322,57 @@ def copy_school_name_to_invoice(doc, method):
 
 
 @frappe.whitelist()
+def search_items(search_text="", limit=50):
+	"""Fuzzy search Items by code, name, group, description, barcode.
+
+	Splits search_text into words and matches ALL words (AND logic).
+	Returns: item_code, item_name, item_group, stock_uom, barcode
+	"""
+	search_text = (search_text or "").strip()
+	limit = min(int(limit), 100)
+
+	if len(search_text) < 2:
+		return []
+
+	words = search_text.split()
+	conditions = []
+	values = []
+
+	for word in words:
+		like_val = "%{}%".format(word)
+		conditions.append("""(
+			i.name LIKE %s
+			OR i.item_name LIKE %s
+			OR i.item_group LIKE %s
+			OR i.description LIKE %s
+			OR ib.barcode LIKE %s
+		)""")
+		values.extend([like_val, like_val, like_val, like_val, like_val])
+
+	where_clause = " AND ".join(conditions)
+
+	items = frappe.db.sql("""
+		SELECT DISTINCT i.name as item_code, i.item_name, i.item_group,
+			i.stock_uom, i.image,
+			(SELECT ib2.barcode FROM `tabItem Barcode` ib2
+			 WHERE ib2.parent = i.name LIMIT 1) as barcode
+		FROM `tabItem` i
+		LEFT JOIN `tabItem Barcode` ib ON ib.parent = i.name
+		WHERE i.disabled = 0 AND i.has_variants = 0
+			AND {where_clause}
+		ORDER BY
+			CASE WHEN i.name LIKE %s THEN 0 ELSE 1 END,
+			i.name
+		LIMIT %s
+	""".format(where_clause=where_clause),
+		values + ["%{}%".format(words[0]), limit],
+		as_dict=True,
+	)
+
+	return items
+
+
+@frappe.whitelist()
 def search_product_bundles(search_text="", limit=20):
 	"""Fuzzy search Product Bundles by name, parent item name, description, item group.
 
