@@ -147,7 +147,23 @@ Fetch items from an ERPNext **Product Bundle** into transaction documents with a
 4. Choose **Append** (add to existing items) or **Replace** (clear existing items first)
 5. Click **Get Items** — items are added to the table and rates auto-populate from the document's Price List
 
-### 16. Workspace
+### 16. Advanced Search on Product Bundle Form
+The Product Bundle form includes **Ctrl+Q Quick Add** and **Ctrl+B Barcode Scan** for rapidly adding component items — the same advanced search experience as `trustbit_advance_search`.
+
+**Quick Add (Ctrl+Q):**
+- Fuzzy search across item code, name, group, description, and barcode
+- Multi-word AND matching (e.g. "NCERT math" finds items matching both words)
+- Results table: Item Code | Item Name | Group | UOM | Select button
+- Barcodes shown below item code when available
+- Select an item → enter qty → **Add to Bundle** → form resets for next item
+
+**Scan Barcode (Ctrl+B):**
+- Scan or type barcode → item auto-detected with details shown
+- Enter qty → **Add to Bundle** → auto-resets for continuous scanning
+
+**Smart duplicate handling:** If an item already exists in the bundle, qty is added to the existing row.
+
+### 17. Workspace
 A dedicated **"School Book Seller"** workspace with:
 - Quick shortcuts to Book Item Creator, Publication, Class Master, Subject
 - Links to both reports
@@ -394,6 +410,8 @@ All whitelisted API methods are at:
 | Method | Arguments | Description |
 |--------|-----------|-------------|
 | `get_product_bundle_items` | `product_bundle`, `qty_sets` (default 1) | Returns list of items from a Product Bundle with quantities multiplied by `qty_sets` |
+| `search_product_bundles` | `search_text`, `limit` (default 20) | Fuzzy search Product Bundles by name, item name, description, group |
+| `search_items` | `search_text`, `limit` (default 50) | Fuzzy search Items by code, name, group, description, barcode (AND logic) |
 
 ---
 
@@ -479,10 +497,11 @@ trustbit_school_book_seller/
     │   ├── subject.json                # 20 default subjects
     │   ├── custom_field.json           # 22 custom field definitions (Item, SO, PO, SI)
     │   └── print_format.json           # KGS Purchase Order print format
-    ├── api.py                          # Product Bundle API
+    ├── api.py                          # Product Bundle & search APIs
     ├── public/js/
     │   ├── book_item_creator.js        # Client-side logic (649 lines)
     │   ├── product_bundle.js           # Get Items from Product Bundle (MR, SI, SO, PO, PI)
+    │   ├── product_bundle_form.js      # Advanced Search on Product Bundle form (Ctrl+Q, Ctrl+B)
     │   └── sales_order.js              # Sales Order custom buttons
     └── trustbit_school_book/
         ├── doctype/
