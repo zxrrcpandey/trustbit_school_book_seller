@@ -132,7 +132,22 @@ Status values: `Draft` | `In Progress` | `Completed` | `Partially Created` | `Fa
 - No duplicate ISBNs across existing Items and submitted Book Item Creators
 - All validations run server-side (Python) and client-side (JavaScript) for immediate feedback
 
-### 15. Workspace
+### 15. Get Items from Product Bundle
+Fetch items from an ERPNext **Product Bundle** into transaction documents with a single click. Available on:
+- Material Request
+- Sales Invoice
+- Sales Order
+- Purchase Order
+- Purchase Invoice
+
+**How it works:**
+1. Open a Draft document → click **Get Items → Product Bundle**
+2. Select a Product Bundle — the dialog shows the **parent item name/description** and a **preview table** of all component items with quantities and UOMs
+3. Enter **Number of Sets** — each item's quantity is multiplied by this number
+4. Choose **Append** (add to existing items) or **Replace** (clear existing items first)
+5. Click **Get Items** — items are added to the table and rates auto-populate from the document's Price List
+
+### 16. Workspace
 A dedicated **"School Book Seller"** workspace with:
 - Quick shortcuts to Book Item Creator, Publication, Class Master, Subject
 - Links to both reports
@@ -374,6 +389,12 @@ All whitelisted API methods are at:
 | `parse_csv_file` | `file_url` | Parses uploaded CSV, validates classes, returns data + skipped info |
 | `duplicate_book_item_creator` | `docname` | Clones a Book Item Creator (clears ISBNs) |
 
+**Product Bundle API** (`trustbit_school_book_seller.api`):
+
+| Method | Arguments | Description |
+|--------|-----------|-------------|
+| `get_product_bundle_items` | `product_bundle`, `qty_sets` (default 1) | Returns list of items from a Product Bundle with quantities multiplied by `qty_sets` |
+
 ---
 
 ## Deployment
@@ -458,8 +479,11 @@ trustbit_school_book_seller/
     │   ├── subject.json                # 20 default subjects
     │   ├── custom_field.json           # 22 custom field definitions (Item, SO, PO, SI)
     │   └── print_format.json           # KGS Purchase Order print format
+    ├── api.py                          # Product Bundle API
     ├── public/js/
-    │   └── book_item_creator.js        # Client-side logic (649 lines)
+    │   ├── book_item_creator.js        # Client-side logic (649 lines)
+    │   ├── product_bundle.js           # Get Items from Product Bundle (MR, SI, SO, PO, PI)
+    │   └── sales_order.js              # Sales Order custom buttons
     └── trustbit_school_book/
         ├── doctype/
         │   ├── book_item_creator/      # Main transaction DocType
