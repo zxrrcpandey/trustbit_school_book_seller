@@ -322,6 +322,62 @@ def copy_school_name_to_invoice(doc, method):
 
 
 @frappe.whitelist()
+def search_product_bundles(search_text="", limit=20):
+	"""Fuzzy search Product Bundles by name, parent item name, description, item group.
+
+	Splits search_text into words and matches ALL words (AND logic) against:
+	- Product Bundle name (= parent item code)
+	- Parent item's item_name
+	- Parent item's description
+	- Parent item's item_group
+
+	Returns list of dicts with: name, item_name, description, item_group, items_count
+	"""
+	search_text = (search_text or "").strip()
+	limit = min(int(limit), 50)
+
+	if not search_text:
+		# Return all bundles (up to limit) when no search text
+		bundles = frappe.db.sql("""
+			SELECT pb.name, i.item_name, i.description, i.item_group,
+				(SELECT COUNT(*) FROM `tabProduct Bundle Item` pbi WHERE pbi.parent = pb.name) as items_count
+			FROM `tabProduct Bundle` pb
+			LEFT JOIN `tabItem` i ON i.name = pb.new_item_code
+			ORDER BY pb.name
+			LIMIT %s
+		""", (limit,), as_dict=True)
+		return bundles
+
+	words = search_text.split()
+	conditions = []
+	values = []
+
+	for word in words:
+		like_val = "%{}%".format(word)
+		conditions.append("""(
+			pb.name LIKE %s
+			OR i.item_name LIKE %s
+			OR i.description LIKE %s
+			OR i.item_group LIKE %s
+		)""")
+		values.extend([like_val, like_val, like_val, like_val])
+
+	where_clause = " AND ".join(conditions)
+
+	bundles = frappe.db.sql("""
+		SELECT pb.name, i.item_name, i.description, i.item_group,
+			(SELECT COUNT(*) FROM `tabProduct Bundle Item` pbi WHERE pbi.parent = pb.name) as items_count
+		FROM `tabProduct Bundle` pb
+		LEFT JOIN `tabItem` i ON i.name = pb.new_item_code
+		WHERE {where_clause}
+		ORDER BY pb.name
+		LIMIT %s
+	""".format(where_clause=where_clause), values + [limit], as_dict=True)
+
+	return bundles
+
+
+@frappe.whitelist()
 def get_product_bundle_items(product_bundle, qty_sets=1):
 	"""Get component items from a Product Bundle, multiplied by number of sets.
 
