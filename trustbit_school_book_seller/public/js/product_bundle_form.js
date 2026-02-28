@@ -1,10 +1,10 @@
 // Advanced Search for Product Bundle form
-// Adds Ctrl+K Quick Add and Ctrl+B Barcode Scan for adding items to a Product Bundle
+// Adds Ctrl+Q Quick Add and Ctrl+B Barcode Scan for adding items to a Product Bundle
 
 frappe.ui.form.on("Product Bundle", {
 	refresh: function (frm) {
 		frm.add_custom_button(
-			__("Quick Add (Ctrl+K)"),
+			__("Quick Add (Ctrl+Q)"),
 			function () {
 				show_quick_add_dialog(frm);
 			},
@@ -23,8 +23,8 @@ frappe.ui.form.on("Product Bundle", {
 	onload: function (frm) {
 		// Keyboard shortcuts
 		frm.$wrapper.on("keydown", function (e) {
-			// Ctrl+K = Quick Add
-			if (e.ctrlKey && e.key === "k") {
+			// Ctrl+Q = Quick Add
+			if (e.ctrlKey && e.key === "q") {
 				e.preventDefault();
 				show_quick_add_dialog(frm);
 			}
@@ -37,7 +37,7 @@ frappe.ui.form.on("Product Bundle", {
 	},
 });
 
-// ─── Quick Add Dialog (Ctrl+K) ───
+// ─── Quick Add Dialog (Ctrl+Q) ───
 
 var search_timeout = null;
 
