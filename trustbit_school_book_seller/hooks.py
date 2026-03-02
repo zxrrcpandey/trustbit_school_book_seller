@@ -223,7 +223,7 @@ fixtures = [
     {
         "doctype": "Print Format",
         "filters": [
-            ["name", "in", ["KGS Purchase Order"]]
+            ["name", "in", ["KGS Purchase Order", "80MM Token"]]
         ]
     }
 ]
