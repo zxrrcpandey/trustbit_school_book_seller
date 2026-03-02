@@ -322,6 +322,29 @@ def copy_school_name_to_invoice(doc, method):
 
 
 @frappe.whitelist()
+def get_multi_print_settings():
+	"""Get Multi Print Setting configuration for auto-printing Sales Invoices."""
+	if not frappe.db.exists("DocType", "Multi Print Setting"):
+		return {"enabled": 0, "print_formats": []}
+
+	settings = frappe.get_single("Multi Print Setting")
+	return {
+		"enabled": settings.enabled,
+		"show_token": settings.show_token,
+		"token_digits": settings.token_digits or 3,
+		"print_formats": [
+			{
+				"print_format": row.print_format,
+				"printer_name": row.printer_name,
+				"copies": row.copies or 1,
+				"enabled": row.enabled,
+			}
+			for row in (settings.print_formats or [])
+		],
+	}
+
+
+@frappe.whitelist()
 def search_items(search_text="", limit=50):
 	"""Fuzzy search Items by code, name, group, description, barcode.
 

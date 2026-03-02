@@ -1,0 +1,85 @@
+{
+    "actions": [],
+    "creation": "2026-03-02 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "enabled",
+        "column_break_main",
+        "show_token",
+        "token_digits",
+        "section_break_formats",
+        "print_formats"
+    ],
+    "fields": [
+        {
+            "default": "1",
+            "fieldname": "enabled",
+            "fieldtype": "Check",
+            "label": "Enable Auto Print on Sales Invoice Submit"
+        },
+        {
+            "fieldname": "column_break_main",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "1",
+            "fieldname": "show_token",
+            "fieldtype": "Check",
+            "label": "Show Token After Print"
+        },
+        {
+            "default": "3",
+            "fieldname": "token_digits",
+            "fieldtype": "Int",
+            "label": "Token Digits",
+            "description": "Number of digits from the end of Sales Invoice name (e.g. 3 = last 3 digits)"
+        },
+        {
+            "fieldname": "section_break_formats",
+            "fieldtype": "Section Break",
+            "label": "Print Formats & Printers"
+        },
+        {
+            "fieldname": "print_formats",
+            "fieldtype": "Table",
+            "label": "Print Formats",
+            "options": "Multi Print Format",
+            "description": "Configure which print formats to auto-print and on which printer. Printer name must match QZ Tray exactly."
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "issingle": 1,
+    "links": [],
+    "modified": "2026-03-02 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Trustbit School Book",
+    "name": "Multi Print Setting",
+    "naming_rule": "Expression",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Stock Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
+}

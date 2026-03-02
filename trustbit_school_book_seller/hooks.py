@@ -14,7 +14,7 @@ required_apps = ["frappe", "erpnext"]
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/trustbit_school_book_seller/css/trustbit_school_book_seller.css"
-# app_include_js = "/assets/trustbit_school_book_seller/js/trustbit_school_book_seller.js"
+app_include_js = "/assets/trustbit_school_book_seller/js/sales_invoice_print.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/trustbit_school_book_seller/css/trustbit_school_book_seller.css"
