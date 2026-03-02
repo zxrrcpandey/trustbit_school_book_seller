@@ -323,25 +323,54 @@ def copy_school_name_to_invoice(doc, method):
 
 @frappe.whitelist()
 def get_multi_print_settings():
-	"""Get Multi Print Setting configuration for auto-printing Sales Invoices."""
+	"""Get print config for current user.
+
+	Priority: User Print Config (per-user) > Multi Print Setting (global default).
+	Global settings (enabled, show_token, token_digits) always come from Multi Print Setting.
+	Print formats/printers come from user config if it exists, otherwise global default.
+	"""
 	if not frappe.db.exists("DocType", "Multi Print Setting"):
 		return {"enabled": 0, "print_formats": []}
 
 	settings = frappe.get_single("Multi Print Setting")
-	return {
+	result = {
 		"enabled": settings.enabled,
 		"show_token": settings.show_token,
 		"token_digits": settings.token_digits or 3,
-		"print_formats": [
-			{
-				"print_format": row.print_format,
-				"printer_name": row.printer_name,
-				"copies": row.copies or 1,
-				"enabled": row.enabled,
-			}
-			for row in (settings.print_formats or [])
-		],
+		"source": "global",
+		"print_formats": [],
 	}
+
+	# Check for user-specific config first
+	user = frappe.session.user
+	user_config_name = frappe.db.exists("User Print Config", user)
+
+	if user_config_name:
+		user_config = frappe.get_doc("User Print Config", user_config_name)
+		if user_config.print_formats:
+			result["source"] = "user"
+			result["print_formats"] = [
+				{
+					"print_format": row.print_format,
+					"printer_name": row.printer_name,
+					"copies": row.copies or 1,
+					"enabled": row.enabled,
+				}
+				for row in user_config.print_formats
+			]
+			return result
+
+	# Fallback to global default
+	result["print_formats"] = [
+		{
+			"print_format": row.print_format,
+			"printer_name": row.printer_name,
+			"copies": row.copies or 1,
+			"enabled": row.enabled,
+		}
+		for row in (settings.print_formats or [])
+	]
+	return result
 
 
 @frappe.whitelist()

@@ -1,0 +1,82 @@
+{
+    "actions": [],
+    "autoname": "field:user",
+    "creation": "2026-03-03 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "user",
+        "column_break_user",
+        "printer_status_html",
+        "section_break_formats",
+        "print_formats"
+    ],
+    "fields": [
+        {
+            "fieldname": "user",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "User",
+            "options": "User",
+            "reqd": 1,
+            "unique": 1,
+            "default": "__user"
+        },
+        {
+            "fieldname": "column_break_user",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "printer_status_html",
+            "fieldtype": "HTML",
+            "label": "Printer Status"
+        },
+        {
+            "fieldname": "section_break_formats",
+            "fieldtype": "Section Break",
+            "label": "Print Formats & Printers"
+        },
+        {
+            "fieldname": "print_formats",
+            "fieldtype": "Table",
+            "label": "Print Formats",
+            "options": "Multi Print Format",
+            "description": "Map each print format to a specific printer. Click 'Detect Printers' to see available printers. Printer name must match QZ Tray exactly."
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-03-03 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Trustbit School Book",
+    "name": "User Print Config",
+    "naming_rule": "By fieldname",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Stock Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "title_field": "user",
+    "track_changes": 1
+}

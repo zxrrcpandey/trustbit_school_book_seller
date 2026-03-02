@@ -1,0 +1,245 @@
+// User Print Config — QZ Tray Printer Detection & Status
+frappe.ui.form.on("User Print Config", {
+	refresh: function (frm) {
+		// Detect Printers button
+		frm.add_custom_button(__("Detect Printers"), function () {
+			detect_and_select_printer(frm);
+		});
+
+		// Check printer status on load
+		check_all_printer_status(frm);
+	},
+});
+
+function detect_and_select_printer(frm) {
+	if (typeof qz === "undefined") {
+		frappe.msgprint({
+			title: __("QZ Tray Not Found"),
+			message: __("QZ Tray is not loaded. Please ensure:<br>1. QZ Tray is installed and running<br>2. The trustbit_barcode app is installed<br>3. Refresh the browser page"),
+			indicator: "red",
+		});
+		return;
+	}
+
+	var connect_promise = qz.websocket.isActive()
+		? Promise.resolve()
+		: qz.websocket.connect();
+
+	frappe.show_alert({
+		message: __("Connecting to QZ Tray..."),
+		indicator: "blue",
+	});
+
+	connect_promise
+		.then(function () {
+			return qz.printers.find();
+		})
+		.then(function (printers) {
+			if (!printers || !printers.length) {
+				frappe.msgprint(__("No printers detected. Check if printers are installed and turned on."));
+				return;
+			}
+
+			show_printer_dialog(frm, printers);
+		})
+		.catch(function (err) {
+			frappe.msgprint({
+				title: __("QZ Tray Connection Failed"),
+				message: __(
+					"Cannot connect to QZ Tray: {0}<br><br>"
+					+ "Make sure QZ Tray is running (check system tray icon).",
+					[err.message || err]
+				),
+				indicator: "red",
+			});
+		});
+}
+
+function show_printer_dialog(frm, printers) {
+	var html =
+		'<div style="margin-bottom:8px;font-size:13px;color:#555;">'
+		+ __("{0} printer(s) detected on this machine", [printers.length])
+		+ "</div>"
+		+ '<div style="max-height:300px;overflow-y:auto;border:1px solid #d1d8dd;border-radius:4px;">'
+		+ '<table class="table table-hover" style="margin-bottom:0;">'
+		+ '<thead style="position:sticky;top:0;background:#f5f7fa;z-index:1;">'
+		+ "<tr>"
+		+ '<th style="font-size:12px;padding:8px 10px;">' + __("Printer Name") + "</th>"
+		+ '<th style="font-size:12px;padding:8px 10px;width:100px;text-align:center;">'
+		+ __("Action") + "</th>"
+		+ "</tr></thead><tbody>";
+
+	// Check which printers are already configured
+	var configured = {};
+	(frm.doc.print_formats || []).forEach(function (row) {
+		configured[row.printer_name] = true;
+	});
+
+	printers.forEach(function (printer) {
+		var is_configured = configured[printer];
+		var badge = is_configured
+			? '<span class="badge" style="background:#28a745;color:#fff;font-size:10px;">Configured</span>'
+			: "";
+
+		html +=
+			'<tr class="printer-row" data-printer="'
+			+ frappe.utils.escape_html(printer)
+			+ '" style="cursor:pointer;">'
+			+ '<td style="padding:8px 10px;font-size:12px;">'
+			+ '<span style="color:#28a745;margin-right:6px;">&#9679;</span>'
+			+ frappe.utils.escape_html(printer)
+			+ " " + badge + "</td>"
+			+ '<td style="padding:8px 10px;text-align:center;">'
+			+ '<button class="btn btn-xs btn-primary select-printer-btn" style="font-size:11px;">'
+			+ __("Add") + "</button></td></tr>";
+	});
+
+	html += "</tbody></table></div>";
+
+	var d = new frappe.ui.Dialog({
+		title: __("Detected Printers"),
+		fields: [
+			{
+				fieldname: "printer_list",
+				fieldtype: "HTML",
+			},
+			{
+				fieldname: "print_format",
+				fieldtype: "Link",
+				label: __("Print Format to Map"),
+				options: "Print Format",
+				description: __("Select which print format to assign to the printer"),
+			},
+			{
+				fieldname: "copies",
+				fieldtype: "Int",
+				label: __("Copies"),
+				default: 1,
+			},
+		],
+		size: "large",
+	});
+
+	d.fields_dict.printer_list.$wrapper.html(html);
+
+	// Click handler
+	d.fields_dict.printer_list.$wrapper.find(".select-printer-btn").on("click", function (e) {
+		e.stopPropagation();
+		var printer_name = $(this).closest(".printer-row").data("printer");
+		var print_format = d.get_value("print_format");
+		var copies = d.get_value("copies") || 1;
+
+		if (!print_format) {
+			frappe.msgprint(__("Please select a Print Format first"));
+			return;
+		}
+
+		// Add row to child table
+		var row = frm.add_child("print_formats");
+		row.print_format = print_format;
+		row.printer_name = printer_name;
+		row.copies = copies;
+		row.enabled = 1;
+		frm.refresh_field("print_formats");
+		frm.dirty();
+
+		frappe.show_alert({
+			message: __("Added: {0} → {1}", [print_format, printer_name]),
+			indicator: "green",
+		});
+
+		// Update badge
+		$(this).closest("tr").find("td:first").append(
+			' <span class="badge" style="background:#28a745;color:#fff;font-size:10px;">Configured</span>'
+		);
+	});
+
+	d.show();
+}
+
+function check_all_printer_status(frm) {
+	var $status = frm.fields_dict.printer_status_html.$wrapper;
+
+	if (!frm.doc.print_formats || !frm.doc.print_formats.length) {
+		$status.html(
+			'<div style="padding:8px 12px;background:#f5f7fa;border-radius:4px;font-size:12px;color:#888;">'
+			+ __('No printers configured. Click "Detect Printers" to add.')
+			+ "</div>"
+		);
+		return;
+	}
+
+	if (typeof qz === "undefined") {
+		$status.html(
+			'<div style="padding:8px 12px;background:#fff3cd;border-radius:4px;border-left:3px solid #ffc107;font-size:12px;">'
+			+ '<b>' + __("QZ Tray not loaded") + "</b> — Cannot check printer status. "
+			+ __("Make sure QZ Tray is running and refresh the page.")
+			+ "</div>"
+		);
+		return;
+	}
+
+	$status.html(
+		'<div style="padding:8px 12px;background:#f5f7fa;border-radius:4px;font-size:12px;">'
+		+ '<i class="fa fa-spinner fa-spin"></i> ' + __("Checking printer status...")
+		+ "</div>"
+	);
+
+	var connect_promise = qz.websocket.isActive()
+		? Promise.resolve()
+		: qz.websocket.connect();
+
+	connect_promise
+		.then(function () {
+			return qz.printers.find();
+		})
+		.then(function (available_printers) {
+			var available_set = {};
+			available_printers.forEach(function (p) {
+				available_set[p] = true;
+			});
+
+			var html =
+				'<div style="padding:8px 12px;background:#f5f7fa;border-radius:4px;">'
+				+ '<div style="font-size:12px;font-weight:600;margin-bottom:6px;">'
+				+ __("Printer Status") + "</div>";
+
+			var all_ok = true;
+			frm.doc.print_formats.forEach(function (row) {
+				if (!row.enabled) return;
+				var is_available = available_set[row.printer_name];
+				if (!is_available) all_ok = false;
+
+				var dot_color = is_available ? "#28a745" : "#dc3545";
+				var status_text = is_available ? __("Available") : __("NOT FOUND");
+				var status_style = is_available
+					? "color:#28a745;"
+					: "color:#dc3545;font-weight:bold;";
+
+				html +=
+					'<div style="font-size:12px;padding:3px 0;">'
+					+ '<span style="color:' + dot_color + ';margin-right:6px;">&#9679;</span>'
+					+ frappe.utils.escape_html(row.printer_name)
+					+ ' <span style="' + status_style + '">(' + status_text + ")</span>"
+					+ ' <span style="color:#888;"> → ' + frappe.utils.escape_html(row.print_format)
+					+ "</span></div>";
+			});
+
+			if (!all_ok) {
+				html +=
+					'<div style="margin-top:6px;padding:6px 8px;background:#fff3cd;border-radius:3px;font-size:11px;">'
+					+ __("Some printers are not found. Check connections and printer names.")
+					+ "</div>";
+			}
+
+			html += "</div>";
+			$status.html(html);
+		})
+		.catch(function () {
+			$status.html(
+				'<div style="padding:8px 12px;background:#f8d7da;border-radius:4px;border-left:3px solid #dc3545;font-size:12px;">'
+				+ '<b>' + __("QZ Tray offline") + "</b> — Cannot check printer status."
+				+ "</div>"
+			);
+		});
+}

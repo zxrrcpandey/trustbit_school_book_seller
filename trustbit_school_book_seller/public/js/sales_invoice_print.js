@@ -1,10 +1,10 @@
 // Multi Print Master — Auto-print Sales Invoice on Submit
 // Uses QZ Tray (loaded globally by trustbit_barcode) to print
 // multiple formats to configured printers.
+// Priority: User Print Config (per-user) > Multi Print Setting (global default)
 
 frappe.ui.form.on("Sales Invoice", {
 	on_submit: function (frm) {
-		// Fetch multi print settings
 		frappe.call({
 			method: "trustbit_school_book_seller.api.get_multi_print_settings",
 			async: false,
@@ -18,14 +18,12 @@ frappe.ui.form.on("Sales Invoice", {
 				});
 				if (!enabled_formats.length) return;
 
-				// Start printing
 				multi_print_invoice(frm, settings, enabled_formats);
 			},
 		});
 	},
 
 	refresh: function (frm) {
-		// Add manual reprint button on submitted invoices
 		if (frm.doc.docstatus === 1) {
 			frm.add_custom_button(__("Multi Print"), function () {
 				frappe.call({
@@ -33,7 +31,13 @@ frappe.ui.form.on("Sales Invoice", {
 					callback: function (r) {
 						var settings = r.message;
 						if (!settings || !settings.print_formats || !settings.print_formats.length) {
-							frappe.msgprint(__("No print formats configured. Go to Multi Print Setting to configure."));
+							frappe.msgprint({
+								title: __("No Print Config"),
+								message: __("No print formats configured.<br><br>"
+									+ "Create a <b>User Print Config</b> for your account, "
+									+ "or configure defaults in <b>Multi Print Setting</b>."),
+								indicator: "orange",
+							});
 							return;
 						}
 						var enabled_formats = settings.print_formats.filter(function (pf) {
@@ -52,51 +56,100 @@ frappe.ui.form.on("Sales Invoice", {
 });
 
 function multi_print_invoice(frm, settings, enabled_formats) {
-	// Show token first if enabled
 	var token = extract_token(frm.doc.name, settings.token_digits || 3);
+	var source_label = settings.source === "user" ? "your config" : "global default";
 
 	if (typeof qz === "undefined") {
-		frappe.msgprint(__("QZ Tray is not loaded. Please ensure QZ Tray is running and trustbit_barcode app is installed."));
+		frappe.msgprint({
+			title: __("QZ Tray Not Found"),
+			message: __("QZ Tray is not loaded.<br><br>"
+				+ "1. Make sure QZ Tray is installed and running (check system tray)<br>"
+				+ "2. Refresh the browser page (Ctrl+Shift+R)"),
+			indicator: "red",
+		});
+		if (settings.show_token) {
+			show_token_dialog(frm.doc.name, token);
+		}
 		return;
 	}
 
 	frappe.show_alert({
-		message: __("Printing {0} format(s)...", [enabled_formats.length]),
+		message: __("Printing {0} format(s) using {1}...", [enabled_formats.length, source_label]),
 		indicator: "blue",
 	});
 
-	// Connect to QZ Tray and print
-	var qz_connect;
-	if (qz.websocket.isActive()) {
-		qz_connect = Promise.resolve();
-	} else {
-		qz_connect = qz.websocket.connect();
-	}
+	var qz_connect = qz.websocket.isActive()
+		? Promise.resolve()
+		: qz.websocket.connect();
 
 	qz_connect
 		.then(function () {
-			return print_all_formats(frm, enabled_formats, 0);
+			// First check which printers are available
+			return qz.printers.find();
 		})
-		.then(function () {
-			frappe.show_alert({
-				message: __("All prints sent successfully!"),
-				indicator: "green",
+		.then(function (available_printers) {
+			var available_set = {};
+			available_printers.forEach(function (p) {
+				available_set[p] = true;
 			});
 
-			// Show token dialog
-			if (settings.show_token) {
-				show_token_dialog(frm.doc.name, token);
+			// Check each configured printer
+			var valid_formats = [];
+			var skipped = [];
+			enabled_formats.forEach(function (pf) {
+				if (available_set[pf.printer_name]) {
+					valid_formats.push(pf);
+				} else {
+					skipped.push(pf);
+				}
+			});
+
+			// Warn about unavailable printers
+			if (skipped.length) {
+				var skip_names = skipped.map(function (pf) {
+					return pf.printer_name + " (" + pf.print_format + ")";
+				}).join(", ");
+				frappe.show_alert({
+					message: __("Printer not found: {0}", [skip_names]),
+					indicator: "orange",
+				});
 			}
+
+			if (!valid_formats.length) {
+				frappe.msgprint({
+					title: __("No Printers Available"),
+					message: __("None of the configured printers are available:<br><br>"
+						+ skipped.map(function (pf) {
+							return "&#9679; " + pf.printer_name + " → " + pf.print_format;
+						}).join("<br>")
+						+ "<br><br>Check printer connections and QZ Tray."),
+					indicator: "red",
+				});
+				if (settings.show_token) {
+					show_token_dialog(frm.doc.name, token);
+				}
+				return Promise.resolve();
+			}
+
+			return print_all_formats(frm, valid_formats, 0).then(function () {
+				frappe.show_alert({
+					message: __("All prints sent successfully!"),
+					indicator: "green",
+				});
+				if (settings.show_token) {
+					show_token_dialog(frm.doc.name, token);
+				}
+			});
 		})
 		.catch(function (err) {
 			console.error("QZ Tray print error:", err);
 			frappe.msgprint({
 				title: __("Print Error"),
-				message: __("Failed to print: {0}", [err.message || err]),
+				message: __("Failed to print: {0}<br><br>"
+					+ "Make sure QZ Tray is running and printers are connected.",
+					[err.message || err]),
 				indicator: "red",
 			});
-
-			// Still show token even if print fails
 			if (settings.show_token) {
 				show_token_dialog(frm.doc.name, token);
 			}
@@ -132,22 +185,12 @@ function print_all_formats(frm, formats, index) {
 				message: __("Printed: {0} → {1}", [pf.print_format, pf.printer_name]),
 				indicator: "green",
 			});
-			// Print next format
 			return print_all_formats(frm, formats, index + 1);
 		});
 }
 
 function fetch_print_html(docname, print_format) {
 	return new Promise(function (resolve, reject) {
-		var url =
-			"/api/method/frappe.utils.print_format.download_pdf?"
-			+ "doctype=Sales%20Invoice"
-			+ "&name=" + encodeURIComponent(docname)
-			+ "&format=" + encodeURIComponent(print_format)
-			+ "&no_letterhead=0"
-			+ "&_type=html";
-
-		// Use frappe.call to get print HTML
 		$.ajax({
 			url:
 				"/printview?doctype=Sales%20Invoice"
@@ -166,8 +209,6 @@ function fetch_print_html(docname, print_format) {
 }
 
 function extract_token(invoice_name, digits) {
-	// Extract last N digits from the invoice name
-	// e.g. "ACC-SINV-2026-00345" → "345"
 	var numbers = invoice_name.replace(/[^0-9]/g, "");
 	if (numbers.length <= digits) {
 		return numbers;
