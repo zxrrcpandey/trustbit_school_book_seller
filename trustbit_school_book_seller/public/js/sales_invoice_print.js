@@ -2,27 +2,33 @@
 // Uses QZ Tray (loaded globally by trustbit_barcode) to print
 // multiple formats to configured printers.
 // Priority: User Print Config (per-user) > Multi Print Setting (global default)
+//
+// Triggered via realtime event from server-side on_submit hook.
+// Works from ANY submission source: standard form, POS Awesome, API.
 
+// ── Realtime listener (global — fires on any page) ──────────────
+frappe.realtime.on("multi_print_invoice", function (data) {
+	if (!data || !data.docname) return;
+
+	frappe.call({
+		method: "trustbit_school_book_seller.api.get_multi_print_settings",
+		callback: function (r) {
+			var settings = r.message;
+			if (!settings || !settings.enabled) return;
+			if (!settings.print_formats || !settings.print_formats.length) return;
+
+			var enabled_formats = settings.print_formats.filter(function (pf) {
+				return pf.enabled;
+			});
+			if (!enabled_formats.length) return;
+
+			multi_print_invoice(data.docname, settings, enabled_formats);
+		},
+	});
+});
+
+// ── Manual "Multi Print" button on submitted Sales Invoice form ──
 frappe.ui.form.on("Sales Invoice", {
-	on_submit: function (frm) {
-		frappe.call({
-			method: "trustbit_school_book_seller.api.get_multi_print_settings",
-			async: false,
-			callback: function (r) {
-				var settings = r.message;
-				if (!settings || !settings.enabled) return;
-				if (!settings.print_formats || !settings.print_formats.length) return;
-
-				var enabled_formats = settings.print_formats.filter(function (pf) {
-					return pf.enabled;
-				});
-				if (!enabled_formats.length) return;
-
-				multi_print_invoice(frm, settings, enabled_formats);
-			},
-		});
-	},
-
 	refresh: function (frm) {
 		if (frm.doc.docstatus === 1) {
 			frm.add_custom_button(__("Multi Print"), function () {
@@ -47,7 +53,7 @@ frappe.ui.form.on("Sales Invoice", {
 							frappe.msgprint(__("No enabled print formats found."));
 							return;
 						}
-						multi_print_invoice(frm, settings, enabled_formats);
+						multi_print_invoice(frm.doc.name, settings, enabled_formats);
 					},
 				});
 			}, __("Print"));
@@ -55,8 +61,9 @@ frappe.ui.form.on("Sales Invoice", {
 	},
 });
 
-function multi_print_invoice(frm, settings, enabled_formats) {
-	var token = extract_token(frm.doc.name, settings.token_digits || 3);
+// ── Core print function (accepts docname, not frm) ──────────────
+function multi_print_invoice(docname, settings, enabled_formats) {
+	var token = extract_token(docname, settings.token_digits || 3);
 	var source_label = settings.source === "user" ? "your config" : "global default";
 
 	if (typeof qz === "undefined") {
@@ -68,7 +75,7 @@ function multi_print_invoice(frm, settings, enabled_formats) {
 			indicator: "red",
 		});
 		if (settings.show_token) {
-			show_token_dialog(frm.doc.name, token);
+			show_token_dialog(docname, token);
 		}
 		return;
 	}
@@ -84,7 +91,6 @@ function multi_print_invoice(frm, settings, enabled_formats) {
 
 	qz_connect
 		.then(function () {
-			// First check which printers are available
 			return qz.printers.find();
 		})
 		.then(function (available_printers) {
@@ -93,7 +99,6 @@ function multi_print_invoice(frm, settings, enabled_formats) {
 				available_set[p] = true;
 			});
 
-			// Check each configured printer
 			var valid_formats = [];
 			var skipped = [];
 			enabled_formats.forEach(function (pf) {
@@ -104,7 +109,6 @@ function multi_print_invoice(frm, settings, enabled_formats) {
 				}
 			});
 
-			// Warn about unavailable printers
 			if (skipped.length) {
 				var skip_names = skipped.map(function (pf) {
 					return pf.printer_name + " (" + pf.print_format + ")";
@@ -126,18 +130,18 @@ function multi_print_invoice(frm, settings, enabled_formats) {
 					indicator: "red",
 				});
 				if (settings.show_token) {
-					show_token_dialog(frm.doc.name, token);
+					show_token_dialog(docname, token);
 				}
 				return Promise.resolve();
 			}
 
-			return print_all_formats(frm, valid_formats, 0).then(function () {
+			return print_all_formats(docname, valid_formats, 0).then(function () {
 				frappe.show_alert({
 					message: __("All prints sent successfully!"),
 					indicator: "green",
 				});
 				if (settings.show_token) {
-					show_token_dialog(frm.doc.name, token);
+					show_token_dialog(docname, token);
 				}
 			});
 		})
@@ -151,19 +155,19 @@ function multi_print_invoice(frm, settings, enabled_formats) {
 				indicator: "red",
 			});
 			if (settings.show_token) {
-				show_token_dialog(frm.doc.name, token);
+				show_token_dialog(docname, token);
 			}
 		});
 }
 
-function print_all_formats(frm, formats, index) {
+function print_all_formats(docname, formats, index) {
 	if (index >= formats.length) {
 		return Promise.resolve();
 	}
 
 	var pf = formats[index];
 
-	return fetch_print_html(frm.doc.name, pf.print_format)
+	return fetch_print_html(docname, pf.print_format)
 		.then(function (html) {
 			var config = qz.configs.create(pf.printer_name, {
 				copies: pf.copies || 1,
@@ -185,7 +189,7 @@ function print_all_formats(frm, formats, index) {
 				message: __("Printed: {0} → {1}", [pf.print_format, pf.printer_name]),
 				indicator: "green",
 			});
-			return print_all_formats(frm, formats, index + 1);
+			return print_all_formats(docname, formats, index + 1);
 		});
 }
 

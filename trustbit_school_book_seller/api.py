@@ -321,6 +321,21 @@ def copy_school_name_to_invoice(doc, method):
 				break
 
 
+def on_sales_invoice_submit(doc, method):
+	"""Publish realtime event for multi-print on Sales Invoice submit.
+
+	Called via doc_events hook. The client-side JS listens for this event
+	and triggers QZ Tray printing. Works from any submission source:
+	standard form, POS Awesome, API, background jobs.
+	"""
+	frappe.publish_realtime(
+		"multi_print_invoice",
+		{"docname": doc.name},
+		user=frappe.session.user,
+		after_commit=True,
+	)
+
+
 @frappe.whitelist()
 def get_multi_print_settings():
 	"""Get print config for current user.
