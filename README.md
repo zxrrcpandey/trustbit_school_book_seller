@@ -163,7 +163,33 @@ The Product Bundle form includes **Ctrl+Q Quick Add** and **Ctrl+B Barcode Scan*
 
 **Smart duplicate handling:** If an item already exists in the bundle, qty is added to the existing row.
 
-### 17. Workspace
+### 17. Multi Print Master (Auto-Print on Sales Invoice Submit)
+Automatically print multiple copies of a Sales Invoice to different printers on submit, using **QZ Tray**.
+
+**Setup (Multi Print Setting):**
+1. Search **"Multi Print Setting"** → Enable auto-print
+2. Add rows to configure print formats and printers:
+
+| Print Format | Printer Name | Copies | Enabled |
+|---|---|---|---|
+| 80MM Token | Thermal Printer | 1 | Yes |
+| A4 School Invoice | HP LaserJet | 1 | Yes |
+
+3. Enable **Show Token After Print** and set **Token Digits** (default: 3)
+
+**What happens on submit:**
+- Each enabled print format is sent to its configured printer via QZ Tray
+- A **Token dialog** appears with the last 3 digits of the invoice number in large text
+- Token shows even if printing fails (so counter always gets the number)
+
+**Manual Reprint:** On any submitted Sales Invoice, click **Print → Multi Print**
+
+**80MM Token Print Format:** A dedicated thermal receipt format (72mm width) that prints:
+- Company name, full invoice number
+- Token number in **56px bold** (last 3 digits)
+- Customer name, date/time, items count, total amount
+
+### 18. Workspace
 A dedicated **"School Book Seller"** workspace with:
 - Quick shortcuts to Book Item Creator, Publication, Class Master, Subject
 - Links to both reports
@@ -181,6 +207,8 @@ A dedicated **"School Book Seller"** workspace with:
 | **Subject** | Master | By `subject_name` | School subject with short code and sort order |
 | **Class Master** | Master | By `class_name` | School class/grade with short code and sort order |
 | **Book Creation Log** | Child Table | — | Reserved for future audit trail functionality |
+| **Multi Print Setting** | Single (Settings) | — | Configure auto-print formats, printers, and token display |
+| **Multi Print Format** | Child Table | — | Print format + printer name + copies per row |
 
 ### Permissions
 
@@ -412,6 +440,7 @@ All whitelisted API methods are at:
 | `get_product_bundle_items` | `product_bundle`, `qty_sets` (default 1) | Returns list of items from a Product Bundle with quantities multiplied by `qty_sets` |
 | `search_product_bundles` | `search_text`, `limit` (default 20) | Fuzzy search Product Bundles by name, item name, description, group |
 | `search_items` | `search_text`, `limit` (default 50) | Fuzzy search Items by code, name, group, description, barcode (AND logic) |
+| `get_multi_print_settings` | — | Returns Multi Print Setting config (enabled formats, printers, token settings) |
 
 ---
 
@@ -471,7 +500,7 @@ sudo supervisorctl restart all
 | **Background Jobs** | `frappe.enqueue()` on `default` queue, 600s timeout |
 | **Realtime Event** | `book_item_creation_progress` |
 | **Barcode Type** | Empty string (accepts any format) |
-| **Fixtures** | Subject, Class Master, Custom Field (22 fields), Print Format (KGS Purchase Order) |
+| **Fixtures** | Subject, Class Master, Custom Field (22 fields), Print Format (KGS Purchase Order, 80MM Token) |
 | **Build System** | Flit (`flit_core >= 3.4, < 4`) |
 
 ### File Structure
@@ -496,18 +525,21 @@ trustbit_school_book_seller/
     │   ├── class_master.json           # 15 default classes
     │   ├── subject.json                # 20 default subjects
     │   ├── custom_field.json           # 22 custom field definitions (Item, SO, PO, SI)
-    │   └── print_format.json           # KGS Purchase Order print format
-    ├── api.py                          # Product Bundle & search APIs
+    │   └── print_format.json           # Print formats (KGS Purchase Order, 80MM Token)
+    ├── api.py                          # Product Bundle, search & multi-print APIs
     ├── public/js/
     │   ├── book_item_creator.js        # Client-side logic (649 lines)
     │   ├── product_bundle.js           # Get Items from Product Bundle (MR, SI, SO, PO, PI)
     │   ├── product_bundle_form.js      # Advanced Search on Product Bundle form (Ctrl+Q, Ctrl+B)
+    │   ├── sales_invoice_print.js      # Multi Print auto-print on SI submit (global JS)
     │   └── sales_order.js              # Sales Order custom buttons
     └── trustbit_school_book/
         ├── doctype/
         │   ├── book_item_creator/      # Main transaction DocType
         │   ├── book_class_detail/      # Child table for class rows
         │   ├── book_creation_log/      # Child table (reserved)
+        │   ├── multi_print_setting/    # Auto-print settings (Single DocType)
+        │   ├── multi_print_format/     # Print format + printer config (Child Table)
         │   ├── publication/            # Publisher master
         │   ├── subject/                # Subject master
         │   └── class_master/           # Class/Grade master
