@@ -321,13 +321,43 @@ def copy_school_name_to_invoice(doc, method):
 				break
 
 
+def on_sales_invoice_save(doc, method):
+	"""Publish realtime event for multi-print on Sales Invoice save (draft).
+
+	Only triggers if Multi Print Setting trigger_on is 'Draft (Save)' or 'Both (Save + Submit)'.
+	Skips submitted docs (docstatus=1) to avoid double-print when trigger_on is 'Both'.
+	"""
+	if doc.docstatus == 1:
+		return  # Submitted docs are handled by on_submit hook
+
+	if not frappe.db.exists("DocType", "Multi Print Setting"):
+		return
+
+	trigger_on = frappe.db.get_single_value("Multi Print Setting", "trigger_on") or "Submitted Only"
+	if trigger_on not in ("Draft (Save)", "Both (Save + Submit)"):
+		return
+
+	frappe.publish_realtime(
+		"multi_print_invoice",
+		{"docname": doc.name},
+		user=frappe.session.user,
+		after_commit=True,
+	)
+
+
 def on_sales_invoice_submit(doc, method):
 	"""Publish realtime event for multi-print on Sales Invoice submit.
 
-	Called via doc_events hook. The client-side JS listens for this event
-	and triggers QZ Tray printing. Works from any submission source:
-	standard form, POS Awesome, API, background jobs.
+	Only triggers if Multi Print Setting trigger_on is 'Submitted Only' or 'Both (Save + Submit)'.
+	Works from any submission source: standard form, POS Awesome, API, background jobs.
 	"""
+	if not frappe.db.exists("DocType", "Multi Print Setting"):
+		return
+
+	trigger_on = frappe.db.get_single_value("Multi Print Setting", "trigger_on") or "Submitted Only"
+	if trigger_on not in ("Submitted Only", "Both (Save + Submit)"):
+		return
+
 	frappe.publish_realtime(
 		"multi_print_invoice",
 		{"docname": doc.name},
@@ -341,8 +371,9 @@ def get_multi_print_settings():
 	"""Get print config for current user.
 
 	Priority: User Print Config (per-user) > Multi Print Setting (global default).
-	Global settings (enabled, show_token, token_digits) always come from Multi Print Setting.
-	Print formats/printers come from user config if it exists, otherwise global default.
+	Global settings (enabled, show_token, token_digits, trigger_on) always come from Multi Print Setting.
+	Print formats/printers come from user config if it exists, otherwise global default
+	(only if use_default_fallback is enabled).
 	"""
 	if not frappe.db.exists("DocType", "Multi Print Setting"):
 		return {"enabled": 0, "print_formats": []}
@@ -352,6 +383,7 @@ def get_multi_print_settings():
 		"enabled": settings.enabled,
 		"show_token": settings.show_token,
 		"token_digits": settings.token_digits or 3,
+		"trigger_on": settings.get("trigger_on") or "Submitted Only",
 		"source": "global",
 		"print_formats": [],
 	}
@@ -375,7 +407,15 @@ def get_multi_print_settings():
 			]
 			return result
 
-	# Fallback to global default
+	# Fallback to global default (only if use_default_fallback is enabled)
+	use_fallback = settings.get("use_default_fallback")
+	if use_fallback is None:
+		use_fallback = 1  # default to enabled for backwards compatibility
+
+	if not use_fallback:
+		# No user config and fallback disabled — return empty
+		return result
+
 	result["print_formats"] = [
 		{
 			"print_format": row.print_format,

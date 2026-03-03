@@ -104,6 +104,7 @@ after_install = "trustbit_school_book_seller.install.after_install"
 doc_events = {
 	"Sales Invoice": {
 		"before_save": "trustbit_school_book_seller.api.copy_school_name_to_invoice",
+		"after_insert": "trustbit_school_book_seller.api.on_sales_invoice_save",
 		"on_submit": "trustbit_school_book_seller.api.on_sales_invoice_submit",
 	}
 }

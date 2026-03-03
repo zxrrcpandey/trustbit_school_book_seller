@@ -5,9 +5,11 @@
     "engine": "InnoDB",
     "field_order": [
         "enabled",
+        "trigger_on",
         "column_break_main",
         "show_token",
         "token_digits",
+        "use_default_fallback",
         "section_break_formats",
         "print_formats",
         "section_break_user_config",
@@ -20,7 +22,16 @@
             "default": "1",
             "fieldname": "enabled",
             "fieldtype": "Check",
-            "label": "Enable Auto Print on Sales Invoice Submit"
+            "label": "Enable Auto Print on Sales Invoice"
+        },
+        {
+            "default": "Submitted Only",
+            "fieldname": "trigger_on",
+            "fieldtype": "Select",
+            "label": "Trigger Print On",
+            "options": "Submitted Only\nDraft (Save)\nBoth (Save + Submit)",
+            "depends_on": "eval:doc.enabled",
+            "description": "When to auto-print: on Submit only, on Save (draft) only, or both"
         },
         {
             "fieldname": "column_break_main",
@@ -38,6 +49,13 @@
             "fieldtype": "Int",
             "label": "Token Digits",
             "description": "Number of digits from the end of Sales Invoice name (e.g. 3 = last 3 digits)"
+        },
+        {
+            "default": "1",
+            "fieldname": "use_default_fallback",
+            "fieldtype": "Check",
+            "label": "Use Default Config as Fallback",
+            "description": "If enabled, users without a User Print Config will use the default print formats above. If disabled, only users with their own config will get auto-print."
         },
         {
             "fieldname": "section_break_formats",
