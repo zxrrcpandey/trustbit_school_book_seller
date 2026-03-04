@@ -47,12 +47,13 @@
             "reqd": 1
         },
         {
+            "description": "Auto-filled from Card Type. Override if needed.",
             "fetch_from": "card_type.discount_percent",
+            "fetch_if_empty": 1,
             "fieldname": "discount_percent",
             "fieldtype": "Percent",
             "in_list_view": 1,
-            "label": "Discount %",
-            "reqd": 1
+            "label": "Discount %"
         },
         {
             "default": "Active",
