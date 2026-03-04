@@ -95,6 +95,9 @@
 					);
 				});
 
+				// Recalculate rates and totals after applying discount
+				frm.cscript.calculate_taxes_and_totals();
+				frm.refresh_fields();
 				frm.dirty();
 
 				frappe.show_alert(
@@ -132,6 +135,8 @@
 				0
 			);
 		});
+		frm.cscript.calculate_taxes_and_totals();
+		frm.refresh_fields();
 		frm.dirty();
 		frm.dashboard.set_headline("");
 
