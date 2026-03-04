@@ -1,0 +1,254 @@
+{
+    "actions": [],
+    "autoname": "naming_series:",
+    "creation": "2026-03-04 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "naming_series",
+        "card_type",
+        "discount_percent",
+        "status",
+        "column_break_main",
+        "holder_name",
+        "mobile_no",
+        "customer",
+        "section_break_school",
+        "school",
+        "class_name",
+        "column_break_school",
+        "issue_date",
+        "expiry_date",
+        "section_break_barcode",
+        "barcode",
+        "section_break_usage",
+        "usage_log",
+        "section_break_totals",
+        "total_times_used",
+        "column_break_totals",
+        "total_discount_given"
+    ],
+    "fields": [
+        {
+            "default": "PC-.#####",
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Series",
+            "options": "PC-.#####",
+            "reqd": 1
+        },
+        {
+            "fieldname": "card_type",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Card Type",
+            "options": "Privilege Card Type",
+            "reqd": 1
+        },
+        {
+            "fetch_from": "card_type.discount_percent",
+            "fieldname": "discount_percent",
+            "fieldtype": "Percent",
+            "in_list_view": 1,
+            "label": "Discount %",
+            "reqd": 1
+        },
+        {
+            "default": "Active",
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Status",
+            "options": "Active\nInactive\nExpired"
+        },
+        {
+            "fieldname": "column_break_main",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "holder_name",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Card Holder Name",
+            "reqd": 1
+        },
+        {
+            "fieldname": "mobile_no",
+            "fieldtype": "Data",
+            "label": "Mobile No",
+            "options": "Phone"
+        },
+        {
+            "fieldname": "customer",
+            "fieldtype": "Link",
+            "label": "Customer",
+            "options": "Customer"
+        },
+        {
+            "fieldname": "section_break_school",
+            "fieldtype": "Section Break",
+            "label": "School & Validity"
+        },
+        {
+            "fieldname": "school",
+            "fieldtype": "Link",
+            "in_standard_filter": 1,
+            "label": "School",
+            "options": "School"
+        },
+        {
+            "fieldname": "class_name",
+            "fieldtype": "Data",
+            "label": "Class"
+        },
+        {
+            "fieldname": "column_break_school",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "Today",
+            "fieldname": "issue_date",
+            "fieldtype": "Date",
+            "label": "Issue Date",
+            "reqd": 1
+        },
+        {
+            "fieldname": "expiry_date",
+            "fieldtype": "Date",
+            "label": "Expiry Date"
+        },
+        {
+            "fieldname": "section_break_barcode",
+            "fieldtype": "Section Break",
+            "label": "Card Barcode"
+        },
+        {
+            "fieldname": "barcode",
+            "fieldtype": "Data",
+            "label": "Card Barcode",
+            "options": "Barcode",
+            "read_only": 1
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "section_break_usage",
+            "fieldtype": "Section Break",
+            "label": "Usage History"
+        },
+        {
+            "fieldname": "usage_log",
+            "fieldtype": "Table",
+            "label": "Usage Log",
+            "options": "Privilege Card Usage Log",
+            "read_only": 1
+        },
+        {
+            "fieldname": "section_break_totals",
+            "fieldtype": "Section Break",
+            "label": "Summary"
+        },
+        {
+            "default": "0",
+            "fieldname": "total_times_used",
+            "fieldtype": "Int",
+            "label": "Total Times Used",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_totals",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "fieldname": "total_discount_given",
+            "fieldtype": "Currency",
+            "label": "Total Discount Given",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "links": [
+        {
+            "link_doctype": "Sales Order",
+            "link_fieldname": "custom_privilege_card"
+        },
+        {
+            "link_doctype": "Sales Invoice",
+            "link_fieldname": "custom_privilege_card"
+        }
+    ],
+    "modified": "2026-03-04 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Trustbit School Book",
+    "name": "Privilege Card",
+    "naming_rule": "By \"Naming Series\" field",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Stock Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Sales User",
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Sales Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "search_fields": "holder_name, card_type, school, status",
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [
+        {
+            "color": "green",
+            "title": "Active"
+        },
+        {
+            "color": "gray",
+            "title": "Inactive"
+        },
+        {
+            "color": "red",
+            "title": "Expired"
+        }
+    ],
+    "title_field": "holder_name",
+    "track_changes": 1
+}

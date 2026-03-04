@@ -70,6 +70,36 @@
             "link_type": "Report",
             "onboard": 0,
             "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Privilege Card",
+            "link_count": 0,
+            "link_to": "Privilege Card",
+            "link_type": "DocType",
+            "onboard": 1,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Privilege Card Type",
+            "link_count": 0,
+            "link_to": "Privilege Card Type",
+            "link_type": "DocType",
+            "onboard": 0,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 1,
+            "label": "Privilege Card Usage",
+            "link_count": 0,
+            "link_to": "Privilege Card Usage",
+            "link_type": "Report",
+            "onboard": 0,
+            "type": "Link"
         }
     ],
     "modified": "2024-12-25 00:00:00.000000",
@@ -110,6 +140,13 @@
             "label": "Book Items Report",
             "link_to": "Book Items Report",
             "type": "Report"
+        },
+        {
+            "color": "Purple",
+            "doc_view": "List",
+            "label": "Privilege Cards",
+            "link_to": "Privilege Card",
+            "type": "DocType"
         }
     ],
     "title": "School Book Seller"

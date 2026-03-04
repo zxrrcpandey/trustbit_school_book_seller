@@ -9,8 +9,10 @@ def after_install():
     """Run after app installation"""
     create_custom_fields()
     create_school_custom_fields()
+    create_privilege_card_custom_fields()
     create_default_classes()
     create_default_subjects()
+    create_default_card_types()
     frappe.db.commit()
     print("Trustbit School Book Seller App installed successfully!")
 
@@ -282,3 +284,69 @@ def create_default_subjects():
             })
             doc.insert(ignore_permissions=True)
             print(f"Created subject: {subj['name']}")
+
+
+def create_privilege_card_custom_fields():
+    """Create Privilege Card custom fields on Sales Order and Sales Invoice"""
+    fields = [
+        {
+            "doctype": "Custom Field",
+            "dt": "Sales Order",
+            "fieldname": "custom_privilege_card",
+            "fieldtype": "Link",
+            "label": "Privilege Card",
+            "options": "Privilege Card",
+            "insert_after": "custom_school_name",
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Sales Order",
+            "fieldname": "custom_privilege_card_discount",
+            "fieldtype": "Percent",
+            "label": "Card Discount %",
+            "insert_after": "custom_privilege_card",
+            "read_only": 1,
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Sales Invoice",
+            "fieldname": "custom_privilege_card",
+            "fieldtype": "Link",
+            "label": "Privilege Card",
+            "options": "Privilege Card",
+            "insert_after": "custom_school_name",
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Sales Invoice",
+            "fieldname": "custom_privilege_card_discount",
+            "fieldtype": "Percent",
+            "label": "Card Discount %",
+            "insert_after": "custom_privilege_card",
+            "read_only": 1,
+        },
+    ]
+
+    for field in fields:
+        if not frappe.db.exists("Custom Field", {"dt": field["dt"], "fieldname": field["fieldname"]}):
+            doc = frappe.get_doc(field)
+            doc.insert(ignore_permissions=True)
+            print(f"Created custom field: {field['dt']}-{field['fieldname']}")
+
+
+def create_default_card_types():
+    """Create default privilege card types"""
+    card_types = [
+        {"card_type_name": "Student", "discount_percent": 0, "description": "Student privilege card"},
+        {"card_type_name": "Parent", "discount_percent": 0, "description": "Parent privilege card"},
+        {"card_type_name": "Teacher", "discount_percent": 0, "description": "Teacher privilege card"},
+    ]
+
+    for ct in card_types:
+        if not frappe.db.exists("Privilege Card Type", ct["card_type_name"]):
+            doc = frappe.get_doc({
+                "doctype": "Privilege Card Type",
+                **ct,
+            })
+            doc.insert(ignore_permissions=True)
+            print(f"Created card type: {ct['card_type_name']}")

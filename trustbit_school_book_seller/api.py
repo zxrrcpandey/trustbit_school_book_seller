@@ -536,6 +536,38 @@ def search_product_bundles(search_text="", limit=20):
 
 
 @frappe.whitelist()
+def validate_privilege_card(card_name):
+	"""Validate a privilege card and return its details.
+
+	Checks: exists, status is Active, not expired.
+	Returns: card_type, discount_percent, holder_name, school, status.
+	"""
+	from frappe.utils import getdate, today
+
+	if not frappe.db.exists("Privilege Card", card_name):
+		frappe.throw(_("Privilege Card {0} not found").format(card_name))
+
+	card = frappe.get_doc("Privilege Card", card_name)
+
+	if card.status != "Active":
+		frappe.throw(_("Privilege Card {0} is {1}").format(card_name, card.status))
+
+	if card.expiry_date and getdate(card.expiry_date) < getdate(today()):
+		card.db_set("status", "Expired")
+		frappe.throw(_("Privilege Card {0} has expired on {1}").format(
+			card_name, card.expiry_date))
+
+	return {
+		"card_name": card.name,
+		"card_type": card.card_type,
+		"discount_percent": card.discount_percent,
+		"holder_name": card.holder_name,
+		"school": card.school,
+		"status": card.status,
+	}
+
+
+@frappe.whitelist()
 def get_product_bundle_items(product_bundle, qty_sets=1):
 	"""Get component items from a Product Bundle, multiplied by number of sets.
 

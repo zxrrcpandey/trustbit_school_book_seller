@@ -29,8 +29,8 @@ app_include_js = "/assets/trustbit_school_book_seller/js/sales_invoice_print.js"
 # include js in doctype views
 doctype_js = {
     "Book Item Creator": "public/js/book_item_creator.js",
-    "Sales Order": "public/js/sales_order.js",
-    "Sales Invoice": "public/js/product_bundle.js",
+    "Sales Order": ["public/js/sales_order.js", "public/js/privilege_card_so_si.js"],
+    "Sales Invoice": ["public/js/product_bundle.js", "public/js/privilege_card_so_si.js"],
     "Purchase Order": "public/js/product_bundle.js",
     "Purchase Invoice": "public/js/product_bundle.js",
     "Material Request": "public/js/product_bundle.js",
@@ -104,31 +104,27 @@ after_install = "trustbit_school_book_seller.install.after_install"
 doc_events = {
 	"Sales Invoice": {
 		"before_save": "trustbit_school_book_seller.api.copy_school_name_to_invoice",
+		"validate": "trustbit_school_book_seller.privilege_card.validate_privilege_card_on_doc",
 		"after_insert": "trustbit_school_book_seller.api.on_sales_invoice_save",
-		"on_submit": "trustbit_school_book_seller.api.on_sales_invoice_submit",
-	}
+		"on_submit": [
+			"trustbit_school_book_seller.api.on_sales_invoice_submit",
+			"trustbit_school_book_seller.privilege_card.log_privilege_card_usage",
+		],
+	},
+	"Sales Order": {
+		"validate": "trustbit_school_book_seller.privilege_card.validate_privilege_card_on_doc",
+		"on_submit": "trustbit_school_book_seller.privilege_card.log_privilege_card_usage",
+	},
 }
 
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"trustbit_school_book_seller.tasks.all"
-# 	],
-# 	"daily": [
-# 		"trustbit_school_book_seller.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"trustbit_school_book_seller.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"trustbit_school_book_seller.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"trustbit_school_book_seller.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"daily": [
+		"trustbit_school_book_seller.privilege_card.expire_cards_daily",
+	],
+}
 
 # Testing
 # -------
@@ -219,7 +215,11 @@ fixtures = [
                 "Purchase Order-custom_school_name",
                 "Purchase Order-custom_remark",
                 "Purchase Order-custom_transport_name",
-                "Sales Invoice-custom_school_name"
+                "Sales Invoice-custom_school_name",
+                "Sales Order-custom_privilege_card",
+                "Sales Order-custom_privilege_card_discount",
+                "Sales Invoice-custom_privilege_card",
+                "Sales Invoice-custom_privilege_card_discount"
             ]]
         ]
     },
