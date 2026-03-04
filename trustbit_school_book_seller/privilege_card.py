@@ -39,6 +39,12 @@ def validate_privilege_card_on_doc(doc, method):
 
     for item in doc.items:
         item.discount_percentage = discount
+        # Recalculate rate from price_list_rate and discount
+        price_list_rate = flt(item.price_list_rate) or flt(item.rate)
+        if price_list_rate:
+            item.discount_amount = flt(price_list_rate * discount / 100, item.precision("discount_amount"))
+            item.rate = flt(price_list_rate - item.discount_amount, item.precision("rate"))
+            item.amount = flt(item.rate * flt(item.qty), item.precision("amount"))
 
 
 def log_privilege_card_usage(doc, method):
