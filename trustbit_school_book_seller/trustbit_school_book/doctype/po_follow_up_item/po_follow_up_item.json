@@ -1,0 +1,102 @@
+{
+ "actions": [],
+ "creation": "2026-03-12 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "po_detail",
+  "item_code",
+  "item_name",
+  "ordered_qty",
+  "previously_confirmed_qty",
+  "expected_qty",
+  "expected_delivery_date",
+  "status",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "po_detail",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "PO Detail",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item Code",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "ordered_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Ordered Qty",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "previously_confirmed_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Prev. Confirmed Qty",
+   "read_only": 1,
+   "description": "Total qty confirmed in previous follow-ups"
+  },
+  {
+   "columns": 1,
+   "fieldname": "expected_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Expected Qty",
+   "description": "Qty supplier says they will deliver this time"
+  },
+  {
+   "columns": 1,
+   "fieldname": "expected_delivery_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Expected Delivery"
+  },
+  {
+   "columns": 1,
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nConfirmed\nDispatched\nDelivered\nDelayed"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-03-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trustbit School Book",
+ "name": "PO Follow Up Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

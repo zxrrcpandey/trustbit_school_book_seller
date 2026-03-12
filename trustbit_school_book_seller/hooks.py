@@ -31,7 +31,7 @@ doctype_js = {
     "Book Item Creator": "public/js/book_item_creator.js",
     "Sales Order": ["public/js/sales_order.js", "public/js/privilege_card_so_si.js"],
     "Sales Invoice": ["public/js/product_bundle.js", "public/js/privilege_card_so_si.js"],
-    "Purchase Order": "public/js/product_bundle.js",
+    "Purchase Order": ["public/js/product_bundle.js", "public/js/purchase_order_followup.js"],
     "Purchase Invoice": "public/js/product_bundle.js",
     "Material Request": "public/js/product_bundle.js",
     "Product Bundle": "public/js/product_bundle_form.js",
@@ -123,6 +123,8 @@ doc_events = {
 scheduler_events = {
 	"daily": [
 		"trustbit_school_book_seller.privilege_card.expire_cards_daily",
+		"trustbit_school_book_seller.followup_api.send_followup_reminders",
+		"trustbit_school_book_seller.followup_api.check_pos_without_followups",
 	],
 }
 
@@ -219,7 +221,13 @@ fixtures = [
                 "Sales Order-custom_privilege_card",
                 "Sales Order-custom_privilege_card_discount",
                 "Sales Invoice-custom_privilege_card",
-                "Sales Invoice-custom_privilege_card_discount"
+                "Sales Invoice-custom_privilege_card_discount",
+                "Purchase Order-custom_followup_section",
+                "Purchase Order-custom_last_followup_date",
+                "Purchase Order-custom_last_followup_status",
+                "Purchase Order-custom_column_break_followup",
+                "Purchase Order-custom_next_followup_date",
+                "Purchase Order-custom_total_followups"
             ]]
         ]
     },

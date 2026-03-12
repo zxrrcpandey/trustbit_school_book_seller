@@ -10,6 +10,7 @@ def after_install():
     create_custom_fields()
     create_school_custom_fields()
     create_privilege_card_custom_fields()
+    create_po_followup_custom_fields()
     create_default_classes()
     create_default_subjects()
     create_default_card_types()
@@ -328,6 +329,71 @@ def create_privilege_card_custom_fields():
     ]
 
     for field in fields:
+        if not frappe.db.exists("Custom Field", {"dt": field["dt"], "fieldname": field["fieldname"]}):
+            doc = frappe.get_doc(field)
+            doc.insert(ignore_permissions=True)
+            print(f"Created custom field: {field['dt']}-{field['fieldname']}")
+
+
+def create_po_followup_custom_fields():
+    """Create PO Follow Up summary custom fields on Purchase Order"""
+    followup_fields = [
+        {
+            "doctype": "Custom Field",
+            "dt": "Purchase Order",
+            "fieldname": "custom_followup_section",
+            "fieldtype": "Section Break",
+            "label": "Follow Up Summary",
+            "insert_after": "custom_transport_name",
+            "collapsible": 1,
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Purchase Order",
+            "fieldname": "custom_last_followup_date",
+            "fieldtype": "Date",
+            "label": "Last Follow Up Date",
+            "insert_after": "custom_followup_section",
+            "read_only": 1,
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Purchase Order",
+            "fieldname": "custom_last_followup_status",
+            "fieldtype": "Data",
+            "label": "Last Follow Up Status",
+            "insert_after": "custom_last_followup_date",
+            "read_only": 1,
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Purchase Order",
+            "fieldname": "custom_column_break_followup",
+            "fieldtype": "Column Break",
+            "insert_after": "custom_last_followup_status",
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Purchase Order",
+            "fieldname": "custom_next_followup_date",
+            "fieldtype": "Date",
+            "label": "Next Follow Up Date",
+            "insert_after": "custom_column_break_followup",
+            "read_only": 1,
+        },
+        {
+            "doctype": "Custom Field",
+            "dt": "Purchase Order",
+            "fieldname": "custom_total_followups",
+            "fieldtype": "Int",
+            "label": "Total Follow Ups",
+            "insert_after": "custom_next_followup_date",
+            "read_only": 1,
+            "default": "0",
+        },
+    ]
+
+    for field in followup_fields:
         if not frappe.db.exists("Custom Field", {"dt": field["dt"], "fieldname": field["fieldname"]}):
             doc = frappe.get_doc(field)
             doc.insert(ignore_permissions=True)
