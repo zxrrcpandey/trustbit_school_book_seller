@@ -1,17 +1,432 @@
 [
-    {"doctype": "Class Master", "name": "Nursery", "class_name": "Nursery", "short_code": "NUR", "sort_order": 1, "disabled": 0},
-    {"doctype": "Class Master", "name": "LKG", "class_name": "LKG", "short_code": "LKG", "sort_order": 2, "disabled": 0},
-    {"doctype": "Class Master", "name": "UKG", "class_name": "UKG", "short_code": "UKG", "sort_order": 3, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 1", "class_name": "Class 1", "short_code": "C1", "sort_order": 4, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 2", "class_name": "Class 2", "short_code": "C2", "sort_order": 5, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 3", "class_name": "Class 3", "short_code": "C3", "sort_order": 6, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 4", "class_name": "Class 4", "short_code": "C4", "sort_order": 7, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 5", "class_name": "Class 5", "short_code": "C5", "sort_order": 8, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 6", "class_name": "Class 6", "short_code": "C6", "sort_order": 9, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 7", "class_name": "Class 7", "short_code": "C7", "sort_order": 10, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 8", "class_name": "Class 8", "short_code": "C8", "sort_order": 11, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 9", "class_name": "Class 9", "short_code": "C9", "sort_order": 12, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 10", "class_name": "Class 10", "short_code": "C10", "sort_order": 13, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 11", "class_name": "Class 11", "short_code": "C11", "sort_order": 14, "disabled": 0},
-    {"doctype": "Class Master", "name": "Class 12", "class_name": "Class 12", "short_code": "C12", "sort_order": 15, "disabled": 0}
+ {
+  "class_name": "11",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.753401",
+  "name": "11",
+  "short_code": "C11",
+  "sort_order": 14
+ },
+ {
+  "class_name": "12",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.761593",
+  "name": "12",
+  "short_code": "C12",
+  "sort_order": 15
+ },
+ {
+  "class_name": "9-10",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 21:48:34.790079",
+  "name": "9-10",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "11-12",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 21:48:47.696313",
+  "name": "11-12",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "Pre",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 21:49:25.426718",
+  "name": "Pre",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "Pre-NUR",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 21:49:44.704974",
+  "name": "Pre-NUR",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "2-1",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-28 14:57:31.725164",
+  "name": "2-1",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "2-2",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-28 14:58:17.076538",
+  "name": "2-2",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "3-1",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-28 15:10:31.658645",
+  "name": "3-1",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "4-1",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-28 15:13:09.295486",
+  "name": "4-1",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "4-2",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-28 15:14:09.433406",
+  "name": "4-2",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "9 & 10",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-04 11:26:19.320570",
+  "name": "9 & 10",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "1-1",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-04 23:40:01.636031",
+  "name": "1-1",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "1-2",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-04 23:40:13.545821",
+  "name": "1-2",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "5-1",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-05 00:50:56.386430",
+  "name": "5-1",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "5-2",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-05 00:51:16.612322",
+  "name": "5-2",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "Nursery",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.918147",
+  "name": "Nursery",
+  "short_code": "NUR",
+  "sort_order": 1
+ },
+ {
+  "class_name": "LKG",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.928118",
+  "name": "LKG",
+  "short_code": "LKG",
+  "sort_order": 2
+ },
+ {
+  "class_name": "UKG",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.935921",
+  "name": "UKG",
+  "short_code": "UKG",
+  "sort_order": 3
+ },
+ {
+  "class_name": "Class 1",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.944203",
+  "name": "Class 1",
+  "short_code": "C1",
+  "sort_order": 4
+ },
+ {
+  "class_name": "Class 2",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.951833",
+  "name": "Class 2",
+  "short_code": "C2",
+  "sort_order": 5
+ },
+ {
+  "class_name": "Class 3",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.959768",
+  "name": "Class 3",
+  "short_code": "C3",
+  "sort_order": 6
+ },
+ {
+  "class_name": "Class 4",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.967127",
+  "name": "Class 4",
+  "short_code": "C4",
+  "sort_order": 7
+ },
+ {
+  "class_name": "Class 5",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.975372",
+  "name": "Class 5",
+  "short_code": "C5",
+  "sort_order": 8
+ },
+ {
+  "class_name": "Class 6",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.984052",
+  "name": "Class 6",
+  "short_code": "C6",
+  "sort_order": 9
+ },
+ {
+  "class_name": "Class 7",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:33.992463",
+  "name": "Class 7",
+  "short_code": "C7",
+  "sort_order": 10
+ },
+ {
+  "class_name": "Class 8",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:34.000873",
+  "name": "Class 8",
+  "short_code": "C8",
+  "sort_order": 11
+ },
+ {
+  "class_name": "Class 9",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:34.009585",
+  "name": "Class 9",
+  "short_code": "C9",
+  "sort_order": 12
+ },
+ {
+  "class_name": "Class 10",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:34.018777",
+  "name": "Class 10",
+  "short_code": "C10",
+  "sort_order": 13
+ },
+ {
+  "class_name": "Class 11",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:34.027823",
+  "name": "Class 11",
+  "short_code": "C11",
+  "sort_order": 14
+ },
+ {
+  "class_name": "Class 12",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-03-12 22:02:34.035933",
+  "name": "Class 12",
+  "short_code": "C12",
+  "sort_order": 15
+ },
+ {
+  "class_name": "10",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.744995",
+  "name": "10",
+  "short_code": "C10",
+  "sort_order": 13
+ },
+ {
+  "class_name": "0",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 21:48:21.071606",
+  "name": "0",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "3-2",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-28 15:11:41.910926",
+  "name": "3-2",
+  "short_code": null,
+  "sort_order": 0
+ },
+ {
+  "class_name": "9",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.736424",
+  "name": "9",
+  "short_code": "C9",
+  "sort_order": 12
+ },
+ {
+  "class_name": "3",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.688324",
+  "name": "3",
+  "short_code": "C3",
+  "sort_order": 6
+ },
+ {
+  "class_name": "1",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.672852",
+  "name": "1",
+  "short_code": "C1",
+  "sort_order": 4
+ },
+ {
+  "class_name": "6",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.712817",
+  "name": "6",
+  "short_code": "C6",
+  "sort_order": 9
+ },
+ {
+  "class_name": "7",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.720262",
+  "name": "7",
+  "short_code": "C7",
+  "sort_order": 10
+ },
+ {
+  "class_name": "8",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.728682",
+  "name": "8",
+  "short_code": "C8",
+  "sort_order": 11
+ },
+ {
+  "class_name": "4",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.695781",
+  "name": "4",
+  "short_code": "C4",
+  "sort_order": 7
+ },
+ {
+  "class_name": "5",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.704910",
+  "name": "5",
+  "short_code": "C5",
+  "sort_order": 8
+ },
+ {
+  "class_name": "2",
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Class Master",
+  "modified": "2026-02-26 10:23:32.680867",
+  "name": "2",
+  "short_code": "C2",
+  "sort_order": 5
+ }
 ]
