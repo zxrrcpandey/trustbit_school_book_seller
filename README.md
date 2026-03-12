@@ -15,6 +15,8 @@ A custom ERPNext application for school book sellers to manage bulk book item cr
   - [Book Item Creation (1-14)](#1-bulk-book-item-creation)
   - [Product Bundle (15-16)](#15-get-items-from-product-bundle)
   - [Multi Print Master (17-20)](#17-multi-print-master-auto-print-on-sales-invoice)
+  - [Privilege Card (22-24)](#22-privilege-card-system)
+  - [PO Follow Up (25-27)](#25-po-follow-up-tracking)
   - [Workspace (21)](#21-workspace)
 - [DocTypes](#doctypes)
 - [Reports](#reports)
@@ -249,9 +251,66 @@ The Multi Print Setting page includes a built-in setup guide for the **Brother H
 
 ### 21. Workspace
 A dedicated **"School Book Seller"** workspace with:
-- Quick shortcuts to Book Item Creator, Publication, Class Master, Subject
-- Links to both reports
+- Quick shortcuts to Book Item Creator, Publication, Items, Privilege Cards, PO Follow Ups
+- Links to all reports (Book Items, Book Creation Summary, Privilege Card Usage, PO Follow Up Report)
 - Organized navigation for all app features
+
+### 22. Privilege Card System
+Issue discount cards to customers (students, parents, teachers) that automatically apply discounts on Sales Orders and Sales Invoices.
+
+- **Privilege Card Type** — master for card categories (Student, Parent, Teacher) with configurable discount %
+- **Privilege Card** — issued to a customer, links to card type, has expiry date and active/expired status
+- **Auto-discount on SO/SI** — when a Privilege Card is selected, its discount % is applied and shown as a read-only field
+- **Usage logging** — every SO/SI submission with a privilege card creates a usage log entry
+- **Daily expiry check** — scheduler job automatically expires cards past their expiry date
+
+### 23. Privilege Card Usage Report
+- **Type:** Script Report
+- **Based on:** Privilege Card
+- **Shows:** Card usage across Sales Orders and Sales Invoices with dates, amounts, and discounts applied
+
+### 24. Privilege Card Custom Fields
+Added to Sales Order and Sales Invoice:
+- `custom_privilege_card` — Link to Privilege Card
+- `custom_privilege_card_discount` — Card Discount % (read-only, auto-populated)
+
+### 25. PO Follow Up Tracking
+A structured follow-up system for Purchase Managers to track supplier delivery commitments on Purchase Orders. Log each follow-up conversation with per-item quantity tracking, delivery dates, transport details, and contact information.
+
+**Creating a Follow Up:**
+1. Open a submitted Purchase Order → click **Create > Follow Up**
+2. A new PO Follow Up form opens pre-filled with all PO items (item code, name, ordered qty)
+3. Fill in: follow-up date, next follow-up date, overall status, contacted person, transport name
+4. For each item: enter expected qty, expected delivery date, and per-item status
+5. Save — the Purchase Order's summary fields are automatically updated
+
+**PO Summary Fields (auto-updated):**
+- Last Follow Up Date, Last Follow Up Status
+- Next Follow Up Date, Total Follow Ups count
+- Displayed in a collapsible "Follow Up Summary" section on the PO form
+
+**Dashboard Indicators on PO:**
+- Color-coded status indicator (green=Delivered, blue=Confirmed/Dispatched, orange=Pending, red=Delayed)
+- Next follow-up date indicator (red if overdue, blue if upcoming)
+
+**Previously Confirmed Qty:**
+Each follow-up automatically computes the previously confirmed quantity per item from all prior follow-ups on the same PO, giving visibility into what was already committed.
+
+### 26. PO Follow Up Report
+- **Type:** Script Report
+- **Based on:** PO Follow Up
+- **Shows:** All follow-ups with Purchase Order, Supplier, dates, status, contacted person, transport, items count, remarks
+- **Chart:** Bar chart grouped by status
+- **Summary cards:** Total Follow Ups, Pending/Delayed count, Delivered count
+- **Filters:** Supplier, Status, From Date, To Date
+
+### 27. Auto-Reminders for Follow Ups
+Two daily scheduler jobs keep Purchase Managers informed:
+
+| Job | What it does |
+|-----|--------------|
+| **Follow Up Reminders** | Finds follow-ups where next follow-up date <= today AND status != Delivered. Sends a Notification Log to all users with Purchase Manager or Purchase User roles |
+| **POs Without Follow Ups** | Finds submitted Purchase Orders older than 3 days with zero follow-ups. Alerts Purchase Managers to initiate first contact |
 
 ---
 
@@ -268,14 +327,19 @@ A dedicated **"School Book Seller"** workspace with:
 | **Multi Print Setting** | Single (Settings) | — | Global auto-print config: trigger timing, token display, default fallback |
 | **Multi Print Format** | Child Table | — | Print format + printer name + copies (shared by Multi Print Setting & User Print Config) |
 | **User Print Config** | Master | By `user` (unique) | Per-user printer mapping — overrides global Multi Print Setting |
+| **Privilege Card Type** | Master | By `card_type_name` | Card categories (Student, Parent, Teacher) with discount % |
+| **Privilege Card** | Master | Auto | Issued to customer, links card type, expiry date, active/expired status |
+| **PO Follow Up** | Master | `PO-FU-.#####` | Per-PO follow-up log: contact, transport, status, remarks |
+| **PO Follow Up Item** | Child Table | — | Per-item tracking: ordered qty, expected qty, delivery date, status |
 
 ### Permissions
 
-| Role | Book Item Creator | Publication / Subject / Class Master |
-|------|-------------------|--------------------------------------|
-| **System Manager** | Full access (create, read, write, submit, cancel, amend, delete) | Full access |
-| **Stock Manager** | Full access | Full access |
-| **Stock User** | Full access | Create, read, write, export, print (no delete) |
+| Role | Book Item Creator | Publication / Subject / Class Master | PO Follow Up |
+|------|-------------------|--------------------------------------|--------------|
+| **System Manager** | Full access (create, read, write, submit, cancel, amend, delete) | Full access | Full access |
+| **Stock Manager** | Full access | Full access | Full access |
+| **Stock User** | Full access | Create, read, write, export, print (no delete) | Create, read, write (no delete) |
+| **Purchase User** | — | — | Create, read, write (no delete) |
 
 ---
 
@@ -296,6 +360,19 @@ A dedicated **"School Book Seller"** workspace with:
 - **Chart:** Bar chart grouped by Publication
 - **Summary cards:** Total Book Items, Total Stock Qty, Total Stock Value
 - **Filters:** Publication, Subject, Class, From Date, To Date
+
+### Privilege Card Usage
+- **Type:** Script Report
+- **Based on:** Privilege Card
+- **Shows:** Card usage across Sales Orders and Sales Invoices
+
+### PO Follow Up Report
+- **Type:** Script Report
+- **Based on:** PO Follow Up
+- **Shows:** All follow-ups with PO link, supplier, follow-up date, next follow-up, status, contacted person, transport, items count, remarks
+- **Chart:** Bar chart grouped by status (Pending, Confirmed, Dispatched, Delivered, Delayed)
+- **Summary cards:** Total Follow Ups, Pending/Delayed, Delivered
+- **Filters:** Supplier, Status, From Date, To Date
 
 ---
 
@@ -328,10 +405,19 @@ The app adds 17 custom fields to the standard ERPNext **Item** doctype:
 | DocType | Field | Type | Options |
 |---------|-------|------|---------|
 | Sales Order | `custom_school_name` | Link | School |
+| Sales Order | `custom_privilege_card` | Link | Privilege Card |
+| Sales Order | `custom_privilege_card_discount` | Percent (read-only) | — |
 | Purchase Order | `custom_school_name` | Link | School |
 | Purchase Order | `custom_remark` | Small Text | — |
 | Purchase Order | `custom_transport_name` | Data | — |
+| Purchase Order | `custom_followup_section` | Section Break | Follow Up Summary (collapsible) |
+| Purchase Order | `custom_last_followup_date` | Date (read-only) | — |
+| Purchase Order | `custom_last_followup_status` | Data (read-only) | — |
+| Purchase Order | `custom_next_followup_date` | Date (read-only) | — |
+| Purchase Order | `custom_total_followups` | Int (read-only) | — |
 | Sales Invoice | `custom_school_name` | Link | School |
+| Sales Invoice | `custom_privilege_card` | Link | Privilege Card |
+| Sales Invoice | `custom_privilege_card_discount` | Percent (read-only) | — |
 
 **School Name Propagation:**
 - Sales Order → Set School Name (linked to School master)
@@ -339,6 +425,8 @@ The app adds 17 custom fields to the standard ERPNext **Item** doctype:
 - "Make Sales Invoice" → School Name copied to Sales Invoice (via `before_save` hook)
 
 > **Dependency:** School Name fields require the `trustbit_school_pro` app (provides the `School` DocType). If not installed, these fields are created as Data type instead of Link.
+
+**PO Follow Up Summary:** The 5 summary fields on Purchase Order are auto-updated whenever a PO Follow Up is saved or deleted. They provide a quick-glance view of follow-up activity without opening the follow-up records.
 
 ---
 
@@ -506,6 +594,22 @@ All whitelisted API methods are at:
 |--------|-----------|-------------|
 | `get_multi_print_settings` | — | Returns user-aware print config (user config > global fallback). Includes: enabled, trigger_on, show_token, token_digits, source, print_formats |
 
+**PO Follow Up API** (`trustbit_school_book_seller.followup_api`):
+
+| Method | Arguments | Description |
+|--------|-----------|-------------|
+| `get_po_items` | `purchase_order` | Returns PO items with ordered qty, received qty, pending qty for pre-filling follow-up |
+| `get_followup_summary` | `purchase_order` | Returns all follow-ups for a PO with status and dates |
+| `create_followup_from_po` | `purchase_order` | Creates a pre-filled PO Follow Up with all PO items, returns name for routing |
+
+**Privilege Card API** (`trustbit_school_book_seller.privilege_card`):
+
+| Function | Trigger | Description |
+|----------|---------|-------------|
+| `validate_privilege_card_on_doc` | SO/SI before_validate | Validates card is active and not expired, populates discount % |
+| `log_privilege_card_usage` | SO/SI on_submit | Creates usage log entry for the privilege card |
+| `expire_cards_daily` | Daily scheduler | Expires cards past their expiry date |
+
 **Server-side Hooks** (not whitelisted — called via doc_events):
 
 | Function | Trigger | Description |
@@ -513,6 +617,14 @@ All whitelisted API methods are at:
 | `copy_school_name_to_invoice` | SI before_save | Copies School Name from linked Sales Order to Sales Invoice |
 | `on_sales_invoice_save` | SI after_insert | Publishes realtime event for draft printing (if trigger_on includes draft) |
 | `on_sales_invoice_submit` | SI on_submit | Publishes realtime event for submit printing (if trigger_on includes submit) |
+
+**Scheduler Jobs** (daily):
+
+| Function | Description |
+|----------|-------------|
+| `expire_cards_daily` | Expires privilege cards past their expiry date |
+| `send_followup_reminders` | Notifies Purchase Manager/User roles of overdue follow-ups (next_followup_date <= today, status != Delivered) |
+| `check_pos_without_followups` | Alerts Purchase Managers about submitted POs older than 3 days with zero follow-ups |
 
 ---
 
@@ -573,7 +685,7 @@ sudo supervisorctl restart all
 | **Realtime Events** | `book_item_creation_progress`, `multi_print_invoice` |
 | **QZ Tray** | Required for multi-print (loaded globally by `trustbit_barcode` app) |
 | **Barcode Type** | Empty string (accepts any format) |
-| **Fixtures** | Subject, Class Master, Custom Field (22 fields), Print Format (KGS Purchase Order, 80MM Token) |
+| **Fixtures** | Subject, Class Master, Custom Field (28 fields), Print Format (KGS Purchase Order, 80MM Token) |
 | **Build System** | Flit (`flit_core >= 3.4, < 4`) |
 
 ### File Structure
@@ -592,21 +704,25 @@ trustbit_school_book_seller/
     ├── __init__.py                     # App version
     ├── hooks.py                        # App configuration
     ├── install.py                      # Post-install setup
+    ├── api.py                          # Product Bundle, search, multi-print & hook APIs
+    ├── privilege_card.py               # Privilege card validation, usage logging, expiry
+    ├── followup_api.py                 # PO Follow Up APIs + scheduler functions
     ├── modules.txt
     ├── patches.txt
     ├── fixtures/
     │   ├── class_master.json           # 15 default classes
     │   ├── subject.json                # 20 default subjects
-    │   ├── custom_field.json           # 22 custom field definitions (Item, SO, PO, SI)
+    │   ├── custom_field.json           # 28 custom field definitions (Item, SO, PO, SI)
     │   └── print_format.json           # Print formats (KGS Purchase Order, 80MM Token)
-    ├── api.py                          # Product Bundle, search, multi-print & hook APIs
     ├── public/js/
     │   ├── book_item_creator.js        # Client-side logic (649 lines)
     │   ├── product_bundle.js           # Get Items from Product Bundle (MR, SI, SO, PO, PI)
     │   ├── product_bundle_form.js      # Advanced Search on Product Bundle form (Ctrl+Q, Ctrl+B)
     │   ├── sales_invoice_print.js      # Multi Print realtime listener + manual reprint (global JS)
     │   ├── sales_order.js              # Sales Order custom buttons
-    │   └── user_print_config.js        # Printer detection & status for User Print Config
+    │   ├── user_print_config.js        # Printer detection & status for User Print Config
+    │   ├── privilege_card_so_si.js     # Privilege card discount handling on SO/SI
+    │   └── purchase_order_followup.js  # PO Follow Up buttons + dashboard indicators
     └── trustbit_school_book/
         ├── doctype/
         │   ├── book_item_creator/      # Main transaction DocType
@@ -617,10 +733,16 @@ trustbit_school_book_seller/
         │   ├── user_print_config/      # Per-user printer mapping (overrides global)
         │   ├── publication/            # Publisher master
         │   ├── subject/                # Subject master
-        │   └── class_master/           # Class/Grade master
+        │   ├── class_master/           # Class/Grade master
+        │   ├── privilege_card_type/    # Card categories with discount %
+        │   ├── privilege_card/         # Issued cards with expiry
+        │   ├── po_follow_up/           # PO Follow Up parent DocType
+        │   └── po_follow_up_item/      # PO Follow Up child table
         ├── report/
         │   ├── book_creation_summary/  # Summary report
-        │   └── book_items_report/      # Items report
+        │   ├── book_items_report/      # Items report
+        │   ├── privilege_card_usage/   # Card usage report
+        │   └── po_follow_up_report/    # Follow-up report with chart
         └── workspace/
             └── trustbit_school_book.json  # Workspace config
 ```
