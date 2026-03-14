@@ -158,16 +158,26 @@ Fetch items from an ERPNext **Product Bundle** into transaction documents with a
 **"Not Available" item filtering:**
 Items marked as `Not Available` in the Product Bundle (via `custom_product_bundle_stock` field on Product Bundle Item) are automatically skipped when fetching items. An orange alert lists which items were skipped. Each added row stores `custom_bundle_id` linking it back to the source Product Bundle for print format grouping.
 
-### 15a. Product Bundle Print Format (SchoolProductBundleA4V1)
-A custom A4 print format for Sales Invoices that groups items by their Product Bundle and Item Group, with special handling for unavailable and removed items:
+### 15a. Product Bundle Print Formats (3 Designs)
+Custom A4 print formats for Sales Invoices that group items by Item Group, with special handling for unavailable and removed items. All three share the same Jinja logic but differ in visual design:
 
+| Print Format | Style | Description |
+|---|---|---|
+| **SchoolProductBundleA4V1** | Original | Black borders, solid table lines, bold group headers, standard layout |
+| **SchoolProductBundleA4T2** | Light & Airy | Segoe UI font, thin 1px borders, soft `#f5f5f5` row dividers, uppercase 9px labels, light-weight total, red/orange left-border accent for NA/Removed sections |
+| **SchoolProductBundleA4T3** | Serif Traditional | Georgia font, double-line borders, dotted row dividers, italic labels, gold `#c5a47e` accents, `~ Group ~` style headers, double-bordered total box, warm `#fdf8f0` NA/Removed sections |
+
+**Common features across all three:**
 - **Dynamic company header** — pulls company name, address, GSTIN, and phone from Company and Address doctypes (not hardcoded)
-- **Item grouping** — items are grouped by Item Group with group subtotals
+- **9-column item table** — SN, Description, Company, Qty, Unit, MRP, Dis%, Disc Amt, Amount
+- **Item grouping** — items grouped by Item Group with group subtotals
 - **"Not Available" section** — shows items from the bundle marked as Not Available with 0.00 amounts, including items not present in the SI (fetched from Item master)
 - **"Removed Items" section** — detects items present in the bundle but missing or reduced in the SI, displayed with 0.00 amounts
 - **Correct total calculation** — calculates total from displayed items only (not `doc.rounded_total`), so hidden/skipped items don't inflate the total
 - **UPI QR code** — generates a scannable QR code for UPI payment with the correct displayed total
 - **Amount in words** — recalculated from the displayed total
+
+All three are stored as Print Format DocType records on the server (not in app fixtures). Source HTML is in the `Print Format/` directory.
 
 ### 16. Advanced Search on Product Bundle Form
 The Product Bundle form includes **Ctrl+Q Quick Add** and **Ctrl+B Barcode Scan** for rapidly adding component items — the same advanced search experience as `trustbit_advance_search`.
@@ -723,7 +733,7 @@ sudo supervisorctl restart all
 | **Realtime Events** | `book_item_creation_progress`, `multi_print_invoice` |
 | **QZ Tray** | Required for multi-print (loaded globally by `trustbit_barcode` app) |
 | **Barcode Type** | Empty string (accepts any format) |
-| **Fixtures** | Subject, Class Master, Custom Field (32 fields), Print Format (KGS Purchase Order, 80MM Token). SchoolProductBundleA4V1 print format is stored in server's Print Format DocType (not in fixtures). |
+| **Fixtures** | Subject, Class Master, Custom Field (32 fields), Print Format (KGS Purchase Order, 80MM Token). SchoolProductBundleA4V1/T2/T3 print formats are stored in server's Print Format DocType (not in fixtures). |
 | **Build System** | Flit (`flit_core >= 3.4, < 4`) |
 
 ### File Structure
