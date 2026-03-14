@@ -13,7 +13,7 @@ A custom ERPNext application for school book sellers to manage bulk book item cr
 
 - [Features](#features)
   - [Book Item Creation (1-14)](#1-bulk-book-item-creation)
-  - [Product Bundle (15-16)](#15-get-items-from-product-bundle)
+  - [Product Bundle (15-16)](#15-get-items-from-product-bundle) | [Print Format (15a)](#15a-product-bundle-print-format-schoolproductbundlea4v1)
   - [Multi Print Master (17-20)](#17-multi-print-master-auto-print-on-sales-invoice)
   - [Supplier-Wise PO (21)](#21-supplier-wise-purchase-orders-from-sales-order)
   - [Workspace (22)](#22-workspace)
@@ -154,6 +154,20 @@ Fetch items from an ERPNext **Product Bundle** into transaction documents with a
 3. Enter **Number of Sets** — each item's quantity is multiplied by this number
 4. Choose **Append** (add to existing items) or **Replace** (clear existing items first)
 5. Click **Get Items** — items are added to the table and rates auto-populate from the document's Price List
+
+**"Not Available" item filtering:**
+Items marked as `Not Available` in the Product Bundle (via `custom_product_bundle_stock` field on Product Bundle Item) are automatically skipped when fetching items. An orange alert lists which items were skipped. Each added row stores `custom_bundle_id` linking it back to the source Product Bundle for print format grouping.
+
+### 15a. Product Bundle Print Format (SchoolProductBundleA4V1)
+A custom A4 print format for Sales Invoices that groups items by their Product Bundle and Item Group, with special handling for unavailable and removed items:
+
+- **Dynamic company header** — pulls company name, address, GSTIN, and phone from Company and Address doctypes (not hardcoded)
+- **Item grouping** — items are grouped by Item Group with group subtotals
+- **"Not Available" section** — shows items from the bundle marked as Not Available with 0.00 amounts, including items not present in the SI (fetched from Item master)
+- **"Removed Items" section** — detects items present in the bundle but missing or reduced in the SI, displayed with 0.00 amounts
+- **Correct total calculation** — calculates total from displayed items only (not `doc.rounded_total`), so hidden/skipped items don't inflate the total
+- **UPI QR code** — generates a scannable QR code for UPI payment with the correct displayed total
+- **Amount in words** — recalculated from the displayed total
 
 ### 16. Advanced Search on Product Bundle Form
 The Product Bundle form includes **Ctrl+Q Quick Add** and **Ctrl+B Barcode Scan** for rapidly adding component items — the same advanced search experience as `trustbit_advance_search`.
@@ -607,7 +621,7 @@ All whitelisted API methods are at:
 
 | Method | Arguments | Description |
 |--------|-----------|-------------|
-| `get_product_bundle_items` | `product_bundle`, `qty_sets` (default 1) | Returns list of items from a Product Bundle with quantities multiplied by `qty_sets` |
+| `get_product_bundle_items` | `product_bundle`, `qty_sets` (default 1) | Returns available items from a Product Bundle (skips "Not Available" items) with quantities multiplied by `qty_sets`. Shows orange alert for skipped items. |
 | `search_product_bundles` | `search_text`, `limit` (default 20) | Fuzzy search Product Bundles by name, item name, description, group |
 | `search_items` | `search_text`, `limit` (default 50) | Fuzzy search Items by code, name, group, description, barcode (AND logic) |
 
@@ -709,7 +723,7 @@ sudo supervisorctl restart all
 | **Realtime Events** | `book_item_creation_progress`, `multi_print_invoice` |
 | **QZ Tray** | Required for multi-print (loaded globally by `trustbit_barcode` app) |
 | **Barcode Type** | Empty string (accepts any format) |
-| **Fixtures** | Subject, Class Master, Custom Field (32 fields), Print Format (KGS Purchase Order, 80MM Token) |
+| **Fixtures** | Subject, Class Master, Custom Field (32 fields), Print Format (KGS Purchase Order, 80MM Token). SchoolProductBundleA4V1 print format is stored in server's Print Format DocType (not in fixtures). |
 | **Build System** | Flit (`flit_core >= 3.4, < 4`) |
 
 ### File Structure
@@ -861,6 +875,11 @@ bench remove-app trustbit_school_book_seller
 | **80MM Token `regex_replace` filter not found** | Frappe's Jinja environment does not include the `regex_replace` filter (unlike Ansible/Django). Template used `inv_digits \| regex_replace('[^0-9]', '')` which raised `ValidationError`. | Replaced with `doc.name.split('-')[-1]` and `last_part[-3:]` — pure Jinja string operations that work in Frappe. |
 | **Multi Print not triggering from POS Awesome** | `frappe.ui.form.on("Sales Invoice", { on_submit: ... })` is a client-side form event that only fires when the standard Frappe form is open. POS Awesome uses its own Vue.js UI and never opens the standard form. | Replaced client-side `on_submit` with server-side `on_submit` doc_event hook that publishes a `frappe.publish_realtime` event. Client-side JS listens via `frappe.realtime.on()` which works on any page, including POS. |
 | **Double printing with POS Awesome** | POS Awesome has its own print mechanism (`window.open(printview_url)` + `window.print()`) that triggers a browser print dialog. Combined with QZ Tray auto-print, this causes duplicate prints. | Solution: clear the Print Format field in POS Profile settings to disable POS Awesome's built-in print. Only QZ Tray handles printing. |
+| **Product Bundle "Not Available" items added to SI** | POS Awesome's `processProductBundle()` and trustbit's `get_product_bundle_items()` added ALL bundle items regardless of `custom_product_bundle_stock` status. NA items appeared in the Sales Invoice at full rates. | Both POS Awesome (`ItemsSelector.vue`) and trustbit (`api.py`) now filter out items where `custom_product_bundle_stock == "Not Available"`. POS shows skipped count; trustbit shows orange alert. |
+| **Print format total includes hidden NA items** | Print format `SchoolProductBundleV1` used `doc.rounded_total` which includes ALL SI items, but visually hid NA items — so displayed items summed to less than the total shown. | Print format now calculates its own `total_amount` from displayed items only. Amount in words and UPI QR also use the corrected total. |
+| **product_bundle.js `async: false` blocking UI** | The `select_bundle()` function used `async: false` on `frappe.call()` to fetch parent item info, freezing the browser during the request. | Removed `async: false` and nested the component items fetch inside the parent info callback. |
+| **`custom_bundle_id` not set by trustbit product_bundle.js** | Items added via "Get Items → Product Bundle" button didn't set `custom_bundle_id`, breaking the print format's bundle-aware grouping for non-POS invoices. | Added `row.custom_bundle_id = bundle_name` in `fetch_and_add_items()`. |
+| **product_bundle.js missing from Sales Order hooks** | The JS file registered handlers for 5 doctypes but `hooks.py` only loaded it for 4 (missing Sales Order). Button never appeared on SO. | Added `product_bundle.js` to Sales Order's `doctype_js` array in `hooks.py`. |
 
 ---
 
