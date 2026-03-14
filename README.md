@@ -15,9 +15,10 @@ A custom ERPNext application for school book sellers to manage bulk book item cr
   - [Book Item Creation (1-14)](#1-bulk-book-item-creation)
   - [Product Bundle (15-16)](#15-get-items-from-product-bundle)
   - [Multi Print Master (17-20)](#17-multi-print-master-auto-print-on-sales-invoice)
-  - [Privilege Card (22-24)](#22-privilege-card-system)
-  - [PO Follow Up (25-27)](#25-po-follow-up-tracking)
-  - [Workspace (21)](#21-workspace)
+  - [Supplier-Wise PO (21)](#21-supplier-wise-purchase-orders-from-sales-order)
+  - [Workspace (22)](#22-workspace)
+  - [Privilege Card (23-25)](#23-privilege-card-system)
+  - [PO Follow Up (26-28)](#26-po-follow-up-tracking)
 - [DocTypes](#doctypes)
 - [Reports](#reports)
 - [Custom Fields on Item](#custom-fields-on-item)
@@ -249,13 +250,27 @@ The Multi Print Setting page includes a built-in setup guide for the **Brother H
 - QZ Tray setup steps for every PC
 - Typical per-user config example (80MM Token → local thermal, A4 Invoice → Brother LAN)
 
-### 21. Workspace
+### 21. Supplier-Wise Purchase Orders from Sales Order
+On submitted Sales Orders, a **Create > PO (Supplier Wise)** button groups SO items by their default supplier and creates separate Purchase Orders for each supplier in one click.
+
+**How it works:**
+1. Open a submitted Sales Order → click **Create > PO (Supplier Wise)**
+2. A dialog shows all SO items with: Item Code, Item Name, Qty, UOM, Supplier
+3. Items without a default supplier are grouped under "No Supplier" — you can assign suppliers in the dialog
+4. Select items → click **Create Purchase Orders** → confirmation shows how many POs will be created per supplier
+5. POs are created and linked back to the SO. School Name is copied to each PO.
+
+- Only shows items not yet ordered (pending qty > 0)
+- If all items already have POs, prompts to re-create for all items
+- Copies school name from SO to each created PO
+
+### 22. Workspace
 A dedicated **"School Book Seller"** workspace with:
 - Quick shortcuts to Book Item Creator, Publication, Items, Privilege Cards, PO Follow Ups
 - Links to all reports (Book Items, Book Creation Summary, Privilege Card Usage, PO Follow Up Report)
 - Organized navigation for all app features
 
-### 22. Privilege Card System
+### 23. Privilege Card System
 Issue discount cards to customers (students, parents, teachers) that automatically apply discounts on Sales Orders and Sales Invoices.
 
 - **Privilege Card Type** — master for card categories (Student, Parent, Teacher) with configurable discount %
@@ -264,17 +279,17 @@ Issue discount cards to customers (students, parents, teachers) that automatical
 - **Usage logging** — every SO/SI submission with a privilege card creates a usage log entry
 - **Daily expiry check** — scheduler job automatically expires cards past their expiry date
 
-### 23. Privilege Card Usage Report
+### 24. Privilege Card Usage Report
 - **Type:** Script Report
 - **Based on:** Privilege Card
 - **Shows:** Card usage across Sales Orders and Sales Invoices with dates, amounts, and discounts applied
 
-### 24. Privilege Card Custom Fields
+### 25. Privilege Card Custom Fields
 Added to Sales Order and Sales Invoice:
 - `custom_privilege_card` — Link to Privilege Card
 - `custom_privilege_card_discount` — Card Discount % (read-only, auto-populated)
 
-### 25. PO Follow Up Tracking
+### 26. PO Follow Up Tracking
 A structured follow-up system for Purchase Managers to track supplier delivery commitments on Purchase Orders. Log each follow-up conversation with per-item quantity tracking, delivery dates, transport details, and contact information.
 
 **Creating a Follow Up:**
@@ -296,7 +311,7 @@ A structured follow-up system for Purchase Managers to track supplier delivery c
 **Previously Confirmed Qty:**
 Each follow-up automatically computes the previously confirmed quantity per item from all prior follow-ups on the same PO, giving visibility into what was already committed.
 
-### 26. PO Follow Up Report
+### 27. PO Follow Up Report
 - **Type:** Script Report
 - **Based on:** PO Follow Up
 - **Shows:** All follow-ups with Purchase Order, Supplier, dates, status, contacted person, transport, items count, remarks
@@ -304,7 +319,7 @@ Each follow-up automatically computes the previously confirmed quantity per item
 - **Summary cards:** Total Follow Ups, Pending/Delayed count, Delivered count
 - **Filters:** Supplier, Status, From Date, To Date
 
-### 27. Auto-Reminders for Follow Ups
+### 28. Auto-Reminders for Follow Ups
 Two daily scheduler jobs keep Purchase Managers informed:
 
 | Job | What it does |
@@ -413,6 +428,7 @@ The app adds 17 custom fields to the standard ERPNext **Item** doctype:
 | Purchase Order | `custom_followup_section` | Section Break | Follow Up Summary (collapsible) |
 | Purchase Order | `custom_last_followup_date` | Date (read-only) | — |
 | Purchase Order | `custom_last_followup_status` | Data (read-only) | — |
+| Purchase Order | `custom_column_break_followup` | Column Break | — |
 | Purchase Order | `custom_next_followup_date` | Date (read-only) | — |
 | Purchase Order | `custom_total_followups` | Int (read-only) | — |
 | Sales Invoice | `custom_school_name` | Link | School |
@@ -426,7 +442,7 @@ The app adds 17 custom fields to the standard ERPNext **Item** doctype:
 
 > **Dependency:** School Name fields require the `trustbit_school_pro` app (provides the `School` DocType). If not installed, these fields are created as Data type instead of Link.
 
-**PO Follow Up Summary:** The 5 summary fields on Purchase Order are auto-updated whenever a PO Follow Up is saved or deleted. They provide a quick-glance view of follow-up activity without opening the follow-up records.
+**PO Follow Up Summary:** The 6 fields on Purchase Order (section + column break + 4 data fields) are auto-updated whenever a PO Follow Up is saved or deleted. They provide a quick-glance view of follow-up activity without opening the follow-up records.
 
 ---
 
@@ -580,6 +596,13 @@ All whitelisted API methods are at:
 | `parse_csv_file` | `file_url` | Parses uploaded CSV, validates classes, returns data + skipped info |
 | `duplicate_book_item_creator` | `docname` | Clones a Book Item Creator (clears ISBNs) |
 
+**Sales Order API** (`trustbit_school_book_seller.api`):
+
+| Method | Arguments | Description |
+|--------|-----------|-------------|
+| `get_so_items_with_suppliers` | `sales_order`, `include_ordered` (0/1) | Returns SO items with default suppliers and pending qty for supplier-wise PO creation |
+| `create_po_supplier_wise` | `sales_order`, `items` (list) | Groups selected items by supplier and creates separate Purchase Orders. Copies school name from SO |
+
 **Product Bundle & Search API** (`trustbit_school_book_seller.api`):
 
 | Method | Arguments | Description |
@@ -602,11 +625,12 @@ All whitelisted API methods are at:
 | `get_followup_summary` | `purchase_order` | Returns all follow-ups for a PO with status and dates |
 | `create_followup_from_po` | `purchase_order` | Creates a pre-filled PO Follow Up with all PO items, returns name for routing |
 
-**Privilege Card API** (`trustbit_school_book_seller.privilege_card`):
+**Privilege Card API** (`trustbit_school_book_seller.api` + `trustbit_school_book_seller.privilege_card`):
 
 | Function | Trigger | Description |
 |----------|---------|-------------|
-| `validate_privilege_card_on_doc` | SO/SI before_validate | Validates card is active and not expired, populates discount % |
+| `validate_privilege_card` | Whitelisted API (api.py) | Client-callable: validates card and returns card details (name, type, discount %, status) |
+| `validate_privilege_card_on_doc` | SO/SI before_validate | Server-side: validates card is active and not expired, populates discount % |
 | `log_privilege_card_usage` | SO/SI on_submit | Creates usage log entry for the privilege card |
 | `expire_cards_daily` | Daily scheduler | Expires cards past their expiry date |
 
@@ -685,7 +709,7 @@ sudo supervisorctl restart all
 | **Realtime Events** | `book_item_creation_progress`, `multi_print_invoice` |
 | **QZ Tray** | Required for multi-print (loaded globally by `trustbit_barcode` app) |
 | **Barcode Type** | Empty string (accepts any format) |
-| **Fixtures** | Subject, Class Master, Custom Field (28 fields), Print Format (KGS Purchase Order, 80MM Token) |
+| **Fixtures** | Subject, Class Master, Custom Field (32 fields), Print Format (KGS Purchase Order, 80MM Token) |
 | **Build System** | Flit (`flit_core >= 3.4, < 4`) |
 
 ### File Structure
@@ -712,7 +736,7 @@ trustbit_school_book_seller/
     ├── fixtures/
     │   ├── class_master.json           # 15 default classes
     │   ├── subject.json                # 20 default subjects
-    │   ├── custom_field.json           # 28 custom field definitions (Item, SO, PO, SI)
+    │   ├── custom_field.json           # 32 custom field definitions (Item, SO, PO, SI)
     │   └── print_format.json           # Print formats (KGS Purchase Order, 80MM Token)
     ├── public/js/
     │   ├── book_item_creator.js        # Client-side logic (649 lines)
