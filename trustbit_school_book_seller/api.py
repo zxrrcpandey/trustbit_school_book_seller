@@ -571,13 +571,15 @@ def validate_privilege_card(card_name):
 def get_product_bundle_items(product_bundle, qty_sets=1):
 	"""Get component items from a Product Bundle, multiplied by number of sets.
 
+	Skips items marked as "Not Available" in custom_product_bundle_stock.
+
 	Args:
 		product_bundle: Name of the Product Bundle document
 		qty_sets: Number of sets (multiplier for component qty)
 
 	Returns:
 		List of dicts with item_code, item_name, description, qty, uom,
-		stock_uom, conversion_factor
+		stock_uom, conversion_factor, custom_product_bundle_stock
 	"""
 	qty_sets = flt(qty_sets)
 	if qty_sets <= 0:
@@ -592,7 +594,14 @@ def get_product_bundle_items(product_bundle, qty_sets=1):
 		frappe.throw(_("Product Bundle {0} has no items").format(product_bundle))
 
 	items = []
+	skipped = []
 	for row in bundle.items:
+		stock_status = getattr(row, "custom_product_bundle_stock", "") or "Available"
+
+		if stock_status == "Not Available":
+			skipped.append(row.item_code)
+			continue
+
 		item_details = frappe.db.get_value(
 			"Item",
 			row.item_code,
@@ -615,6 +624,15 @@ def get_product_bundle_items(product_bundle, qty_sets=1):
 				"stock_uom": item_details.stock_uom,
 				"conversion_factor": 1,
 			}
+		)
+
+	if skipped:
+		frappe.msgprint(
+			_("Skipped {0} item(s) marked as Not Available: {1}").format(
+				len(skipped), ", ".join(skipped)
+			),
+			alert=True,
+			indicator="orange",
 		)
 
 	return items

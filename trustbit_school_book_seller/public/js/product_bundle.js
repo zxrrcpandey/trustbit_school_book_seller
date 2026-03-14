@@ -253,7 +253,7 @@
 			+ '<i class="fa fa-spinner fa-spin"></i> ' + __("Loading bundle details...") + '</div>'
 		);
 
-		// Fetch parent item info
+		// Fetch parent item info, then component items
 		frappe.call({
 			method: "frappe.client.get_value",
 			args: {
@@ -261,7 +261,6 @@
 				filters: { name: bundle_name },
 				fieldname: ["item_name", "description"],
 			},
-			async: false,
 			callback: function (p) {
 				var info = p.message || {};
 				var phtml = '<div style="margin-bottom:8px;padding:8px 12px;'
@@ -279,31 +278,31 @@
 				}
 				phtml += '</div>';
 				$preview.html(phtml);
-			},
-		});
 
-		// Fetch component items
-		frappe.call({
-			method: "trustbit_school_book_seller.api.get_product_bundle_items",
-			args: { product_bundle: bundle_name, qty_sets: 1 },
-			callback: function (r) {
-				var existing = $preview.html();
-				if (r.message && r.message.length) {
-					var html = '<div style="max-height:150px;overflow-y:auto;">'
-						+ '<table class="table table-bordered table-condensed" style="margin-bottom:0;font-size:12px;">'
-						+ '<thead><tr><th>' + __("Item Code") + '</th><th>'
-						+ __("Item Name") + '</th><th>' + __("Qty") + '</th><th>'
-						+ __("UOM") + '</th></tr></thead><tbody>';
-					r.message.forEach(function (item) {
-						html += '<tr><td>' + frappe.utils.escape_html(item.item_code)
-							+ '</td><td>' + frappe.utils.escape_html(item.item_name || "")
-							+ '</td><td>' + item.qty
-							+ '</td><td>' + frappe.utils.escape_html(item.uom || "")
-							+ '</td></tr>';
-					});
-					html += '</tbody></table></div>';
-					$preview.html(existing + html);
-				}
+				// Fetch component items after parent info is rendered
+				frappe.call({
+					method: "trustbit_school_book_seller.api.get_product_bundle_items",
+					args: { product_bundle: bundle_name, qty_sets: 1 },
+					callback: function (r) {
+						var existing = $preview.html();
+						if (r.message && r.message.length) {
+							var html = '<div style="max-height:150px;overflow-y:auto;">'
+								+ '<table class="table table-bordered table-condensed" style="margin-bottom:0;font-size:12px;">'
+								+ '<thead><tr><th>' + __("Item Code") + '</th><th>'
+								+ __("Item Name") + '</th><th>' + __("Qty") + '</th><th>'
+								+ __("UOM") + '</th></tr></thead><tbody>';
+							r.message.forEach(function (item) {
+								html += '<tr><td>' + frappe.utils.escape_html(item.item_code)
+									+ '</td><td>' + frappe.utils.escape_html(item.item_name || "")
+									+ '</td><td>' + item.qty
+									+ '</td><td>' + frappe.utils.escape_html(item.uom || "")
+									+ '</td></tr>';
+							});
+							html += '</tbody></table></div>';
+							$preview.html(existing + html);
+						}
+					},
+				});
 			},
 		});
 	}
@@ -319,7 +318,7 @@
 			freeze_message: __("Fetching bundle items..."),
 			callback: function (r) {
 				if (!r.message || !r.message.length) {
-					frappe.msgprint(__("No items found in the selected Product Bundle"));
+					frappe.msgprint(__("No available items in the selected Product Bundle"));
 					return;
 				}
 
@@ -337,6 +336,8 @@
 					row.uom = item.uom;
 					row.stock_uom = item.stock_uom;
 					row.conversion_factor = item.conversion_factor || 1;
+					// Track which bundle this item came from
+					row.custom_bundle_id = bundle_name;
 					added_rows.push(row);
 				});
 
