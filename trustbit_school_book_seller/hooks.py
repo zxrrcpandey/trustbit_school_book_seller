@@ -30,9 +30,9 @@ app_include_js = "/assets/trustbit_school_book_seller/js/sales_invoice_print.js"
 doctype_js = {
     "Book Item Creator": "public/js/book_item_creator.js",
     "Sales Order": ["public/js/sales_order.js", "public/js/product_bundle.js", "public/js/privilege_card_so_si.js"],
-    "Sales Invoice": ["public/js/product_bundle.js", "public/js/privilege_card_so_si.js"],
+    "Sales Invoice": ["public/js/product_bundle.js", "public/js/privilege_card_so_si.js", "public/js/return_scanner.js"],
     "Purchase Order": ["public/js/product_bundle.js", "public/js/purchase_order_followup.js"],
-    "Purchase Invoice": "public/js/product_bundle.js",
+    "Purchase Invoice": ["public/js/product_bundle.js", "public/js/return_scanner.js"],
     "Material Request": "public/js/product_bundle.js",
     "Product Bundle": "public/js/product_bundle_form.js",
     "User Print Config": "public/js/user_print_config.js",

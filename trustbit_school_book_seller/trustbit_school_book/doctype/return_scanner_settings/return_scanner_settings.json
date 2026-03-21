@@ -1,0 +1,102 @@
+{
+    "actions": [],
+    "creation": "2026-03-21 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "return_mode",
+        "column_break_1",
+        "auto_focus_barcode",
+        "play_sound_on_scan",
+        "section_break_2",
+        "allow_exceed_original_qty",
+        "column_break_3",
+        "max_return_without_approval"
+    ],
+    "fields": [
+        {
+            "default": "Hybrid",
+            "fieldname": "return_mode",
+            "fieldtype": "Select",
+            "label": "Return Mode",
+            "options": "Strict\nFree\nHybrid",
+            "reqd": 1,
+            "description": "Strict: must select original invoice. Free: scan any item. Hybrid: strict if original invoice set, else free."
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": 1,
+            "fieldname": "auto_focus_barcode",
+            "fieldtype": "Check",
+            "label": "Auto Focus Barcode Input"
+        },
+        {
+            "default": 1,
+            "fieldname": "play_sound_on_scan",
+            "fieldtype": "Check",
+            "label": "Play Sound on Scan"
+        },
+        {
+            "fieldname": "section_break_2",
+            "fieldtype": "Section Break",
+            "label": "Limits"
+        },
+        {
+            "default": 0,
+            "fieldname": "allow_exceed_original_qty",
+            "fieldtype": "Check",
+            "label": "Allow Return Qty to Exceed Original",
+            "description": "If unchecked, return qty is capped at original invoice qty minus already returned qty."
+        },
+        {
+            "fieldname": "column_break_3",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": 0,
+            "fieldname": "max_return_without_approval",
+            "fieldtype": "Currency",
+            "label": "Max Return Amount Without Approval",
+            "description": "0 means no limit. If set, returns above this amount require manager approval."
+        }
+    ],
+    "document_type": "Setup",
+    "issingle": 1,
+    "links": [],
+    "modified": "2026-03-21 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Trustbit School Book",
+    "name": "Return Scanner Settings",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Stock Manager",
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Stock User"
+        },
+        {
+            "read": 1,
+            "role": "Accounts User"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1
+}
