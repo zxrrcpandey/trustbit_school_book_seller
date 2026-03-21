@@ -155,13 +155,33 @@ def scan_return_barcode(barcode, return_against=None, doctype=None):
 	if doctype:
 		_validate_doctype(doctype)
 
-	# Use ERPNext's barcode scanner
+	# Try ERPNext's barcode scanner first (searches Item Barcode, Serial No, Batch)
 	from erpnext.stock.utils import scan_barcode as erp_scan_barcode
 
 	scan_result = erp_scan_barcode(barcode)
+	item_code = scan_result.get("item_code") if scan_result else None
 
-	if not scan_result or not scan_result.get("item_code"):
-		return {"success": False, "message": _("Item not found for barcode: {0}").format(barcode)}
+	# If barcode scan didn't find it, try matching by item_code directly
+	if not item_code:
+		if frappe.db.exists("Item", barcode):
+			item_code = barcode
+
+	# If still not found, try matching by item_name (partial match, take first)
+	if not item_code:
+		item_code = frappe.db.get_value("Item", {"item_name": barcode, "disabled": 0}, "name")
+
+	# If still not found, try fuzzy search by item_name LIKE
+	if not item_code:
+		match = frappe.db.get_value(
+			"Item",
+			{"item_name": ("like", f"%{barcode}%"), "disabled": 0},
+			"name",
+		)
+		if match:
+			item_code = match
+
+	if not item_code:
+		return {"success": False, "message": _("Item not found for: {0}").format(barcode)}
 
 	item_code = scan_result["item_code"]
 	item = frappe.get_doc("Item", item_code)
