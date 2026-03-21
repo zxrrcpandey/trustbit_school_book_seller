@@ -19,6 +19,7 @@ A custom ERPNext application for school book sellers to manage bulk book item cr
   - [Workspace (22)](#22-workspace)
   - [Privilege Card (23-25)](#23-privilege-card-system)
   - [PO Follow Up (26-28)](#26-po-follow-up-tracking)
+  - [Return Scanner (29)](#29-return-scanner-for-salespurchase-returns)
 - [DocTypes](#doctypes)
 - [Reports](#reports)
 - [Custom Fields on Item](#custom-fields-on-item)
@@ -351,6 +352,33 @@ Two daily scheduler jobs keep Purchase Managers informed:
 | **Follow Up Reminders** | Finds follow-ups where next follow-up date <= today AND status != Delivered. Sends a Notification Log to all users with Purchase Manager or Purchase User roles |
 | **POs Without Follow Ups** | Finds submitted Purchase Orders older than 3 days with zero follow-ups. Alerts Purchase Managers to initiate first contact |
 
+### 29. Return Scanner for Sales/Purchase Returns
+
+A dialog-based tool for scanning barcodes or searching items when creating Sales/Purchase Returns (Credit/Debit Notes). Automatically adds items with **negative quantities** — no more manually typing `-3`, `-15`, etc.
+
+**Settings:** Go to **Return Scanner Settings** to configure:
+- **Return Mode:** Strict (must select original invoice), Free (scan any item), or Hybrid (auto-detect)
+- **Auto Focus Barcode Input:** Focus the scanner input on dialog open
+- **Play Sound on Scan:** Audio feedback on successful/failed scans
+- **Allow Exceed Original Qty:** Allow returning more than what was invoiced
+- **Max Return Amount Without Approval:** Warn if return value exceeds threshold
+
+**How to use:**
+1. Create a Sales Invoice or Purchase Invoice with **Is Return** checked
+2. Optionally set **Return Against** (original invoice)
+3. Click **Tools > Scan Return Items**
+4. Scan barcodes or type item names — items appear in the table
+5. Adjust return quantities as needed
+6. Click **Add to Return** — items are added with negative qty
+
+**Lookup order:** Barcode (Item Barcode table) → Item Code (exact) → Item Name (exact) → Item Name (fuzzy LIKE)
+
+**Strict mode features:**
+- Only shows items from the original invoice
+- Calculates already-returned qty from submitted return invoices
+- Caps return qty at remaining returnable amount
+- Uses rates from the original invoice
+
 ---
 
 ## DocTypes
@@ -370,6 +398,7 @@ Two daily scheduler jobs keep Purchase Managers informed:
 | **Privilege Card** | Master | Auto | Issued to customer, links card type, expiry date, active/expired status |
 | **PO Follow Up** | Master | `PO-FU-.#####` | Per-PO follow-up log: contact, transport, status, remarks |
 | **PO Follow Up Item** | Child Table | — | Per-item tracking: ordered qty, expected qty, delivery date, status |
+| **Return Scanner Settings** | Single (Settings) | — | Return scanner config: mode (Strict/Free/Hybrid), sounds, qty limits |
 
 ### Permissions
 
