@@ -296,19 +296,21 @@ def _create_po_for_supplier(so, supplier, items):
 
 	po.run_method("set_missing_values")
 
-	# Batch-fetch rates and discounts
+	# Batch-fetch rates and UOM discounts
 	if po.items:
 		item_codes = [row.item_code for row in po.items]
 
-		# Fetch purchase discount from Item
-		discount_map = {}
-		item_discounts = frappe.get_all(
-			"Item",
-			filters={"name": ["in", item_codes]},
-			fields=["name", "custom_purchase_discount_percent"],
+		# Fetch UOM discounts from Item UOM Discount child table
+		all_uom_discounts = frappe.get_all(
+			"Item UOM Discount",
+			filters={"parent": ["in", item_codes], "parenttype": "Item"},
+			fields=["parent", "uom", "discount_percentage", "min_qty", "max_qty"],
+			order_by="min_qty desc",
 		)
-		for d in item_discounts:
-			discount_map[d.name] = flt(d.custom_purchase_discount_percent)
+		uom_discount_map = {}
+		for d in all_uom_discounts:
+			key = (d.parent, d.uom)
+			uom_discount_map.setdefault(key, []).append(d)
 
 		# Fetch price list rates
 		rate_map = {}
@@ -323,8 +325,19 @@ def _create_po_for_supplier(so, supplier, items):
 					rate_map[p.item_code] = flt(p.price_list_rate)
 
 		for row in po.items:
+			# Find best matching UOM discount
+			discount = 0
+			key = (row.item_code, row.uom)
+			if key in uom_discount_map:
+				qty = flt(row.qty)
+				for d in uom_discount_map[key]:
+					min_qty = flt(d.min_qty) or 0
+					max_qty = flt(d.max_qty) or 0
+					if qty >= min_qty and (max_qty == 0 or qty <= max_qty):
+						discount = flt(d.discount_percentage)
+						break
+
 			plr = rate_map.get(row.item_code)
-			discount = discount_map.get(row.item_code, 0)
 			if plr:
 				row.price_list_rate = plr
 				if discount:
@@ -649,8 +662,7 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 		item_details = frappe.db.get_value(
 			"Item",
 			row.item_code,
-			["item_name", "description", "stock_uom",
-			 "custom_sales_discount_percent", "custom_purchase_discount_percent"],
+			["item_name", "description", "stock_uom"],
 			as_dict=True,
 		)
 
@@ -658,12 +670,6 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 			frappe.throw(
 				_("Item {0} in Product Bundle does not exist").format(row.item_code)
 			)
-
-		# Pick the right discount based on doctype
-		if doctype in ("Purchase Order", "Purchase Invoice", "Material Request"):
-			discount = flt(item_details.custom_purchase_discount_percent)
-		else:
-			discount = flt(item_details.custom_sales_discount_percent)
 
 		items.append(
 			{
@@ -674,7 +680,6 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 				"uom": row.uom or item_details.stock_uom,
 				"stock_uom": item_details.stock_uom,
 				"conversion_factor": 1,
-				"discount_percentage": discount,
 			}
 		)
 
@@ -687,9 +692,41 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 			indicator="orange",
 		)
 
-	# Batch-fetch rates from Item Price in one query (no N+1 calls)
-	if price_list and items:
-		item_codes = [d["item_code"] for d in items]
+	if not items:
+		return items
+
+	item_codes = [d["item_code"] for d in items]
+
+	# Batch-fetch UOM discounts from Item UOM Discount child table
+	# (same discount system used by POS Awesome)
+	all_uom_discounts = frappe.get_all(
+		"Item UOM Discount",
+		filters={"parent": ["in", item_codes], "parenttype": "Item"},
+		fields=["parent", "uom", "discount_percentage", "min_qty", "max_qty"],
+		order_by="min_qty desc",
+	)
+	# Group by (item_code, uom)
+	uom_discount_map = {}
+	for d in all_uom_discounts:
+		key = (d.parent, d.uom)
+		uom_discount_map.setdefault(key, []).append(d)
+
+	# Apply best matching UOM discount for each item's qty and uom
+	for item in items:
+		discount = 0
+		key = (item["item_code"], item["uom"])
+		if key in uom_discount_map:
+			qty = flt(item["qty"])
+			for d in uom_discount_map[key]:
+				min_qty = flt(d.min_qty) or 0
+				max_qty = flt(d.max_qty) or 0
+				if qty >= min_qty and (max_qty == 0 or qty <= max_qty):
+					discount = flt(d.discount_percentage)
+					break
+		item["discount_percentage"] = discount
+
+	# Batch-fetch rates from Item Price in one query
+	if price_list:
 		prices = frappe.get_all(
 			"Item Price",
 			filters={"item_code": ["in", item_codes], "price_list": price_list},
