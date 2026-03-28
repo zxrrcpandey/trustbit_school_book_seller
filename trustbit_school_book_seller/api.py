@@ -742,15 +742,15 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 		if d.parent not in defaults_map:
 			defaults_map[d.parent] = d
 
-	# Company defaults as fallback (most items don't have accounts set)
+	# Company and Stock Settings defaults as fallback
 	company_defaults = {}
 	if company:
 		company_defaults = frappe.db.get_value(
 			"Company", company,
-			["default_income_account", "default_expense_account",
-			 "cost_center", "default_warehouse"],
+			["default_income_account", "default_expense_account", "cost_center"],
 			as_dict=True,
 		) or {}
+	default_warehouse = frappe.db.get_single_value("Stock Settings", "default_warehouse") or ""
 
 	for item in items:
 		d = defaults_map.get(item["item_code"])
@@ -764,7 +764,7 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 		)
 		item["warehouse"] = (
 			(d.default_warehouse if d else None)
-			or company_defaults.get("default_warehouse") or ""
+			or default_warehouse
 		)
 		if doctype in ("Purchase Order", "Purchase Invoice", "Material Request"):
 			item["cost_center"] = (
