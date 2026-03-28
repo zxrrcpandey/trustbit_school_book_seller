@@ -318,6 +318,7 @@
 				qty_sets: qty_sets,
 				price_list: price_list,
 				doctype: frm.doc.doctype,
+				company: frm.doc.company || "",
 			},
 			freeze: true,
 			freeze_message: __("Fetching bundle items..."),
@@ -343,6 +344,11 @@
 					row.custom_bundle_id = bundle_name;
 					row.discount_percentage = item.discount_percentage || 0;
 					row.discount_amount = item.discount_amount || 0;
+					// Item defaults (accounts, warehouse, cost center)
+					if (item.income_account) row.income_account = item.income_account;
+					if (item.expense_account) row.expense_account = item.expense_account;
+					if (item.warehouse) row.warehouse = item.warehouse;
+					if (item.cost_center) row.cost_center = item.cost_center;
 					if (item.price_list_rate) {
 						row.price_list_rate = item.price_list_rate;
 						row.rate = item.rate || item.price_list_rate;

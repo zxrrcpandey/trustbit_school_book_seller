@@ -620,23 +620,25 @@ def validate_privilege_card(card_name):
 
 
 @frappe.whitelist()
-def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=""):
+def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype="", company=""):
 	"""Get component items from a Product Bundle, multiplied by number of sets.
 
 	Skips items marked as "Not Available" in custom_product_bundle_stock.
-	If price_list is provided, fetches rates and discounts in batch queries.
+	Fetches rates, UOM discounts, and item defaults (accounts, warehouse)
+	in batch queries.
 
 	Args:
 		product_bundle: Name of the Product Bundle document
 		qty_sets: Number of sets (multiplier for component qty)
 		price_list: Optional price list name to fetch rates
 		doctype: Parent doctype (Purchase Order, Sales Order, etc.)
-			to determine which discount field to use
+		company: Company name to fetch item defaults
 
 	Returns:
 		List of dicts with item_code, item_name, description, qty, uom,
-		stock_uom, conversion_factor. If price_list given, also includes
-		price_list_rate, discount_percentage, and rate (after discount).
+		stock_uom, conversion_factor, discount_percentage, and if price_list
+		given: price_list_rate, rate. Also includes income_account,
+		expense_account, cost_center, warehouse from Item Default.
 	"""
 	qty_sets = flt(qty_sets)
 	if qty_sets <= 0:
@@ -724,6 +726,45 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 					discount = flt(d.discount_percentage)
 					break
 		item["discount_percentage"] = discount
+
+	# Batch-fetch item defaults (accounts, warehouse, cost center)
+	defaults_filters = {"parent": ["in", item_codes]}
+	if company:
+		defaults_filters["company"] = company
+	item_defaults = frappe.get_all(
+		"Item Default",
+		filters=defaults_filters,
+		fields=["parent", "income_account", "expense_account",
+				"default_warehouse", "buying_cost_center", "selling_cost_center"],
+	)
+	defaults_map = {}
+	for d in item_defaults:
+		if d.parent not in defaults_map:
+			defaults_map[d.parent] = d
+
+	# If no company-specific defaults, try without company filter
+	missing = [ic for ic in item_codes if ic not in defaults_map]
+	if company and missing:
+		fallback_defaults = frappe.get_all(
+			"Item Default",
+			filters={"parent": ["in", missing]},
+			fields=["parent", "income_account", "expense_account",
+					"default_warehouse", "buying_cost_center", "selling_cost_center"],
+		)
+		for d in fallback_defaults:
+			if d.parent not in defaults_map:
+				defaults_map[d.parent] = d
+
+	for item in items:
+		d = defaults_map.get(item["item_code"])
+		if d:
+			item["income_account"] = d.income_account or ""
+			item["expense_account"] = d.expense_account or ""
+			item["warehouse"] = d.default_warehouse or ""
+			if doctype in ("Purchase Order", "Purchase Invoice", "Material Request"):
+				item["cost_center"] = d.buying_cost_center or ""
+			else:
+				item["cost_center"] = d.selling_cost_center or ""
 
 	# Batch-fetch rates from Item Price in one query
 	if price_list:
