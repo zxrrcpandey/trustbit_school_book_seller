@@ -742,29 +742,40 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 		if d.parent not in defaults_map:
 			defaults_map[d.parent] = d
 
-	# If no company-specific defaults, try without company filter
-	missing = [ic for ic in item_codes if ic not in defaults_map]
-	if company and missing:
-		fallback_defaults = frappe.get_all(
-			"Item Default",
-			filters={"parent": ["in", missing]},
-			fields=["parent", "income_account", "expense_account",
-					"default_warehouse", "buying_cost_center", "selling_cost_center"],
-		)
-		for d in fallback_defaults:
-			if d.parent not in defaults_map:
-				defaults_map[d.parent] = d
+	# Company defaults as fallback (most items don't have accounts set)
+	company_defaults = {}
+	if company:
+		company_defaults = frappe.db.get_value(
+			"Company", company,
+			["default_income_account", "default_expense_account",
+			 "cost_center", "default_warehouse"],
+			as_dict=True,
+		) or {}
 
 	for item in items:
 		d = defaults_map.get(item["item_code"])
-		if d:
-			item["income_account"] = d.income_account or ""
-			item["expense_account"] = d.expense_account or ""
-			item["warehouse"] = d.default_warehouse or ""
-			if doctype in ("Purchase Order", "Purchase Invoice", "Material Request"):
-				item["cost_center"] = d.buying_cost_center or ""
-			else:
-				item["cost_center"] = d.selling_cost_center or ""
+		item["income_account"] = (
+			(d.income_account if d else None)
+			or company_defaults.get("default_income_account") or ""
+		)
+		item["expense_account"] = (
+			(d.expense_account if d else None)
+			or company_defaults.get("default_expense_account") or ""
+		)
+		item["warehouse"] = (
+			(d.default_warehouse if d else None)
+			or company_defaults.get("default_warehouse") or ""
+		)
+		if doctype in ("Purchase Order", "Purchase Invoice", "Material Request"):
+			item["cost_center"] = (
+				(d.buying_cost_center if d else None)
+				or company_defaults.get("cost_center") or ""
+			)
+		else:
+			item["cost_center"] = (
+				(d.selling_cost_center if d else None)
+				or company_defaults.get("cost_center") or ""
+			)
 
 	# Batch-fetch rates from Item Price in one query
 	if price_list:
