@@ -341,10 +341,10 @@
 					row.stock_uom = item.stock_uom;
 					row.conversion_factor = item.conversion_factor || 1;
 					row.custom_bundle_id = bundle_name;
+					row.discount_percentage = item.discount_percentage || 0;
+					row.discount_amount = item.discount_amount || 0;
 					if (item.price_list_rate) {
 						row.price_list_rate = item.price_list_rate;
-						row.discount_percentage = item.discount_percentage || 0;
-						row.discount_amount = item.discount_amount || 0;
 						row.rate = item.rate || item.price_list_rate;
 						row.amount = flt(row.qty) * flt(row.rate);
 					}
