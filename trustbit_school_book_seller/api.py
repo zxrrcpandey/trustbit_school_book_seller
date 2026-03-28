@@ -355,6 +355,77 @@ def _create_po_for_supplier(so, supplier, items):
 	return po
 
 
+def fill_missing_item_defaults(doc, method):
+	"""Fill missing income_account, expense_account, warehouse, cost_center
+	on transaction items. Runs before_validate so items added via Product
+	Bundle dialog (which bypasses ERPNext's item_code handler) get the
+	required accounting fields.
+	"""
+	if not doc.items:
+		return
+
+	# Check if any items are missing required fields
+	is_selling = doc.doctype in ("Sales Invoice", "Sales Order", "Quotation", "Delivery Note")
+	account_field = "income_account" if is_selling else "expense_account"
+
+	missing = [d for d in doc.items if not d.get(account_field)]
+	if not missing:
+		return
+
+	# Get company defaults
+	company_defaults = {}
+	if doc.company:
+		company_defaults = frappe.db.get_value(
+			"Company", doc.company,
+			["default_income_account", "default_expense_account", "cost_center"],
+			as_dict=True,
+		) or {}
+	default_warehouse = frappe.db.get_single_value("Stock Settings", "default_warehouse") or ""
+
+	# Batch-fetch item defaults for missing items
+	missing_codes = list(set(d.item_code for d in missing if d.item_code))
+	item_defaults_map = {}
+	if missing_codes and doc.company:
+		item_defaults = frappe.get_all(
+			"Item Default",
+			filters={"parent": ["in", missing_codes], "company": doc.company},
+			fields=["parent", "income_account", "expense_account",
+					"default_warehouse", "buying_cost_center", "selling_cost_center"],
+		)
+		for d in item_defaults:
+			if d.parent not in item_defaults_map:
+				item_defaults_map[d.parent] = d
+
+	for item in missing:
+		d = item_defaults_map.get(item.item_code)
+		if not item.get("income_account"):
+			item.income_account = (
+				(d.income_account if d else None)
+				or company_defaults.get("default_income_account") or ""
+			)
+		if not item.get("expense_account"):
+			item.expense_account = (
+				(d.expense_account if d else None)
+				or company_defaults.get("default_expense_account") or ""
+			)
+		if not item.get("warehouse"):
+			item.warehouse = (
+				(d.default_warehouse if d else None)
+				or default_warehouse
+			)
+		if not item.get("cost_center"):
+			if is_selling:
+				item.cost_center = (
+					(d.selling_cost_center if d else None)
+					or company_defaults.get("cost_center") or ""
+				)
+			else:
+				item.cost_center = (
+					(d.buying_cost_center if d else None)
+					or company_defaults.get("cost_center") or ""
+				)
+
+
 def copy_school_name_to_invoice(doc, method):
 	"""Copy School Name from linked Sales Order to Sales Invoice.
 

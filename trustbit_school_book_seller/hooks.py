@@ -104,7 +104,10 @@ after_install = "trustbit_school_book_seller.install.after_install"
 doc_events = {
 	"Sales Invoice": {
 		"before_save": "trustbit_school_book_seller.api.copy_school_name_to_invoice",
-		"before_validate": "trustbit_school_book_seller.privilege_card.validate_privilege_card_on_doc",
+		"before_validate": [
+			"trustbit_school_book_seller.api.fill_missing_item_defaults",
+			"trustbit_school_book_seller.privilege_card.validate_privilege_card_on_doc",
+		],
 		"after_insert": "trustbit_school_book_seller.api.on_sales_invoice_save",
 		"on_submit": [
 			"trustbit_school_book_seller.api.on_sales_invoice_submit",
@@ -112,8 +115,17 @@ doc_events = {
 		],
 	},
 	"Sales Order": {
-		"before_validate": "trustbit_school_book_seller.privilege_card.validate_privilege_card_on_doc",
+		"before_validate": [
+			"trustbit_school_book_seller.api.fill_missing_item_defaults",
+			"trustbit_school_book_seller.privilege_card.validate_privilege_card_on_doc",
+		],
 		"on_submit": "trustbit_school_book_seller.privilege_card.log_privilege_card_usage",
+	},
+	"Purchase Order": {
+		"before_validate": "trustbit_school_book_seller.api.fill_missing_item_defaults",
+	},
+	"Purchase Invoice": {
+		"before_validate": "trustbit_school_book_seller.api.fill_missing_item_defaults",
 	},
 }
 
