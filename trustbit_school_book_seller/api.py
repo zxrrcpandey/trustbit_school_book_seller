@@ -295,6 +295,37 @@ def _create_po_for_supplier(so, supplier, items):
 		frappe.throw(_("No pending items for supplier {0}").format(supplier))
 
 	po.run_method("set_missing_values")
+
+	# Fetch rate and discount for each item from Price List / Pricing Rules
+	from erpnext.stock.get_item_details import get_item_details
+
+	for row in po.items:
+		args = frappe._dict({
+			"item_code": row.item_code,
+			"supplier": supplier,
+			"company": so.company,
+			"doctype": "Purchase Order",
+			"buying_price_list": po.buying_price_list,
+			"price_list_currency": po.currency,
+			"currency": po.currency,
+			"qty": row.qty,
+			"uom": row.uom,
+			"stock_uom": row.stock_uom,
+			"conversion_factor": row.conversion_factor,
+			"transaction_date": po.transaction_date,
+			"plc_conversion_rate": po.plc_conversion_rate or 1,
+			"conversion_rate": po.conversion_rate or 1,
+		})
+		details = get_item_details(args)
+		if details.get("price_list_rate"):
+			row.price_list_rate = details.price_list_rate
+		if details.get("rate"):
+			row.rate = details.rate
+		if details.get("discount_percentage"):
+			row.discount_percentage = details.discount_percentage
+		if details.get("discount_amount"):
+			row.discount_amount = details.discount_amount
+
 	po.run_method("calculate_taxes_and_totals")
 	po.flags.ignore_permissions = True
 	po.insert()

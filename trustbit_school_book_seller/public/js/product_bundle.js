@@ -329,7 +329,8 @@
 				var added_rows = [];
 				r.message.forEach(function (item) {
 					var row = frm.add_child("items");
-					row.item_code = item.item_code;
+					// Do NOT set item_code here — set it via set_value below
+					// so the change handler fires and fetches rate/discount
 					row.item_name = item.item_name;
 					row.description = item.description;
 					row.qty = item.qty;
@@ -338,7 +339,7 @@
 					row.conversion_factor = item.conversion_factor || 1;
 					// Track which bundle this item came from
 					row.custom_bundle_id = bundle_name;
-					added_rows.push(row);
+					added_rows.push({ row: row, item_code: item.item_code });
 				});
 
 				frm.refresh_fields();
@@ -349,15 +350,16 @@
 					indicator: "green",
 				});
 
-				// Trigger item_code change on each row to fetch rates from Price List
+				// Set item_code via set_value to trigger ERPNext's change handler
+				// which fetches rate, discount, price list rate, taxes, etc.
 				var chain = Promise.resolve();
-				added_rows.forEach(function (row) {
+				added_rows.forEach(function (entry) {
 					chain = chain.then(function () {
 						return frappe.model.set_value(
-							row.doctype,
-							row.name,
+							entry.row.doctype,
+							entry.row.name,
 							"item_code",
-							row.item_code
+							entry.item_code
 						);
 					});
 				});
