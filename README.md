@@ -154,7 +154,13 @@ Fetch items from an ERPNext **Product Bundle** into transaction documents with a
 2. Select a Product Bundle — the dialog shows the **parent item name/description** and a **preview table** of all component items with quantities and UOMs
 3. Enter **Number of Sets** — each item's quantity is multiplied by this number
 4. Choose **Append** (add to existing items) or **Replace** (clear existing items first)
-5. Click **Get Items** — items are added to the table and rates auto-populate from the document's Price List
+5. Click **Get Items** — items are added to the table with rates, discounts, and account defaults populated instantly
+
+**Batch-fetched data (single server call):**
+- **Rates** from the document's Price List (buying or selling) via batch Item Price query
+- **Discounts** from the Item UOM Discount child table (same discount system as POS Awesome) — matched by item + UOM + qty tier (min_qty/max_qty)
+- **Accounts** — income_account, expense_account, warehouse, cost_center from Item Default → Company defaults fallback
+- A server-side `before_validate` hook (`fill_missing_item_defaults`) also fills any missing accounts as a safety net
 
 **"Not Available" item filtering:**
 Items marked as `Not Available` in the Product Bundle (via `custom_product_bundle_stock` field on Product Bundle Item) are automatically skipped when fetching items. An orange alert lists which items were skipped. Each added row stores `custom_bundle_id` linking it back to the source Product Bundle for print format grouping.
@@ -287,7 +293,9 @@ On submitted Sales Orders, a **Create > PO (Supplier Wise)** button groups SO it
 
 - Only shows items not yet ordered (pending qty > 0)
 - If all items already have POs, prompts to re-create for all items
-- Copies school name from SO to each created PO
+- Copies school name and remark from SO to each created PO
+- Batch-fetches rates from Item Price and UOM discounts from Item UOM Discount (single queries, not per-item)
+- Fills income_account, expense_account, warehouse, cost_center from Item Default → Company defaults
 
 ### 22. Workspace
 A dedicated **"School Book Seller"** workspace with:
@@ -660,7 +668,7 @@ All whitelisted API methods are at:
 
 | Method | Arguments | Description |
 |--------|-----------|-------------|
-| `get_product_bundle_items` | `product_bundle`, `qty_sets` (default 1) | Returns available items from a Product Bundle (skips "Not Available" items) with quantities multiplied by `qty_sets`. Shows orange alert for skipped items. |
+| `get_product_bundle_items` | `product_bundle`, `qty_sets` (default 1), `price_list` (optional), `doctype` (optional), `company` (optional) | Returns available items from a Product Bundle (skips "Not Available" items) with quantities multiplied by `qty_sets`. If `price_list` given, batch-fetches rates and UOM discounts. Also returns income_account, expense_account, warehouse, cost_center from Item Default → Company defaults. |
 | `search_product_bundles` | `search_text`, `limit` (default 20) | Fuzzy search Product Bundles by name, item name, description, group |
 | `search_items` | `search_text`, `limit` (default 50) | Fuzzy search Items by code, name, group, description, barcode (AND logic) |
 
@@ -919,6 +927,12 @@ bench remove-app trustbit_school_book_seller
 | **product_bundle.js `async: false` blocking UI** | The `select_bundle()` function used `async: false` on `frappe.call()` to fetch parent item info, freezing the browser during the request. | Removed `async: false` and nested the component items fetch inside the parent info callback. |
 | **`custom_bundle_id` not set by trustbit product_bundle.js** | Items added via "Get Items → Product Bundle" button didn't set `custom_bundle_id`, breaking the print format's bundle-aware grouping for non-POS invoices. | Added `row.custom_bundle_id = bundle_name` in `fetch_and_add_items()`. |
 | **product_bundle.js missing from Sales Order hooks** | The JS file registered handlers for 5 doctypes but `hooks.py` only loaded it for 4 (missing Sales Order). Button never appeared on SO. | Added `product_bundle.js` to Sales Order's `doctype_js` array in `hooks.py`. |
+| **Product Bundle items: rate not fetching** | `product_bundle.js` pre-set `row.item_code` then called `frappe.model.set_value` with the same value. Frappe saw no change and skipped the handler — rates never fetched. | Don't pre-set item_code; set it only via `set_value`. Later replaced with batch Item Price query for speed. |
+| **Product Bundle items: extremely slow rate fetching** | Each item triggered a separate `get_item_details` server call. 30 items = 30 sequential roundtrips (6-15 seconds). | Replaced N sequential calls with a single batch Item Price query (~50ms). Rates, discounts, and accounts all fetched in one server call. |
+| **Product Bundle items: discount not fetching** | `discount_percentage` was inside an `if(price_list_rate)` block, so it was skipped when no Item Price record existed. Also was using wrong discount source (`custom_sales_discount_percent` instead of Item UOM Discount). | Moved discount outside the price_list_rate check. Switched to Item UOM Discount child table (same system POS Awesome uses) with qty tier matching. |
+| **Product Bundle items: missing income_account on save** | Bypassing ERPNext's `item_code` change handler for speed meant `income_account`, `expense_account`, `warehouse`, `cost_center` were never set. Items saved with empty accounts. | API now batch-fetches Item Default → Company defaults. Added `fill_missing_item_defaults` server-side `before_validate` hook as safety net. |
+| **Product Bundle items: Company.default_warehouse crash** | `frappe.db.get_value("Company", ..., ["default_warehouse"])` crashed with `OperationalError` — Company table has no `default_warehouse` column. The crash silently broke the entire API response. | Warehouse comes from Stock Settings, not Company. Fixed query to use `frappe.db.get_single_value("Stock Settings", "default_warehouse")`. |
+| **SO→PO: rate and discount not set** | `_create_po_for_supplier()` relied on `set_missing_values()` which doesn't fetch item rates or discounts from price lists. | Added batch Item Price query and UOM discount lookup in `_create_po_for_supplier()`. |
 
 ---
 

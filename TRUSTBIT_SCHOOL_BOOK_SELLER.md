@@ -49,7 +49,7 @@ Custom ERPNext app for **bulk book item creation** for school book sellers. Allo
 |------|---------|
 | `hooks.py` | App config — fixtures, after_install, doctype_js |
 | `install.py` | Post-install — creates custom fields, default classes & subjects |
-| `api.py` | SO to PO Supplier Wise APIs — create POs grouped by supplier, backfill suppliers |
+| `api.py` | Product Bundle items (batch rates/discounts/accounts), SO→PO Supplier Wise, fill_missing_item_defaults hook |
 | `public/js/book_item_creator.js` | Client-side logic — progress dialog, CSV import, quick add, etc. |
 | `public/js/sales_order.js` | Sales Order customization — "PO (Supplier Wise)" button and dialog |
 | `doctype/book_item_creator/book_item_creator.py` | Server-side — item creation, price lists, stock entries, whitelisted APIs |
