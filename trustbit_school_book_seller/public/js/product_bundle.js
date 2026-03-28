@@ -308,11 +308,15 @@
 	}
 
 	function fetch_and_add_items(frm, bundle_name, qty_sets, action) {
+		var price_list = frm.doc.buying_price_list
+			|| frm.doc.selling_price_list || "";
+
 		frappe.call({
 			method: "trustbit_school_book_seller.api.get_product_bundle_items",
 			args: {
 				product_bundle: bundle_name,
 				qty_sets: qty_sets,
+				price_list: price_list,
 			},
 			freeze: true,
 			freeze_message: __("Fetching bundle items..."),
@@ -326,20 +330,21 @@
 					frm.doc.items = [];
 				}
 
-				var added_rows = [];
 				r.message.forEach(function (item) {
 					var row = frm.add_child("items");
-					// Do NOT set item_code here — set it via set_value below
-					// so the change handler fires and fetches rate/discount
+					row.item_code = item.item_code;
 					row.item_name = item.item_name;
 					row.description = item.description;
 					row.qty = item.qty;
 					row.uom = item.uom;
 					row.stock_uom = item.stock_uom;
 					row.conversion_factor = item.conversion_factor || 1;
-					// Track which bundle this item came from
 					row.custom_bundle_id = bundle_name;
-					added_rows.push({ row: row, item_code: item.item_code });
+					if (item.price_list_rate) {
+						row.price_list_rate = item.price_list_rate;
+						row.rate = item.rate || item.price_list_rate;
+						row.amount = flt(row.qty) * flt(row.rate);
+					}
 				});
 
 				frm.refresh_fields();
@@ -350,19 +355,12 @@
 					indicator: "green",
 				});
 
-				// Set item_code via set_value to trigger ERPNext's change handler
-				// which fetches rate, discount, price list rate, taxes, etc.
-				var chain = Promise.resolve();
-				added_rows.forEach(function (entry) {
-					chain = chain.then(function () {
-						return frappe.model.set_value(
-							entry.row.doctype,
-							entry.row.name,
-							"item_code",
-							entry.item_code
-						);
+				if (!price_list) {
+					frappe.show_alert({
+						message: __("No Price List set — rates not fetched"),
+						indicator: "orange",
 					});
-				});
+				}
 			},
 		});
 	}

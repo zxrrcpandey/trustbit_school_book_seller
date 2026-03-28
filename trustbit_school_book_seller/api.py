@@ -296,35 +296,24 @@ def _create_po_for_supplier(so, supplier, items):
 
 	po.run_method("set_missing_values")
 
-	# Fetch rate and discount for each item from Price List / Pricing Rules
-	from erpnext.stock.get_item_details import get_item_details
+	# Batch-fetch rates from Item Price in one query
+	if po.buying_price_list and po.items:
+		item_codes = [row.item_code for row in po.items]
+		prices = frappe.get_all(
+			"Item Price",
+			filters={"item_code": ["in", item_codes], "price_list": po.buying_price_list},
+			fields=["item_code", "price_list_rate"],
+		)
+		rate_map = {}
+		for p in prices:
+			if p.item_code not in rate_map:
+				rate_map[p.item_code] = flt(p.price_list_rate)
 
-	for row in po.items:
-		args = frappe._dict({
-			"item_code": row.item_code,
-			"supplier": supplier,
-			"company": so.company,
-			"doctype": "Purchase Order",
-			"buying_price_list": po.buying_price_list,
-			"price_list_currency": po.currency,
-			"currency": po.currency,
-			"qty": row.qty,
-			"uom": row.uom,
-			"stock_uom": row.stock_uom,
-			"conversion_factor": row.conversion_factor,
-			"transaction_date": po.transaction_date,
-			"plc_conversion_rate": po.plc_conversion_rate or 1,
-			"conversion_rate": po.conversion_rate or 1,
-		})
-		details = get_item_details(args)
-		if details.get("price_list_rate"):
-			row.price_list_rate = details.price_list_rate
-		if details.get("rate"):
-			row.rate = details.rate
-		if details.get("discount_percentage"):
-			row.discount_percentage = details.discount_percentage
-		if details.get("discount_amount"):
-			row.discount_amount = details.discount_amount
+		for row in po.items:
+			rate = rate_map.get(row.item_code)
+			if rate:
+				row.price_list_rate = rate
+				row.rate = rate
 
 	po.run_method("calculate_taxes_and_totals")
 	po.flags.ignore_permissions = True
@@ -599,18 +588,21 @@ def validate_privilege_card(card_name):
 
 
 @frappe.whitelist()
-def get_product_bundle_items(product_bundle, qty_sets=1):
+def get_product_bundle_items(product_bundle, qty_sets=1, price_list=""):
 	"""Get component items from a Product Bundle, multiplied by number of sets.
 
 	Skips items marked as "Not Available" in custom_product_bundle_stock.
+	If price_list is provided, fetches rates in a single batch query.
 
 	Args:
 		product_bundle: Name of the Product Bundle document
 		qty_sets: Number of sets (multiplier for component qty)
+		price_list: Optional price list name to fetch rates
 
 	Returns:
 		List of dicts with item_code, item_name, description, qty, uom,
-		stock_uom, conversion_factor, custom_product_bundle_stock
+		stock_uom, conversion_factor. If price_list given, also includes
+		price_list_rate and rate.
 	"""
 	qty_sets = flt(qty_sets)
 	if qty_sets <= 0:
@@ -665,5 +657,23 @@ def get_product_bundle_items(product_bundle, qty_sets=1):
 			alert=True,
 			indicator="orange",
 		)
+
+	# Batch-fetch rates from Item Price in one query (no N+1 calls)
+	if price_list and items:
+		item_codes = [d["item_code"] for d in items]
+		prices = frappe.get_all(
+			"Item Price",
+			filters={"item_code": ["in", item_codes], "price_list": price_list},
+			fields=["item_code", "price_list_rate"],
+		)
+		rate_map = {}
+		for p in prices:
+			if p.item_code not in rate_map:
+				rate_map[p.item_code] = flt(p.price_list_rate)
+
+		for item in items:
+			rate = rate_map.get(item["item_code"], 0)
+			item["price_list_rate"] = rate
+			item["rate"] = rate
 
 	return items
