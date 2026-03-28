@@ -296,24 +296,43 @@ def _create_po_for_supplier(so, supplier, items):
 
 	po.run_method("set_missing_values")
 
-	# Batch-fetch rates from Item Price in one query
-	if po.buying_price_list and po.items:
+	# Batch-fetch rates and discounts
+	if po.items:
 		item_codes = [row.item_code for row in po.items]
-		prices = frappe.get_all(
-			"Item Price",
-			filters={"item_code": ["in", item_codes], "price_list": po.buying_price_list},
-			fields=["item_code", "price_list_rate"],
+
+		# Fetch purchase discount from Item
+		discount_map = {}
+		item_discounts = frappe.get_all(
+			"Item",
+			filters={"name": ["in", item_codes]},
+			fields=["name", "custom_purchase_discount_percent"],
 		)
+		for d in item_discounts:
+			discount_map[d.name] = flt(d.custom_purchase_discount_percent)
+
+		# Fetch price list rates
 		rate_map = {}
-		for p in prices:
-			if p.item_code not in rate_map:
-				rate_map[p.item_code] = flt(p.price_list_rate)
+		if po.buying_price_list:
+			prices = frappe.get_all(
+				"Item Price",
+				filters={"item_code": ["in", item_codes], "price_list": po.buying_price_list},
+				fields=["item_code", "price_list_rate"],
+			)
+			for p in prices:
+				if p.item_code not in rate_map:
+					rate_map[p.item_code] = flt(p.price_list_rate)
 
 		for row in po.items:
-			rate = rate_map.get(row.item_code)
-			if rate:
-				row.price_list_rate = rate
-				row.rate = rate
+			plr = rate_map.get(row.item_code)
+			discount = discount_map.get(row.item_code, 0)
+			if plr:
+				row.price_list_rate = plr
+				if discount:
+					row.discount_percentage = discount
+					row.discount_amount = flt(plr * discount / 100, 2)
+					row.rate = flt(plr - row.discount_amount, 2)
+				else:
+					row.rate = plr
 
 	po.run_method("calculate_taxes_and_totals")
 	po.flags.ignore_permissions = True
@@ -588,21 +607,23 @@ def validate_privilege_card(card_name):
 
 
 @frappe.whitelist()
-def get_product_bundle_items(product_bundle, qty_sets=1, price_list=""):
+def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=""):
 	"""Get component items from a Product Bundle, multiplied by number of sets.
 
 	Skips items marked as "Not Available" in custom_product_bundle_stock.
-	If price_list is provided, fetches rates in a single batch query.
+	If price_list is provided, fetches rates and discounts in batch queries.
 
 	Args:
 		product_bundle: Name of the Product Bundle document
 		qty_sets: Number of sets (multiplier for component qty)
 		price_list: Optional price list name to fetch rates
+		doctype: Parent doctype (Purchase Order, Sales Order, etc.)
+			to determine which discount field to use
 
 	Returns:
 		List of dicts with item_code, item_name, description, qty, uom,
 		stock_uom, conversion_factor. If price_list given, also includes
-		price_list_rate and rate.
+		price_list_rate, discount_percentage, and rate (after discount).
 	"""
 	qty_sets = flt(qty_sets)
 	if qty_sets <= 0:
@@ -628,7 +649,8 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list=""):
 		item_details = frappe.db.get_value(
 			"Item",
 			row.item_code,
-			["item_name", "description", "stock_uom"],
+			["item_name", "description", "stock_uom",
+			 "custom_sales_discount_percent", "custom_purchase_discount_percent"],
 			as_dict=True,
 		)
 
@@ -636,6 +658,12 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list=""):
 			frappe.throw(
 				_("Item {0} in Product Bundle does not exist").format(row.item_code)
 			)
+
+		# Pick the right discount based on doctype
+		if doctype in ("Purchase Order", "Purchase Invoice", "Material Request"):
+			discount = flt(item_details.custom_purchase_discount_percent)
+		else:
+			discount = flt(item_details.custom_sales_discount_percent)
 
 		items.append(
 			{
@@ -646,6 +674,7 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list=""):
 				"uom": row.uom or item_details.stock_uom,
 				"stock_uom": item_details.stock_uom,
 				"conversion_factor": 1,
+				"discount_percentage": discount,
 			}
 		)
 
@@ -672,8 +701,13 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list=""):
 				rate_map[p.item_code] = flt(p.price_list_rate)
 
 		for item in items:
-			rate = rate_map.get(item["item_code"], 0)
-			item["price_list_rate"] = rate
-			item["rate"] = rate
+			plr = rate_map.get(item["item_code"], 0)
+			discount = flt(item["discount_percentage"])
+			item["price_list_rate"] = plr
+			if plr and discount:
+				item["discount_amount"] = flt(plr * discount / 100, 2)
+				item["rate"] = flt(plr - item["discount_amount"], 2)
+			else:
+				item["rate"] = plr
 
 	return items

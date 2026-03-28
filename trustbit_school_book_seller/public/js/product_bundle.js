@@ -317,6 +317,7 @@
 				product_bundle: bundle_name,
 				qty_sets: qty_sets,
 				price_list: price_list,
+				doctype: frm.doc.doctype,
 			},
 			freeze: true,
 			freeze_message: __("Fetching bundle items..."),
@@ -342,6 +343,8 @@
 					row.custom_bundle_id = bundle_name;
 					if (item.price_list_rate) {
 						row.price_list_rate = item.price_list_rate;
+						row.discount_percentage = item.discount_percentage || 0;
+						row.discount_amount = item.discount_amount || 0;
 						row.rate = item.rate || item.price_list_rate;
 						row.amount = flt(row.qty) * flt(row.rate);
 					}
