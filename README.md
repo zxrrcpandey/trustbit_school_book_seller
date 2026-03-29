@@ -933,6 +933,7 @@ bench remove-app trustbit_school_book_seller
 | **Product Bundle items: missing income_account on save** | Bypassing ERPNext's `item_code` change handler for speed meant `income_account`, `expense_account`, `warehouse`, `cost_center` were never set. Items saved with empty accounts. | API now batch-fetches Item Default → Company defaults. Added `fill_missing_item_defaults` server-side `before_validate` hook as safety net. |
 | **Product Bundle items: Company.default_warehouse crash** | `frappe.db.get_value("Company", ..., ["default_warehouse"])` crashed with `OperationalError` — Company table has no `default_warehouse` column. The crash silently broke the entire API response. | Warehouse comes from Stock Settings, not Company. Fixed query to use `frappe.db.get_single_value("Stock Settings", "default_warehouse")`. |
 | **SO→PO: rate and discount not set** | `_create_po_for_supplier()` relied on `set_missing_values()` which doesn't fetch item rates or discounts from price lists. | Added batch Item Price query and UOM discount lookup in `_create_po_for_supplier()`. |
+| **Duplicate Item Price: wrong rate picked** | Items with multiple Item Price entries for the same price list returned in undefined order. The first (potentially stale) entry was used, causing wrong rates on bundle items and PO items. | Added `order_by="modified desc"` to all `Item Price` batch queries so the latest entry always wins. Fixed in both `get_product_bundle_items()` and `_create_po_for_supplier()`. |
 
 ---
 
