@@ -699,6 +699,7 @@ All whitelisted API methods are at:
 
 | Function | Trigger | Description |
 |----------|---------|-------------|
+| `fill_missing_item_defaults` | SI/SO/PO/PI before_validate | Fills missing income_account, expense_account, warehouse, cost_center from Item Default → Company defaults. Safety net for items added via Product Bundle dialog. |
 | `copy_school_name_to_invoice` | SI before_save | Copies School Name from linked Sales Order to Sales Invoice |
 | `on_sales_invoice_save` | SI after_insert | Publishes realtime event for draft printing (if trigger_on includes draft) |
 | `on_sales_invoice_submit` | SI on_submit | Publishes realtime event for submit printing (if trigger_on includes submit) |
