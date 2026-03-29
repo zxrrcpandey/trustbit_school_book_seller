@@ -319,6 +319,7 @@ def _create_po_for_supplier(so, supplier, items):
 				"Item Price",
 				filters={"item_code": ["in", item_codes], "price_list": po.buying_price_list},
 				fields=["item_code", "price_list_rate"],
+				order_by="modified desc",
 			)
 			for p in prices:
 				if p.item_code not in rate_map:
@@ -848,12 +849,13 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 				or company_defaults.get("cost_center") or ""
 			)
 
-	# Batch-fetch rates from Item Price in one query
+	# Batch-fetch rates from Item Price in one query (latest entry wins for duplicates)
 	if price_list:
 		prices = frappe.get_all(
 			"Item Price",
 			filters={"item_code": ["in", item_codes], "price_list": price_list},
 			fields=["item_code", "price_list_rate"],
+			order_by="modified desc",
 		)
 		rate_map = {}
 		for p in prices:
