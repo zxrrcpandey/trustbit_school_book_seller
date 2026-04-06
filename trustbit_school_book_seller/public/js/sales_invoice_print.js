@@ -206,8 +206,8 @@ function print_all_formats(docname, formats, index) {
 				config_opts.scaleContent = false;
 				config_opts.rasterize = true;
 			} else {
-				config_opts.margins = { top: 4, right: 10, bottom: 10, left: 10 };
-				config_opts.scaleContent = true;
+				config_opts.margins = { top: 0, right: 0, bottom: 0, left: 0 };
+				config_opts.scaleContent = false;
 			}
 
 			var data = [{
