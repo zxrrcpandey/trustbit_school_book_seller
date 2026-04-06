@@ -202,23 +202,31 @@ function print_all_formats(docname, formats, index) {
 
 			var is_receipt = paper.indexOf("Receipt") !== -1;
 			if (is_receipt) {
+				// Receipt: QZ Tray direct print
 				config_opts.margins = { top: 0, right: 0, bottom: 0, left: 0 };
 				config_opts.scaleContent = false;
 				config_opts.rasterize = true;
+
+				var data = [{
+					type: "pixel",
+					format: "html",
+					flavor: "plain",
+					data: html,
+				}];
+
+				return qz.print(config, data);
 			} else {
-				config_opts.margins = { top: 0, right: 0, bottom: 0, left: 0 };
-				config_opts.scaleContent = true;
-				config_opts.density = { cross: 300, feed: 300 };
+				// A4/A5/Letter: open browser print window (full quality, no scaling issues)
+				var printUrl = "/printview?doctype=Sales%20Invoice"
+					+ "&name=" + encodeURIComponent(docname)
+					+ "&format=" + encodeURIComponent(pf.print_format)
+					+ "&no_letterhead=0&trigger_print=1";
+				var win = window.open(printUrl, "_blank");
+				if (win) {
+					win.addEventListener("load", function () { win.print(); }, true);
+				}
+				return Promise.resolve();
 			}
-
-			var data = [{
-				type: "pixel",
-				format: "html",
-				flavor: "plain",
-				data: html,
-			}];
-
-			return qz.print(config, data);
 		})
 		.then(function () {
 			frappe.show_alert({
