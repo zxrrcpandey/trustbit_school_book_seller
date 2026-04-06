@@ -187,7 +187,7 @@ function print_all_formats(docname, formats, index) {
 			if (fmt_lower.indexOf("80mm") !== -1 || fmt_lower.indexOf("token") !== -1) {
 				// 72mm receipt printer (80mm roll, 72mm printable area)
 				config_opts.units = "mm";
-				config_opts.size = { width: 72, height: 297 };
+				config_opts.size = { width: 80, height: 297 };
 				config_opts.margins = { top: 0, right: 0, bottom: 0, left: 0 };
 				config_opts.scaleContent = false;
 				config_opts.rasterize = true;
