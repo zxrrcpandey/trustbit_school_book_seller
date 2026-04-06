@@ -36,6 +36,7 @@ doctype_js = {
     "Material Request": "public/js/product_bundle.js",
     "Product Bundle": "public/js/product_bundle_form.js",
     "User Print Config": "public/js/user_print_config.js",
+    "Multi Print Setting": "public/js/multi_print_setting.js",
 }
 
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
