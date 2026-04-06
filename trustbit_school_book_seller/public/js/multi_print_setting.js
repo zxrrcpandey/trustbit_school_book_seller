@@ -94,46 +94,28 @@ function show_preview_dialog(docname, print_format, paper_size, custom_w, custom
 	var max_h = is_receipt ? 400 : Math.round(size.h * px_per_mm * 0.6);
 	var scale = Math.min(1, 650 / content_w);
 
+	var iframe_url = "/printview?doctype=Sales%20Invoice"
+		+ "&name=" + encodeURIComponent(docname)
+		+ "&format=" + encodeURIComponent(print_format)
+		+ "&no_letterhead=0";
+
+	var dw = Math.min(Math.round(content_w * scale) + 20, 750);
+	var dh = Math.min(Math.round(max_h * scale) + 20, 550);
+
 	var dlg = new frappe.ui.Dialog({
 		title: __("Preview: {0} — {1} ({2}×{3}mm)", [print_format, paper_size, size.w, size.h]),
-		fields: [
-			{
-				fieldname: "preview_html",
-				fieldtype: "HTML",
-				options:
-					'<div style="text-align:center;padding:10px 0;">' +
-					'<div style="display:inline-block;border:2px solid #999;background:white;box-shadow:0 2px 8px rgba(0,0,0,0.15);' +
-					"width:" + Math.round(content_w * scale) + "px;" +
-					"height:" + Math.round(max_h * scale) + "px;" +
-					'overflow:auto;">' +
-					'<div class="preview-body" style="width:' + content_w + "px;" +
-					"transform-origin:top left;transform:scale(" + scale + ');">' +
-					'<div style="padding:40px;text-align:center;color:#999;">' +
-					'<i class="fa fa-spinner fa-spin fa-2x"></i><br>Loading preview...</div>' +
-					"</div></div></div>",
-			},
-		],
+		fields: [{
+			fieldname: "preview_html",
+			fieldtype: "HTML",
+			options: '<div style="text-align:center;padding:10px 0;">' +
+				'<iframe src="' + iframe_url + '" ' +
+				'style="border:2px solid #999;background:white;box-shadow:0 2px 8px rgba(0,0,0,0.15);' +
+				"width:" + dw + "px;height:" + dh + 'px;">' +
+				"</iframe></div>",
+		}],
 		size: "extra-large",
 		primary_action_label: __("Close"),
-		primary_action: function () {
-			dlg.hide();
-		},
+		primary_action: function () { dlg.hide(); },
 	});
 	dlg.show();
-
-	$.ajax({
-		url: "/printview?doctype=Sales%20Invoice"
-			+ "&name=" + encodeURIComponent(docname)
-			+ "&format=" + encodeURIComponent(print_format)
-			+ "&no_letterhead=0",
-		type: "GET",
-		success: function (html) {
-			dlg.$wrapper.find(".preview-body").html(html);
-		},
-		error: function () {
-			dlg.$wrapper.find(".preview-body").html(
-				'<div class="text-danger p-4">Preview failed. Check permissions.</div>'
-			);
-		},
-	});
 }

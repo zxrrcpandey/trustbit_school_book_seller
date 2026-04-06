@@ -78,34 +78,26 @@ function show_preview(docname, print_format, paper_size, custom_w, custom_h) {
 	var dw = Math.round(size.w * 3.78 * scale);
 	var dh = Math.round((is_receipt ? Math.min(size.h, 130) : size.h) * 3.78 * scale);
 
+	var iframe_url = "/printview?doctype=Sales%20Invoice"
+		+ "&name=" + encodeURIComponent(docname)
+		+ "&format=" + encodeURIComponent(print_format)
+		+ "&no_letterhead=0";
+
 	var dlg = new frappe.ui.Dialog({
 		title: __("Preview: {0} — {1} ({2}×{3}mm)", [print_format, paper_size, size.w, size.h]),
 		fields: [{
 			fieldname: "preview_html", fieldtype: "HTML",
 			options: '<div style="text-align:center;padding:10px 0;">' +
-				'<div style="display:inline-block;border:2px solid #999;background:white;box-shadow:0 2px 8px rgba(0,0,0,0.15);' +
-				"width:" + dw + "px;height:" + dh + 'px;overflow:auto;">' +
-				'<div class="preview-body" style="width:' + Math.round(size.w * 3.78) + "px;" +
-				"transform-origin:top left;transform:scale(" + scale + ');">' +
-				'<div style="padding:40px;text-align:center;color:#999;">' +
-				'<i class="fa fa-spinner fa-spin fa-2x"></i><br>Loading...</div>' +
-				"</div></div></div>",
+				'<iframe src="' + iframe_url + '" ' +
+				'style="border:2px solid #999;background:white;box-shadow:0 2px 8px rgba(0,0,0,0.15);' +
+				"width:" + Math.min(dw + 20, 750) + "px;height:" + Math.min(dh + 20, 550) + 'px;">' +
+				"</iframe></div>",
 		}],
 		size: "extra-large",
 		primary_action_label: __("Close"),
 		primary_action: function () { dlg.hide(); },
 	});
 	dlg.show();
-
-	$.ajax({
-		url: "/printview?doctype=Sales%20Invoice&name=" + encodeURIComponent(docname) +
-			"&format=" + encodeURIComponent(print_format) + "&no_letterhead=0",
-		type: "GET",
-		success: function (html) { dlg.$wrapper.find(".preview-body").html(html); },
-		error: function () {
-			dlg.$wrapper.find(".preview-body").html('<div class="text-danger p-4">Preview failed.</div>');
-		},
-	});
 }
 
 function detect_and_select_printer(frm) {
