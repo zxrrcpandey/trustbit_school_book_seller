@@ -180,37 +180,42 @@ function print_all_formats(docname, formats, index) {
 				copies: pf.copies || 1,
 			};
 
-			// Detect paper size from print format name
-			var fmt_lower = (pf.print_format || "").toLowerCase();
-			var data;
+			// Paper size from Multi Print Setting (configurable per format)
+			var paper = pf.paper_size || "A4";
+			var paper_sizes = {
+				"A4":           { width: 210, height: 297 },
+				"A5":           { width: 148, height: 210 },
+				"Letter":       { width: 216, height: 279 },
+				"80mm Receipt": { width: 80,  height: 297 },
+				"72mm Receipt": { width: 72,  height: 297 },
+				"58mm Receipt": { width: 58,  height: 297 },
+			};
 
-			if (fmt_lower.indexOf("80mm") !== -1 || fmt_lower.indexOf("token") !== -1) {
-				// 72mm receipt printer (80mm roll, 72mm printable area)
-				config_opts.units = "mm";
-				config_opts.size = { width: 80, height: 297 };
+			var size = paper_sizes[paper];
+			if (paper === "Custom" && pf.custom_width_mm && pf.custom_height_mm) {
+				size = { width: pf.custom_width_mm, height: pf.custom_height_mm };
+			}
+			if (!size) size = paper_sizes["A4"];
+
+			config_opts.units = "mm";
+			config_opts.size = { width: size.width, height: size.height };
+
+			var is_receipt = paper.indexOf("Receipt") !== -1;
+			if (is_receipt) {
 				config_opts.margins = { top: 0, right: 0, bottom: 0, left: 0 };
 				config_opts.scaleContent = false;
 				config_opts.rasterize = true;
-
-				data = [{
-					type: "pixel",
-					format: "html",
-					flavor: "plain",
-					data: html,
-				}];
 			} else {
-				// A4 for all other formats
-				config_opts.size = { width: 8.27, height: 11.69 }; // A4
-				config_opts.margins = { top: 0.15, right: 0.4, bottom: 0.4, left: 0.4 };
+				config_opts.margins = { top: 4, right: 10, bottom: 10, left: 10 };
 				config_opts.scaleContent = true;
-
-				data = [{
-					type: "pixel",
-					format: "html",
-					flavor: "plain",
-					data: html,
-				}];
 			}
+
+			var data = [{
+				type: "pixel",
+				format: "html",
+				flavor: "plain",
+				data: html,
+			}];
 
 			return qz.print(config, data);
 		})

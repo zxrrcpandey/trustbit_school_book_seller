@@ -530,6 +530,9 @@ def get_multi_print_settings():
 					"printer_name": row.printer_name,
 					"copies": row.copies or 1,
 					"enabled": row.enabled,
+					"paper_size": row.get("paper_size") or "A4",
+					"custom_width_mm": row.get("custom_width_mm") or 0,
+					"custom_height_mm": row.get("custom_height_mm") or 0,
 				}
 				for row in user_config.print_formats
 			]
@@ -550,6 +553,9 @@ def get_multi_print_settings():
 			"printer_name": row.printer_name,
 			"copies": row.copies or 1,
 			"enabled": row.enabled,
+			"paper_size": row.get("paper_size") or "A4",
+			"custom_width_mm": row.get("custom_width_mm") or 0,
+			"custom_height_mm": row.get("custom_height_mm") or 0,
 		}
 		for row in (settings.print_formats or [])
 	]
