@@ -461,10 +461,11 @@ def on_sales_invoice_save(doc, method):
 	if trigger_on not in ("Draft (Save)", "Both (Save + Submit)"):
 		return
 
+	target_user = doc.owner or frappe.session.user
 	frappe.publish_realtime(
 		"multi_print_invoice",
 		{"docname": doc.name},
-		user=frappe.session.user,
+		user=target_user,
 		after_commit=True,
 	)
 
@@ -474,6 +475,8 @@ def on_sales_invoice_submit(doc, method):
 
 	Only triggers if Multi Print Setting trigger_on is 'Submitted Only' or 'Both (Save + Submit)'.
 	Works from any submission source: standard form, POS Awesome, API, background jobs.
+	Uses doc.owner as target user (not session.user) because background jobs
+	may run as Administrator while the POS user is the doc owner.
 	"""
 	if not frappe.db.exists("DocType", "Multi Print Setting"):
 		return
@@ -482,10 +485,11 @@ def on_sales_invoice_submit(doc, method):
 	if trigger_on not in ("Submitted Only", "Both (Save + Submit)"):
 		return
 
+	target_user = doc.owner or frappe.session.user
 	frappe.publish_realtime(
 		"multi_print_invoice",
 		{"docname": doc.name},
-		user=frappe.session.user,
+		user=target_user,
 		after_commit=True,
 	)
 
