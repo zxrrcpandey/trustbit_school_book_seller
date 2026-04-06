@@ -10,6 +10,13 @@
 frappe.realtime.on("multi_print_invoice", function (data) {
 	if (!data || !data.docname) return;
 
+	// Skip if Fast Print already handled this invoice (POS Awesome)
+	if (window._pos_fast_print_handled === data.docname) {
+		console.info("Skipping realtime print — Fast Print already handled:", data.docname);
+		window._pos_fast_print_handled = null;
+		return;
+	}
+
 	frappe.call({
 		method: "trustbit_school_book_seller.api.get_multi_print_settings",
 		callback: function (r) {
