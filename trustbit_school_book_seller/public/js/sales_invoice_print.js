@@ -185,9 +185,9 @@ function print_all_formats(docname, formats, index) {
 			var data;
 
 			if (fmt_lower.indexOf("80mm") !== -1 || fmt_lower.indexOf("token") !== -1) {
-				// 80mm receipt printer — fixed 80x70mm page (token content fits in ~65mm)
+				// 72mm receipt printer (80mm roll, 72mm printable area)
 				config_opts.units = "mm";
-				config_opts.size = { width: 80, height: 70 };
+				config_opts.size = { width: 72, height: 297 };
 				config_opts.margins = { top: 0, right: 0, bottom: 0, left: 0 };
 				config_opts.scaleContent = false;
 				config_opts.rasterize = true;
