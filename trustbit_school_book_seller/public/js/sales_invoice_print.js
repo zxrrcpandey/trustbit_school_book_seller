@@ -230,20 +230,32 @@ function print_all_formats(docname, formats, index) {
 
 function fetch_print_html(docname, print_format) {
 	return new Promise(function (resolve, reject) {
-		// Use Frappe API to get clean rendered HTML (no toolbar, no "Print Get PDF")
-		frappe.xcall("frappe.get_print", {
-			doctype: "Sales Invoice",
-			name: docname,
-			print_format: print_format,
-			no_letterhead: 0,
-		}).then(function (html) {
-			if (html) {
-				resolve(html);
-			} else {
-				reject(new Error("Empty HTML for: " + print_format));
-			}
-		}).catch(function (err) {
-			reject(new Error("Failed to fetch: " + print_format + " - " + (err.message || err)));
+		$.ajax({
+			url: "/printview?doctype=Sales%20Invoice"
+				+ "&name=" + encodeURIComponent(docname)
+				+ "&format=" + encodeURIComponent(print_format)
+				+ "&no_letterhead=0",
+			type: "GET",
+			success: function (html) {
+				// Strip Frappe print wrapper — extract just the print-format content
+				var $tmp = $("<div>").html(html);
+				// Remove toolbar (Print, Get PDF links)
+				$tmp.find(".print-toolbar, .print-toolbar-actions, [class*='toolbar']").remove();
+				// Remove the min-height from wrapper inline styles
+				$tmp.find(".page-break").css({
+					"min-height": "0",
+					"height": "auto",
+					"page-break-after": "avoid",
+				});
+				$tmp.find(".print-format").css({
+					"min-height": "0",
+					"height": "auto",
+				});
+				resolve($tmp.html());
+			},
+			error: function () {
+				reject(new Error("Failed to fetch: " + print_format));
+			},
 		});
 	});
 }
