@@ -207,7 +207,8 @@ function print_all_formats(docname, formats, index) {
 				config_opts.rasterize = true;
 			} else {
 				config_opts.margins = { top: 0, right: 0, bottom: 0, left: 0 };
-				config_opts.scaleContent = false;
+				config_opts.scaleContent = true;
+				config_opts.density = { cross: 300, feed: 300 };
 			}
 
 			var data = [{
