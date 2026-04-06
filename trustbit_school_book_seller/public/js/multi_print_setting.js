@@ -121,22 +121,19 @@ function show_preview_dialog(docname, print_format, paper_size, custom_w, custom
 	});
 	dlg.show();
 
-	frappe.xcall("frappe.get_print", {
-		doctype: "Sales Invoice",
-		name: docname,
-		print_format: print_format,
-		no_letterhead: 0,
-	})
-		.then(function (html) {
+	$.ajax({
+		url: "/printview?doctype=Sales%20Invoice"
+			+ "&name=" + encodeURIComponent(docname)
+			+ "&format=" + encodeURIComponent(print_format)
+			+ "&no_letterhead=0",
+		type: "GET",
+		success: function (html) {
 			dlg.$wrapper.find(".preview-body").html(html);
-		})
-		.catch(function (err) {
-			dlg.$wrapper
-				.find(".preview-body")
-				.html(
-					'<div class="text-danger p-4">Preview failed: ' +
-					(err.message || err) +
-					"</div>"
-				);
-		});
+		},
+		error: function () {
+			dlg.$wrapper.find(".preview-body").html(
+				'<div class="text-danger p-4">Preview failed. Check permissions.</div>'
+			);
+		},
+	});
 }
