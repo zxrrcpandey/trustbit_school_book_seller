@@ -182,29 +182,35 @@ function print_all_formats(docname, formats, index) {
 
 			// Detect paper size from print format name
 			var fmt_lower = (pf.print_format || "").toLowerCase();
+			var data;
+
 			if (fmt_lower.indexOf("80mm") !== -1 || fmt_lower.indexOf("token") !== -1) {
-				// 80mm receipt printer — continuous roll, no fixed height
-				config_opts.size = { width: 3.15, height: 100 }; // 80mm = 3.15 inches, auto-cut
+				// 80mm receipt printer — fixed 80x70mm page (token content fits in ~65mm)
+				config_opts.units = "mm";
+				config_opts.size = { width: 80, height: 70 };
 				config_opts.margins = { top: 0, right: 0, bottom: 0, left: 0 };
 				config_opts.scaleContent = false;
 				config_opts.rasterize = true;
+
+				data = [{
+					type: "pixel",
+					format: "html",
+					flavor: "plain",
+					data: html,
+				}];
 			} else {
 				// A4 for all other formats
 				config_opts.size = { width: 8.27, height: 11.69 }; // A4
 				config_opts.margins = { top: 0.15, right: 0.4, bottom: 0.4, left: 0.4 };
 				config_opts.scaleContent = true;
-			}
 
-			var config = qz.configs.create(pf.printer_name, config_opts);
-
-			var data = [
-				{
+				data = [{
 					type: "pixel",
 					format: "html",
 					flavor: "plain",
 					data: html,
-				},
-			];
+				}];
+			}
 
 			return qz.print(config, data);
 		})
