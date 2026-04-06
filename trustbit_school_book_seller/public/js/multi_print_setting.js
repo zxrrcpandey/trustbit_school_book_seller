@@ -1,50 +1,52 @@
 // Multi Print Setting — Paper Size Preview
 frappe.ui.form.on("Multi Print Setting", {
 	refresh: function (frm) {
-		frm.fields_dict.print_formats.grid.wrapper.on("click", ".btn-preview-print", function () {
-			var row_name = $(this).data("row");
-			var row = frm.fields_dict.print_formats.grid.grid_rows_by_docname[row_name];
-			if (!row) return;
-			var d = row.doc;
-			preview_print_format(d.print_format, d.paper_size, d.custom_width_mm, d.custom_height_mm);
-		});
+		// Add Preview button for each row
+		frm.fields_dict.print_formats.grid.add_custom_button(
+			__("Preview Selected"),
+			function () {
+				var selected = frm.fields_dict.print_formats.grid.get_selected_children();
+				if (!selected.length) {
+					frappe.msgprint(__("Please select a row to preview"));
+					return;
+				}
+				var row = selected[0];
+				preview_print_format(
+					row.print_format,
+					row.paper_size || "A4",
+					row.custom_width_mm,
+					row.custom_height_mm
+				);
+			}
+		);
 	},
 });
 
 frappe.ui.form.on("Multi Print Format", {
-	paper_size: function (frm, cdt, cdn) {
-		add_preview_buttons(frm);
-	},
-	print_format: function (frm, cdt, cdn) {
-		add_preview_buttons(frm);
-	},
-	print_formats_add: function (frm) {
-		setTimeout(() => add_preview_buttons(frm), 300);
-	},
-	form_render: function (frm) {
-		add_preview_buttons(frm);
+	// Add preview button when row is opened for editing
+	form_render: function (frm, cdt, cdn) {
+		var row = locals[cdt][cdn];
+		var grid_row = frm.fields_dict.print_formats.grid.grid_rows_by_docname[cdn];
+		if (!grid_row) return;
+
+		// Remove existing preview button
+		grid_row.wrapper.find(".btn-preview-row").remove();
+
+		// Add preview button in the edit form
+		var $btn = $('<button class="btn btn-sm btn-info btn-preview-row mt-2 mb-2">' +
+			'<i class="fa fa-eye"></i> ' + __("Preview at this Paper Size") +
+			"</button>");
+		$btn.on("click", function () {
+			preview_print_format(
+				row.print_format,
+				row.paper_size || "A4",
+				row.custom_width_mm,
+				row.custom_height_mm
+			);
+		});
+		grid_row.wrapper.find(".frappe-control[data-fieldname='enabled']").after($btn);
 	},
 });
-
-function add_preview_buttons(frm) {
-	setTimeout(function () {
-		// Remove existing preview buttons
-		frm.fields_dict.print_formats.grid.wrapper.find(".btn-preview-print").remove();
-
-		frm.fields_dict.print_formats.grid.grid_rows.forEach(function (grid_row) {
-			if (!grid_row.doc.print_format) return;
-			var $row = grid_row.row;
-			// Add preview button in the row
-			if (!$row.find(".btn-preview-print").length) {
-				$row.find(".grid-row-check").after(
-					'<button class="btn btn-xs btn-info btn-preview-print" data-row="' +
-					grid_row.doc.name + '" title="Preview" style="margin: 2px 4px;">' +
-					'<i class="fa fa-eye"></i></button>'
-				);
-			}
-		});
-	}, 200);
-}
 
 function preview_print_format(print_format, paper_size, custom_w, custom_h) {
 	if (!print_format) {
@@ -52,7 +54,6 @@ function preview_print_format(print_format, paper_size, custom_w, custom_h) {
 		return;
 	}
 
-	// Get the last submitted Sales Invoice for preview
 	frappe.call({
 		method: "frappe.client.get_list",
 		args: {
@@ -67,14 +68,12 @@ function preview_print_format(print_format, paper_size, custom_w, custom_h) {
 				frappe.msgprint(__("No submitted Sales Invoice found for preview"));
 				return;
 			}
-			var invoice_name = r.message[0].name;
-			show_preview_dialog(invoice_name, print_format, paper_size, custom_w, custom_h);
+			show_preview_dialog(r.message[0].name, print_format, paper_size, custom_w, custom_h);
 		},
 	});
 }
 
 function show_preview_dialog(docname, print_format, paper_size, custom_w, custom_h) {
-	// Paper size dimensions
 	var sizes = {
 		"A4": { w: 210, h: 297 },
 		"A5": { w: 148, h: 210 },
@@ -90,54 +89,54 @@ function show_preview_dialog(docname, print_format, paper_size, custom_w, custom
 	if (!size) size = sizes["A4"];
 
 	var is_receipt = (paper_size || "").indexOf("Receipt") !== -1;
-
-	// Scale for display (fit in dialog)
-	var max_dialog_w = 700;
-	var scale = Math.min(1, max_dialog_w / (size.w * 3.78)); // mm to px ~3.78
-	var display_w = Math.round(size.w * 3.78 * scale);
-	var display_h = Math.round(size.h * 3.78 * scale);
-
-	// Cap height for receipts
-	if (is_receipt) display_h = Math.min(display_h, 500);
+	var px_per_mm = 3.78;
+	var content_w = Math.round(size.w * px_per_mm);
+	var max_h = is_receipt ? 400 : Math.round(size.h * px_per_mm * 0.6);
+	var scale = Math.min(1, 650 / content_w);
 
 	var dlg = new frappe.ui.Dialog({
-		title: __("Print Preview: {0} ({1})", [print_format, paper_size || "A4"]),
+		title: __("Preview: {0} — {1} ({2}×{3}mm)", [print_format, paper_size, size.w, size.h]),
 		fields: [
 			{
-				fieldname: "info",
+				fieldname: "preview_html",
 				fieldtype: "HTML",
-				options: '<div class="text-muted small mb-2">' +
-					__("Invoice: {0} | Paper: {1}mm × {2}mm", [docname, size.w, size.h]) +
-					"</div>",
-			},
-			{
-				fieldname: "preview",
-				fieldtype: "HTML",
-				options: '<div style="text-align:center;">' +
-					'<div style="display:inline-block;border:2px solid #ccc;background:#fff;overflow:auto;' +
-					"width:" + display_w + "px;height:" + display_h + 'px;">' +
-					'<div class="preview-content" style="transform-origin:top left;transform:scale(' + scale + ');">' +
-					'<i class="fa fa-spinner fa-spin"></i> Loading...' +
+				options:
+					'<div style="text-align:center;padding:10px 0;">' +
+					'<div style="display:inline-block;border:2px solid #999;background:white;box-shadow:0 2px 8px rgba(0,0,0,0.15);' +
+					"width:" + Math.round(content_w * scale) + "px;" +
+					"height:" + Math.round(max_h * scale) + "px;" +
+					'overflow:auto;">' +
+					'<div class="preview-body" style="width:' + content_w + "px;" +
+					"transform-origin:top left;transform:scale(" + scale + ');">' +
+					'<div style="padding:40px;text-align:center;color:#999;">' +
+					'<i class="fa fa-spinner fa-spin fa-2x"></i><br>Loading preview...</div>' +
 					"</div></div></div>",
 			},
 		],
 		size: "extra-large",
 		primary_action_label: __("Close"),
-		primary_action: function () { dlg.hide(); },
+		primary_action: function () {
+			dlg.hide();
+		},
 	});
 	dlg.show();
 
-	// Fetch rendered HTML
 	frappe.xcall("frappe.get_print", {
 		doctype: "Sales Invoice",
 		name: docname,
 		print_format: print_format,
 		no_letterhead: 0,
-	}).then(function (html) {
-		dlg.$wrapper.find(".preview-content").html(html);
-	}).catch(function (err) {
-		dlg.$wrapper.find(".preview-content").html(
-			'<div class="text-danger p-3">Failed to load preview: ' + (err.message || err) + "</div>"
-		);
-	});
+	})
+		.then(function (html) {
+			dlg.$wrapper.find(".preview-body").html(html);
+		})
+		.catch(function (err) {
+			dlg.$wrapper
+				.find(".preview-body")
+				.html(
+					'<div class="text-danger p-4">Preview failed: ' +
+					(err.message || err) +
+					"</div>"
+				);
+		});
 }
