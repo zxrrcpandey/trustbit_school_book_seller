@@ -186,9 +186,9 @@ function print_all_formats(docname, formats, index) {
 				"A4":           { width: 210, height: 297 },
 				"A5":           { width: 148, height: 210 },
 				"Letter":       { width: 216, height: 279 },
-				"80mm Receipt": { width: 80,  height: 297 },
-				"72mm Receipt": { width: 72,  height: 297 },
-				"58mm Receipt": { width: 58,  height: 297 },
+				"80mm Receipt": { width: 80,  height: 80 },
+				"72mm Receipt": { width: 72,  height: 80 },
+				"58mm Receipt": { width: 58,  height: 80 },
 			};
 
 			var size = paper_sizes[paper];
