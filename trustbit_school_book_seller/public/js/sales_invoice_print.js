@@ -202,16 +202,42 @@ function print_all_formats(docname, formats, index) {
 
 			var is_receipt = paper.indexOf("Receipt") !== -1;
 			if (is_receipt) {
-				// Receipt: QZ Tray direct print
+				// Receipt: strip Frappe wrapper, send only the content
 				config_opts.margins = { top: 0, right: 0, bottom: 0, left: 0 };
 				config_opts.scaleContent = false;
 				config_opts.rasterize = true;
+
+				// Extract just the <style> and content div — remove Frappe's
+				// wrapper (min-height:11.69in, page-break, toolbar, etc.)
+				var $tmp = $("<div>").html(html);
+				var style = "";
+				var content = "";
+				$tmp.find("style").each(function () {
+					var css = $(this).html();
+					if (css.indexOf("token-receipt") !== -1 || css.indexOf("receipt") !== -1 || css.indexOf("80mm") !== -1) {
+						style += "<style>" + css + "</style>";
+					}
+				});
+				// Find the actual print content (first user-defined div)
+				var $pf = $tmp.find(".token-receipt, .receipt-content, .print-format > div:first");
+				if ($pf.length) {
+					content = $pf[0].outerHTML;
+				} else {
+					// Fallback: get everything inside .print-format
+					var $inner = $tmp.find(".print-format");
+					content = $inner.length ? $inner.html() : html;
+				}
+
+				var clean_html = "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+					+ style
+					+ "<style>html,body{margin:0;padding:0;width:" + size.width + "mm;height:auto;}</style>"
+					+ "</head><body>" + content + "</body></html>";
 
 				var data = [{
 					type: "pixel",
 					format: "html",
 					flavor: "plain",
-					data: html,
+					data: clean_html,
 				}];
 
 				return qz.print(config, data);
