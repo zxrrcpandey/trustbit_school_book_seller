@@ -42,6 +42,9 @@ body[data-route="wall-display"] .layout-main-section {
   font-family: 'Segoe UI', -apple-system, sans-serif;
   overflow-y: auto;
   overflow-x: hidden;
+  display: grid;
+  grid-template-rows: 44px auto auto 1fr auto auto 36px;
+  padding-bottom: 36px;
 }
 
 /* ===== Header ===== */
@@ -83,7 +86,7 @@ body[data-route="wall-display"] .layout-main-section {
   background: linear-gradient(90deg, transparent, #5e64ff, transparent);
 }
 .wk-label { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #888; margin-bottom: 6px; }
-.wk-value { font-size: 40px; font-weight: 800; background: linear-gradient(135deg, #fff 30%, #7c83ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.1; }
+.wk-value { font-size: 48px; font-weight: 800; background: linear-gradient(135deg, #fff 30%, #7c83ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.1; }
 .wk-sub { font-size: 11px; color: #4ade80; margin-top: 4px; }
 
 /* Goal */
@@ -105,7 +108,7 @@ body[data-route="wall-display"] .layout-main-section {
 .wc-name { font-size: 14px; font-weight: 600; color: #fff; }
 .wc-profile { font-size: 9px; color: #666; margin-bottom: 8px; }
 .wc-stats { display: flex; justify-content: space-between; align-items: baseline; }
-.wc-revenue { font-size: 22px; font-weight: 700; color: #7c83ff; }
+.wc-revenue { font-size: 26px; font-weight: 700; color: #7c83ff; }
 .wc-orders { font-size: 12px; color: #888; }
 .wc-bar-bg { background: rgba(255,255,255,0.06); border-radius: 4px; height: 6px; margin-top: 8px; overflow: hidden; }
 .wc-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
@@ -118,8 +121,8 @@ body[data-route="wall-display"] .layout-main-section {
   border-radius: 12px;
   padding: 14px 16px;
   border: 1px solid rgba(94,100,255,0.1);
-  max-height: 260px;
   overflow-y: auto;
+  min-height: 200px;
 }
 .wall-panel::-webkit-scrollbar { width: 4px; }
 .wall-panel::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
@@ -153,7 +156,7 @@ body[data-route="wall-display"] .layout-main-section {
   border: 1px solid rgba(94,100,255,0.1);
 }
 .wall-chart h3 { font-size: 13px; margin-bottom: 10px; }
-.wall-bars { display: flex; align-items: flex-end; justify-content: space-around; height: 100px; }
+.wall-bars { display: flex; align-items: flex-end; justify-content: space-around; height: 140px; }
 .wb-col { text-align: center; flex: 1; }
 .wb-val { font-size: 10px; color: #7c83ff; margin-bottom: 3px; font-weight: 600; }
 .wb-bar {
@@ -184,12 +187,12 @@ body[data-route="wall-display"] .layout-main-section {
 .wrb-loose { background: linear-gradient(90deg, #f59e0b, #f97316); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
 .wall-ratio-labels { display: flex; justify-content: space-between; font-size: 9px; color: #888; margin-top: 4px; }
 .wall-week-total {
-  font-size: 28px;
+  font-size: 36px;
   font-weight: 800;
   background: linear-gradient(135deg, #7c83ff, #a78bfa);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  margin-top: 12px;
+  margin-top: 16px;
 }
 .wall-week-label { font-size: 10px; color: #888; }
 

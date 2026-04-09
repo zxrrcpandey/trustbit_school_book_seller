@@ -139,7 +139,7 @@ function refresh_wall(page) {
 		html += '<div class="wall-chart"><h3>📊 Revenue — Last 7 Days</h3><div class="wall-bars">';
 		var max = Math.max(...(trend || []).map(d => d.revenue), 1);
 		(trend || []).forEach(function (d) {
-			var h = Math.round((d.revenue / max) * 80);
+			var h = Math.round((d.revenue / max) * 120);
 			var isToday = d.date === today;
 			var dt = new Date(d.date);
 			var label = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getDay()];
