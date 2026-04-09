@@ -136,19 +136,23 @@ function refresh_wall(page) {
 		// === BOTTOM ROW: Chart + Bundle Summary + Ratio ===
 		html += '<div class="wall-bottom-row">';
 
-		// Revenue chart
+		// Revenue chart — use square root scaling for better visual balance
 		html += '<div class="wall-chart"><h3>📊 Revenue — Last 7 Days</h3><div class="wall-bars">';
 		var max_rev = 0;
 		(trend || []).forEach(function (d) { if (d.revenue > max_rev) max_rev = d.revenue; });
 		if (max_rev === 0) max_rev = 1;
+		var max_sqrt = Math.sqrt(max_rev);
 
 		(trend || []).forEach(function (d) {
-			var h = Math.max(4, Math.round((d.revenue / max_rev) * 120));
+			// Square root scaling: reduces gap between large and small values
+			var h = Math.max(8, Math.round((Math.sqrt(d.revenue) / max_sqrt) * 130));
 			var isToday = d.date === today;
 			var dt = new Date(d.date);
 			var label = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dt.getDay()];
 			var color = isToday ? "linear-gradient(to top, #22c55e, #5e64ff)" : "linear-gradient(to top, #5e64ff, #8b5cf6)";
-			html += '<div class="wb-col"><div class="wb-val">' + Math.round(d.revenue / 1000) + "K</div>"
+			// Format value: show in lakhs if > 100K
+			var val_str = d.revenue >= 100000 ? (d.revenue / 100000).toFixed(1) + "L" : Math.round(d.revenue / 1000) + "K";
+			html += '<div class="wb-col"><div class="wb-val">' + val_str + "</div>"
 				+ '<div class="wb-bar" style="height:' + h + "px;background:" + color + ';"></div>'
 				+ '<div class="wb-label' + (isToday ? " wb-today" : "") + '">' + label + "</div></div>";
 		});
