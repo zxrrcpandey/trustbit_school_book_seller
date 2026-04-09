@@ -5,16 +5,15 @@ frappe.pages["wall-display"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 
-	// Hide Frappe UI for fullscreen
-	$(".navbar").hide();
-	$(".page-head").hide();
-	$('[data-page-container="true"]').css("margin-left", 0);
-	$("body").css("overflow", "hidden");
+	// Force fullscreen — hide all Frappe chrome
+	$("head").append('<link rel="stylesheet" href="/assets/trustbit_school_book_seller/css/wall_display.css">');
+	$(".navbar, .page-head, footer, .page-head-wrapper").hide();
+	$("body").attr("data-route", "wall-display").css({ overflow: "hidden", background: "#060612" });
+	$(".layout-main-section, .container, .page-body, .page-content").css({ margin: 0, padding: 0, "max-width": "100%" });
+	$(wrapper).css({ margin: 0, padding: 0 });
+	$(wrapper).closest(".page-container").css({ "margin-left": 0, "max-width": "100%" });
 
 	page.$wall = $('<div class="wall-display"></div>').appendTo(page.body);
-
-	// Load wall display CSS
-	$("head").append('<link rel="stylesheet" href="/assets/trustbit_school_book_seller/css/wall_display.css">');
 
 	refresh_wall(page);
 
