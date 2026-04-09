@@ -1,0 +1,20 @@
+{
+ "creation": "2026-04-09 00:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-04-09 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Trustbit School Book",
+ "name": "wall-display",
+ "owner": "Administrator",
+ "page_name": "wall-display",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Sales Manager"},
+  {"role": "Sales User"}
+ ],
+ "standard": "Yes",
+ "system_page": 0,
+ "title": "Wall Display"
+}

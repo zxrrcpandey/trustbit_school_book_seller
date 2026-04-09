@@ -240,7 +240,8 @@ fixtures = [
                 "Purchase Order-custom_last_followup_status",
                 "Purchase Order-custom_column_break_followup",
                 "Purchase Order-custom_next_followup_date",
-                "Purchase Order-custom_total_followups"
+                "Purchase Order-custom_total_followups",
+                "Product Bundle-custom_sell_goal"
             ]]
         ]
     },

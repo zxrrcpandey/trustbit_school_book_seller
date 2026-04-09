@@ -11,11 +11,29 @@ def after_install():
     create_school_custom_fields()
     create_privilege_card_custom_fields()
     create_po_followup_custom_fields()
+    create_dashboard_custom_fields()
     create_default_classes()
     create_default_subjects()
     create_default_card_types()
     frappe.db.commit()
     print("Trustbit School Book Seller App installed successfully!")
+
+
+def create_dashboard_custom_fields():
+    """Create custom fields for dashboard features."""
+    from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+    create_custom_fields({
+        "Product Bundle": [
+            {
+                "fieldname": "custom_sell_goal",
+                "fieldtype": "Int",
+                "label": "Sell Goal",
+                "insert_after": "description",
+                "description": "Target number of sets to sell this season",
+            },
+        ]
+    })
 
 
 def create_custom_fields():
