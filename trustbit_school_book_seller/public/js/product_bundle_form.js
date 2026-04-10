@@ -506,19 +506,10 @@ function add_item_to_bundle(frm, item_code, qty) {
 
 // ── Print Product Bundle as KGS School Book V5 ──────────────
 function print_product_bundle(bundle_name) {
-	frappe.xcall(
-		"trustbit_school_book_seller.dashboard_api.get_bundle_print_html",
-		{ product_bundle: bundle_name }
-	).then(function (html) {
-		if (!html) {
-			frappe.msgprint(__("No printable content"));
-			return;
-		}
-		var w = window.open("", "_blank");
-		w.document.write(html);
-		w.document.close();
-		w.onload = function () { w.print(); };
-	});
+	// Open PDF directly via Frappe's PDF endpoint
+	var url = "/api/method/trustbit_school_book_seller.dashboard_api.get_bundle_pdf"
+		+ "?product_bundle=" + encodeURIComponent(bundle_name);
+	window.open(url, "_blank");
 }
 
 // ── List View: Bulk Print ──────────────

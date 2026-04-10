@@ -637,61 +637,84 @@ def get_bundle_print_html(product_bundle):
 	html = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <style>
-@page { size: A4; margin: 8mm 12mm; }
-body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; padding: 10px; }
-.invoice-box { border: 2px solid #000; max-width: 800px; margin: 0 auto; }
-.header-row { display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding: 5px 10px; font-weight: bold; }
-.company-section { border-bottom: 1px solid #000; padding: 8px 10px; text-align: center; }
-.company-name { font-size: 16px; font-weight: bold; }
-.company-addr { font-size: 10px; }
-.info-section { border-bottom: 1px solid #000; padding: 6px 10px; display: flex; justify-content: space-between; }
-.info-left { font-size: 13px; font-weight: bold; }
-.info-right { text-align: right; font-size: 11px; }
-table { width: 100%%; border-collapse: collapse; }
-th { border: 1px solid #000; padding: 4px 3px; font-size: 10px; font-weight: bold; text-align: center; background: #f5f5f5; }
-td { border-left: 1px solid #000; border-right: 1px solid #000; padding: 3px; font-size: 10px; }
-tr:last-child td { border-bottom: 1px solid #000; }
-tr.na-row { background: #fff3e0; color: #888; }
-.group-header { background: #e8e8e8; font-weight: bold; font-size: 10px; }
-.group-header td { border: 1px solid #000; padding: 3px 6px; }
-.group-total td { font-weight: bold; border: 1px solid #000; }
-.sn { width: 4%%; text-align: center; }
-.desc { width: 30%%; }
-.hsn { width: 8%%; text-align: center; }
-.qty { width: 7%%; text-align: right; }
-.unit { width: 7%%; text-align: center; }
-.mrp { width: 10%%; text-align: right; }
-.disc { width: 7%%; text-align: right; }
-.disc-amt { width: 9%%; text-align: right; }
-.amt { width: 12%%; text-align: right; }
-.total-section { border-bottom: 1px solid #000; padding: 8px 10px; display: flex; justify-content: space-between; }
-.grand-total { font-size: 14px; font-weight: bold; }
-.footer { padding: 8px 10px; display: flex; justify-content: space-between; font-size: 10px; }
-.na-label { font-size: 9px; color: #f57c00; }
+@page { size: A4; margin: 10mm 15mm; }
+body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; padding: 0; color: #000; }
+.invoice-box { border: 2px solid #000; width: 100%%; }
+.header-row { border-bottom: 1px solid #000; padding: 6px 12px; overflow: hidden; }
+.header-row .left { float: left; font-weight: bold; font-size: 10px; }
+.header-row .center { text-align: center; font-weight: bold; font-size: 12px; }
+.header-row .right { float: right; font-weight: bold; font-size: 10px; }
+.company-section { border-bottom: 1px solid #000; padding: 10px 12px; text-align: center; }
+.company-name { font-size: 18px; font-weight: bold; margin-bottom: 2px; }
+.company-sub { font-size: 10px; color: #555; }
+.info-section { border-bottom: 1px solid #000; padding: 8px 12px; overflow: hidden; }
+.info-left { float: left; }
+.info-right { float: right; text-align: right; }
+.bundle-name { font-size: 14px; font-weight: bold; }
+.bundle-sub { font-size: 10px; color: #555; }
+
+/* Table */
+table { width: 100%%; border-collapse: collapse; table-layout: fixed; }
+col.c-sn { width: 5%%; }
+col.c-desc { width: 32%%; }
+col.c-qty { width: 6%%; }
+col.c-unit { width: 6%%; }
+col.c-mrp { width: 10%%; }
+col.c-disc { width: 7%%; }
+col.c-discamt { width: 10%%; }
+col.c-amt { width: 12%%; }
+
+th { border: 1px solid #000; padding: 5px 4px; font-size: 10px; font-weight: bold; text-align: center; background: #f0f0f0; }
+td { border: 1px solid #ccc; border-left: 1px solid #000; border-right: 1px solid #000; padding: 4px 5px; font-size: 10px; vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 1px solid #000; }
+
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-left { text-align: left; }
+
+tr.na-row { background: #fff8e1; }
+tr.na-row td { color: #999; }
+.group-header { background: #e8e8e8; }
+.group-header td { border: 1px solid #000; padding: 4px 8px; font-weight: bold; font-size: 10px; }
+.group-total td { font-weight: bold; border-top: 1px solid #000; border-bottom: 1px solid #000; background: #fafafa; }
+
+.total-section { border-top: 2px solid #000; padding: 10px 12px; overflow: hidden; }
+.total-left { float: left; font-size: 11px; }
+.total-right { float: right; }
+.grand-total { font-size: 16px; font-weight: bold; }
+
+.footer { padding: 8px 12px; overflow: hidden; font-size: 9px; color: #888; border-top: 1px solid #ddd; }
+.footer .fl { float: left; }
+.footer .fr { float: right; }
+.na-label { font-size: 8px; color: #e65100; font-weight: bold; }
 </style>
 </head><body>
 <div class="invoice-box">"""
 
 	# Header
-	html += '<div class="header-row"><span>GSTIN: ' + (company_doc.get("gstin") or company_doc.get("tax_id") or "") + '</span>'
-	html += '<span>PRODUCT BUNDLE — PRICE LIST</span>'
-	html += '<span>ESTD: 1960</span></div>'
+	html += '<div class="header-row">'
+	html += '<div class="left">GSTIN: ' + (company_doc.get("gstin") or company_doc.get("tax_id") or "") + '</div>'
+	html += '<div class="center">PRODUCT BUNDLE — PRICE LIST</div>'
+	html += '<div class="right">ESTD: 1960</div></div>'
 
 	# Company
 	html += '<div class="company-section">'
 	html += '<div class="company-name">' + (company_doc.company_name or company) + '</div>'
-	html += '<div class="company-addr">Standard Selling Price List</div></div>'
+	html += '<div class="company-sub">Standard Selling Price List</div></div>'
 
 	# Info
 	html += '<div class="info-section">'
-	html += '<div class="info-left">Bundle: ' + desc + '</div>'
+	html += '<div class="info-left"><div class="bundle-name">Bundle: ' + desc + '</div></div>'
 	html += '<div class="info-right">Date: ' + today_str + '<br>Items: ' + str(len(bundle.items)) + '</div></div>'
 
-	# Table
-	html += '<table><thead><tr>'
-	html += '<th class="sn">SN</th><th class="desc">Description</th><th class="hsn">HSN</th>'
-	html += '<th class="qty">Qty</th><th class="unit">Unit</th><th class="mrp">MRP</th>'
-	html += '<th class="disc">Dis%</th><th class="disc-amt">Disc Amt</th><th class="amt">Amount</th>'
+	# Table with colgroup for fixed widths
+	html += '<table><colgroup>'
+	html += '<col class="c-sn"><col class="c-desc"><col class="c-qty"><col class="c-unit">'
+	html += '<col class="c-mrp"><col class="c-disc"><col class="c-discamt"><col class="c-amt">'
+	html += '</colgroup><thead><tr>'
+	html += '<th>SN</th><th class="text-left">Description</th>'
+	html += '<th>Qty</th><th>Unit</th><th>MRP</th>'
+	html += '<th>Dis%</th><th>Disc Amt</th><th>Amount</th>'
 	html += '</tr></thead><tbody>'
 
 	sn = 0
@@ -700,38 +723,53 @@ tr.na-row { background: #fff3e0; color: #888; }
 		group_total = sum(i["amount"] for i in group_items)
 		group_qty = sum(i["qty"] for i in group_items)
 
-		html += '<tr class="group-header"><td colspan="9">' + group_name + ' (' + str(len(group_items)) + ' items)</td></tr>'
+		html += '<tr class="group-header"><td colspan="8">' + group_name + ' (' + str(len(group_items)) + ' items)</td></tr>'
 
 		for item in group_items:
 			sn += 1
 			na_cls = ' class="na-row"' if item["na"] else ""
-			na_label = ' <span class="na-label">[N/A]</span>' if item["na"] else ""
+			na_label = ' <span class="na-label"> [N/A]</span>' if item["na"] else ""
 			html += '<tr' + na_cls + '>'
-			html += '<td class="sn">' + str(sn) + '</td>'
-			html += '<td class="desc">' + item["item_name"] + na_label + '</td>'
-			html += '<td class="hsn">' + (item["hsn"] or "") + '</td>'
-			html += '<td class="qty">' + '{:.0f}'.format(item["qty"]) + '</td>'
-			html += '<td class="unit">' + item["uom"] + '</td>'
-			html += '<td class="mrp">' + '{:.2f}'.format(item["mrp"]) + '</td>'
-			html += '<td class="disc">' + ('{:.0f}%'.format(item["disc_pct"]) if item["disc_pct"] else "") + '</td>'
-			html += '<td class="disc-amt">' + ('{:.2f}'.format(item["disc_amt"] * item["qty"]) if item["disc_pct"] else "") + '</td>'
-			html += '<td class="amt">' + '{:.2f}'.format(item["amount"]) + '</td></tr>'
+			html += '<td class="text-center">' + str(sn) + '</td>'
+			html += '<td class="text-left">' + item["item_name"] + na_label + '</td>'
+			html += '<td class="text-center">' + '{:.0f}'.format(item["qty"]) + '</td>'
+			html += '<td class="text-center">' + item["uom"] + '</td>'
+			html += '<td class="text-right">' + '{:.2f}'.format(item["mrp"]) + '</td>'
+			html += '<td class="text-center">' + ('{:.0f}%'.format(item["disc_pct"]) if item["disc_pct"] else "-") + '</td>'
+			html += '<td class="text-right">' + ('{:.2f}'.format(item["disc_amt"] * item["qty"]) if item["disc_pct"] else "-") + '</td>'
+			html += '<td class="text-right">' + '{:.2f}'.format(item["amount"]) + '</td></tr>'
 
-		html += '<tr class="group-total"><td colspan="3"></td><td class="qty">' + '{:.0f}'.format(group_qty) + '</td>'
-		html += '<td colspan="4"></td><td class="amt">' + '{:.2f}'.format(group_total) + '</td></tr>'
+		html += '<tr class="group-total"><td colspan="2" class="text-right">Group Total</td>'
+		html += '<td class="text-center">' + '{:.0f}'.format(group_qty) + '</td>'
+		html += '<td colspan="4"></td><td class="text-right">' + '{:.2f}'.format(group_total) + '</td></tr>'
 
 	html += '</tbody></table>'
 
 	# Total
 	html += '<div class="total-section">'
-	html += '<div>Total Quantity: ' + '{:.0f}'.format(total_qty) + '</div>'
-	html += '<div class="grand-total">Total: ₹' + '{:,.2f}'.format(grand_total) + '</div></div>'
+	html += '<div class="total-left">Total Quantity: ' + '{:.0f}'.format(total_qty) + '</div>'
+	html += '<div class="total-right"><div class="grand-total">Total: ₹' + '{:,.2f}'.format(grand_total) + '</div></div></div>'
 
 	# Footer
 	html += '<div class="footer">'
-	html += '<span>Generated from Product Bundle: ' + bundle.name + '</span>'
-	html += '<span>For ' + (company_doc.company_name or company) + '</span></div>'
+	html += '<div class="fl">Product Bundle: ' + bundle.name + '</div>'
+	html += '<div class="fr">For ' + (company_doc.company_name or company) + '</div></div>'
 
 	html += '</div></body></html>'
 
 	return html
+
+
+@frappe.whitelist()
+def get_bundle_pdf(product_bundle):
+	"""Generate and return a PDF for a Product Bundle price list."""
+	html = get_bundle_print_html(product_bundle)
+	if not html:
+		frappe.throw(_("No content to generate PDF"))
+
+	from frappe.utils.pdf import get_pdf
+	pdf = get_pdf(html, {"page-size": "A4", "margin-top": "10mm", "margin-bottom": "10mm", "margin-left": "15mm", "margin-right": "15mm"})
+
+	frappe.local.response.filename = "{0}_price_list.pdf".format(product_bundle)
+	frappe.local.response.filecontent = pdf
+	frappe.local.response.type = "pdf"
