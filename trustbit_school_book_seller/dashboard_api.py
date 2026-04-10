@@ -538,3 +538,200 @@ def get_recent_invoices(limit=10, user=None):
 			inv["user_name"] = user_names.get(inv.owner, inv.owner)
 
 	return invoices
+
+
+@frappe.whitelist()
+def get_bundle_print_html(product_bundle):
+	"""Generate KGS School Book V5 style print HTML for a Product Bundle.
+	Uses Standard Selling price list for rates."""
+
+	if not frappe.db.exists("Product Bundle", product_bundle):
+		frappe.throw(_("Product Bundle {0} not found").format(product_bundle))
+
+	bundle = frappe.get_doc("Product Bundle", product_bundle)
+	price_list = "Standard Selling"
+
+	# Get company info
+	company = frappe.defaults.get_defaults().get("company") or frappe.get_all("Company", limit=1)[0].name
+	company_doc = frappe.get_doc("Company", company)
+
+	# Get bundle items with prices
+	item_codes = [i.item_code for i in bundle.items]
+	prices = frappe.get_all("Item Price",
+		filters={"item_code": ["in", item_codes], "price_list": price_list},
+		fields=["item_code", "price_list_rate"],
+		order_by="modified desc",
+	)
+	price_map = {}
+	for p in prices:
+		if p.item_code not in price_map:
+			price_map[p.item_code] = flt(p.price_list_rate)
+
+	# Get item details
+	items_detail = frappe.get_all("Item",
+		filters={"name": ["in", item_codes]},
+		fields=["name", "item_name", "item_group", "stock_uom", "gst_hsn_code"],
+	)
+	detail_map = {i.name: i for i in items_detail}
+
+	# Get UOM discounts
+	all_uom_disc = frappe.get_all("Item UOM Discount",
+		filters={"parent": ["in", item_codes], "parenttype": "Item"},
+		fields=["parent", "uom", "discount_percentage", "min_qty", "max_qty"],
+		order_by="min_qty desc",
+	)
+	disc_map = {}
+	for d in all_uom_disc:
+		key = (d.parent, d.uom)
+		disc_map.setdefault(key, []).append(d)
+
+	# Build rows
+	rows = []
+	grand_total = 0
+	total_qty = 0
+	groups = {}
+
+	for item in bundle.items:
+		stock_status = getattr(item, "custom_product_bundle_stock", "") or "Available"
+		detail = detail_map.get(item.item_code, {})
+		plr = price_map.get(item.item_code, 0)
+		uom = item.uom or detail.get("stock_uom", "PCS")
+		qty = flt(item.qty)
+
+		# Find discount
+		disc_pct = 0
+		key = (item.item_code, uom)
+		if key in disc_map:
+			for d in disc_map[key]:
+				min_q = flt(d.min_qty) or 0
+				max_q = flt(d.max_qty) or 0
+				if qty >= min_q and (max_q == 0 or qty <= max_q):
+					disc_pct = flt(d.discount_percentage)
+					break
+
+		disc_amt = flt(plr * disc_pct / 100, 2)
+		rate = flt(plr - disc_amt, 2)
+		amount = flt(rate * qty, 2)
+		grand_total += amount
+		total_qty += qty
+
+		group = detail.get("item_group", "Others")
+		groups.setdefault(group, []).append({
+			"item_code": item.item_code,
+			"item_name": detail.get("item_name", item.item_code),
+			"hsn": detail.get("gst_hsn_code", ""),
+			"qty": qty,
+			"uom": uom,
+			"mrp": plr,
+			"disc_pct": disc_pct,
+			"disc_amt": disc_amt,
+			"rate": rate,
+			"amount": amount,
+			"na": stock_status == "Not Available",
+		})
+
+	# Render HTML
+	today_str = frappe.utils.format_date(nowdate(), "dd MMMM yyyy")
+	desc = bundle.description or bundle.name
+
+	html = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+@page { size: A4; margin: 8mm 12mm; }
+body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; padding: 10px; }
+.invoice-box { border: 2px solid #000; max-width: 800px; margin: 0 auto; }
+.header-row { display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding: 5px 10px; font-weight: bold; }
+.company-section { border-bottom: 1px solid #000; padding: 8px 10px; text-align: center; }
+.company-name { font-size: 16px; font-weight: bold; }
+.company-addr { font-size: 10px; }
+.info-section { border-bottom: 1px solid #000; padding: 6px 10px; display: flex; justify-content: space-between; }
+.info-left { font-size: 13px; font-weight: bold; }
+.info-right { text-align: right; font-size: 11px; }
+table { width: 100%%; border-collapse: collapse; }
+th { border: 1px solid #000; padding: 4px 3px; font-size: 10px; font-weight: bold; text-align: center; background: #f5f5f5; }
+td { border-left: 1px solid #000; border-right: 1px solid #000; padding: 3px; font-size: 10px; }
+tr:last-child td { border-bottom: 1px solid #000; }
+tr.na-row { background: #fff3e0; color: #888; }
+.group-header { background: #e8e8e8; font-weight: bold; font-size: 10px; }
+.group-header td { border: 1px solid #000; padding: 3px 6px; }
+.group-total td { font-weight: bold; border: 1px solid #000; }
+.sn { width: 4%%; text-align: center; }
+.desc { width: 30%%; }
+.hsn { width: 8%%; text-align: center; }
+.qty { width: 7%%; text-align: right; }
+.unit { width: 7%%; text-align: center; }
+.mrp { width: 10%%; text-align: right; }
+.disc { width: 7%%; text-align: right; }
+.disc-amt { width: 9%%; text-align: right; }
+.amt { width: 12%%; text-align: right; }
+.total-section { border-bottom: 1px solid #000; padding: 8px 10px; display: flex; justify-content: space-between; }
+.grand-total { font-size: 14px; font-weight: bold; }
+.footer { padding: 8px 10px; display: flex; justify-content: space-between; font-size: 10px; }
+.na-label { font-size: 9px; color: #f57c00; }
+</style>
+</head><body>
+<div class="invoice-box">"""
+
+	# Header
+	html += '<div class="header-row"><span>GSTIN: ' + (company_doc.get("gstin") or company_doc.get("tax_id") or "") + '</span>'
+	html += '<span>PRODUCT BUNDLE — PRICE LIST</span>'
+	html += '<span>ESTD: 1960</span></div>'
+
+	# Company
+	html += '<div class="company-section">'
+	html += '<div class="company-name">' + (company_doc.company_name or company) + '</div>'
+	html += '<div class="company-addr">Standard Selling Price List</div></div>'
+
+	# Info
+	html += '<div class="info-section">'
+	html += '<div class="info-left">Bundle: ' + desc + '</div>'
+	html += '<div class="info-right">Date: ' + today_str + '<br>Items: ' + str(len(bundle.items)) + '</div></div>'
+
+	# Table
+	html += '<table><thead><tr>'
+	html += '<th class="sn">SN</th><th class="desc">Description</th><th class="hsn">HSN</th>'
+	html += '<th class="qty">Qty</th><th class="unit">Unit</th><th class="mrp">MRP</th>'
+	html += '<th class="disc">Dis%</th><th class="disc-amt">Disc Amt</th><th class="amt">Amount</th>'
+	html += '</tr></thead><tbody>'
+
+	sn = 0
+	for group_name in sorted(groups.keys()):
+		group_items = groups[group_name]
+		group_total = sum(i["amount"] for i in group_items)
+		group_qty = sum(i["qty"] for i in group_items)
+
+		html += '<tr class="group-header"><td colspan="9">' + group_name + ' (' + str(len(group_items)) + ' items)</td></tr>'
+
+		for item in group_items:
+			sn += 1
+			na_cls = ' class="na-row"' if item["na"] else ""
+			na_label = ' <span class="na-label">[N/A]</span>' if item["na"] else ""
+			html += '<tr' + na_cls + '>'
+			html += '<td class="sn">' + str(sn) + '</td>'
+			html += '<td class="desc">' + item["item_name"] + na_label + '</td>'
+			html += '<td class="hsn">' + (item["hsn"] or "") + '</td>'
+			html += '<td class="qty">' + '{:.0f}'.format(item["qty"]) + '</td>'
+			html += '<td class="unit">' + item["uom"] + '</td>'
+			html += '<td class="mrp">' + '{:.2f}'.format(item["mrp"]) + '</td>'
+			html += '<td class="disc">' + ('{:.0f}%'.format(item["disc_pct"]) if item["disc_pct"] else "") + '</td>'
+			html += '<td class="disc-amt">' + ('{:.2f}'.format(item["disc_amt"] * item["qty"]) if item["disc_pct"] else "") + '</td>'
+			html += '<td class="amt">' + '{:.2f}'.format(item["amount"]) + '</td></tr>'
+
+		html += '<tr class="group-total"><td colspan="3"></td><td class="qty">' + '{:.0f}'.format(group_qty) + '</td>'
+		html += '<td colspan="4"></td><td class="amt">' + '{:.2f}'.format(group_total) + '</td></tr>'
+
+	html += '</tbody></table>'
+
+	# Total
+	html += '<div class="total-section">'
+	html += '<div>Total Quantity: ' + '{:.0f}'.format(total_qty) + '</div>'
+	html += '<div class="grand-total">Total: ₹' + '{:,.2f}'.format(grand_total) + '</div></div>'
+
+	# Footer
+	html += '<div class="footer">'
+	html += '<span>Generated from Product Bundle: ' + bundle.name + '</span>'
+	html += '<span>For ' + (company_doc.company_name or company) + '</span></div>'
+
+	html += '</div></body></html>'
+
+	return html

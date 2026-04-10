@@ -3,6 +3,16 @@
 
 frappe.ui.form.on("Product Bundle", {
 	refresh: function (frm) {
+		if (frm.doc.name) {
+			frm.add_custom_button(
+				__("KGS School Book V5"),
+				function () {
+					print_product_bundle(frm.doc.name);
+				},
+				__("Print")
+			);
+		}
+
 		frm.add_custom_button(
 			__("Quick Add (Ctrl+Q)"),
 			function () {
@@ -493,3 +503,42 @@ function add_item_to_bundle(frm, item_code, qty) {
 	frm.refresh_field("items");
 	frm.dirty();
 }
+
+// ── Print Product Bundle as KGS School Book V5 ──────────────
+function print_product_bundle(bundle_name) {
+	frappe.xcall(
+		"trustbit_school_book_seller.dashboard_api.get_bundle_print_html",
+		{ product_bundle: bundle_name }
+	).then(function (html) {
+		if (!html) {
+			frappe.msgprint(__("No printable content"));
+			return;
+		}
+		var w = window.open("", "_blank");
+		w.document.write(html);
+		w.document.close();
+		w.onload = function () { w.print(); };
+	});
+}
+
+// ── List View: Bulk Print ──────────────
+frappe.listview_settings["Product Bundle"] = frappe.listview_settings["Product Bundle"] || {};
+frappe.listview_settings["Product Bundle"].onload = function (listview) {
+	listview.page.add_action_item(__("Print (KGS School Book V5)"), function () {
+		var selected = listview.get_checked_items();
+		if (!selected.length) {
+			frappe.msgprint(__("Please select Product Bundles to print"));
+			return;
+		}
+		frappe.confirm(
+			__("Print {0} Product Bundle(s)?", [selected.length]),
+			function () {
+				selected.forEach(function (item, idx) {
+					setTimeout(function () {
+						print_product_bundle(item.name);
+					}, idx * 500);
+				});
+			}
+		);
+	});
+};
