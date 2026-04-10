@@ -637,40 +637,39 @@ def get_bundle_print_html(product_bundle):
 	html = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <style>
-@page { size: A4; margin: 10mm 15mm; }
+@page { size: A4; margin: 8mm 10mm; }
 body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; padding: 0; color: #000; }
 .invoice-box { border: 2px solid #000; width: 100%%; }
-.header-row { border-bottom: 1px solid #000; padding: 6px 12px; overflow: hidden; }
-.header-row .left { float: left; font-weight: bold; font-size: 10px; }
-.header-row .center { text-align: center; font-weight: bold; font-size: 12px; }
-.header-row .right { float: right; font-weight: bold; font-size: 10px; }
-.company-section { border-bottom: 1px solid #000; padding: 10px 12px; text-align: center; }
-.company-name { font-size: 18px; font-weight: bold; margin-bottom: 2px; }
-.company-sub { font-size: 10px; color: #555; }
-.info-section { border-bottom: 1px solid #000; padding: 8px 12px; overflow: hidden; }
-.info-left { float: left; }
-.info-right { float: right; text-align: right; }
-.bundle-name { font-size: 14px; font-weight: bold; }
-.bundle-sub { font-size: 10px; color: #555; }
 
-/* Table */
-table { width: 100%%; border-collapse: collapse; table-layout: fixed; }
-col.c-sn { width: 5%%; }
-col.c-desc { width: 32%%; }
-col.c-qty { width: 6%%; }
-col.c-unit { width: 6%%; }
-col.c-mrp { width: 10%%; }
-col.c-disc { width: 7%%; }
-col.c-discamt { width: 10%%; }
-col.c-amt { width: 12%%; }
+/* Use tables for layout (wkhtmltopdf handles tables better than float) */
+.layout-table { width: 100%%; border-collapse: collapse; }
+.layout-table td { padding: 6px 10px; vertical-align: middle; }
 
-th { border: 1px solid #000; padding: 5px 4px; font-size: 10px; font-weight: bold; text-align: center; background: #f0f0f0; }
-td { border: 1px solid #ccc; border-left: 1px solid #000; border-right: 1px solid #000; padding: 4px 5px; font-size: 10px; vertical-align: middle; }
-tbody tr:last-child td { border-bottom: 1px solid #000; }
+.hdr-row td { border-bottom: 1px solid #000; font-weight: bold; }
+.company-section { border-bottom: 1px solid #000; padding: 8px 10px; text-align: center; }
+.company-name { font-size: 16px; font-weight: bold; }
+.company-sub { font-size: 9px; color: #555; }
+.info-row td { border-bottom: 1px solid #000; padding: 6px 10px; }
+.bundle-name { font-size: 13px; font-weight: bold; }
 
-.text-center { text-align: center; }
-.text-right { text-align: right; }
-.text-left { text-align: left; }
+/* Items Table */
+.items-table { width: 100%%; border-collapse: collapse; table-layout: fixed; }
+.items-table col.c-sn { width: 5%%; }
+.items-table col.c-desc { width: 35%%; }
+.items-table col.c-qty { width: 6%%; }
+.items-table col.c-unit { width: 6%%; }
+.items-table col.c-mrp { width: 10%%; }
+.items-table col.c-disc { width: 7%%; }
+.items-table col.c-discamt { width: 10%%; }
+.items-table col.c-amt { width: 11%%; }
+
+.items-table th { border: 1px solid #000; padding: 5px 4px; font-size: 10px; font-weight: bold; text-align: center; background: #f0f0f0; }
+.items-table td { border: 1px solid #ddd; border-left: 1px solid #000; border-right: 1px solid #000; padding: 3px 5px; font-size: 10px; }
+.items-table tbody tr:last-child td { border-bottom: 1px solid #000; }
+
+.tc { text-align: center; }
+.tr { text-align: right; }
+.tl { text-align: left; }
 
 tr.na-row { background: #fff8e1; }
 tr.na-row td { color: #999; }
@@ -678,41 +677,38 @@ tr.na-row td { color: #999; }
 .group-header td { border: 1px solid #000; padding: 4px 8px; font-weight: bold; font-size: 10px; }
 .group-total td { font-weight: bold; border-top: 1px solid #000; border-bottom: 1px solid #000; background: #fafafa; }
 
-.total-section { border-top: 2px solid #000; padding: 10px 12px; overflow: hidden; }
-.total-left { float: left; font-size: 11px; }
-.total-right { float: right; }
-.grand-total { font-size: 16px; font-weight: bold; }
-
-.footer { padding: 8px 12px; overflow: hidden; font-size: 9px; color: #888; border-top: 1px solid #ddd; }
-.footer .fl { float: left; }
-.footer .fr { float: right; }
+.total-row td { border-top: 2px solid #000; padding: 8px 10px; font-size: 11px; }
+.grand-total { font-size: 15px; font-weight: bold; }
+.footer-row td { padding: 6px 10px; font-size: 9px; color: #888; border-top: 1px solid #ddd; }
 .na-label { font-size: 8px; color: #e65100; font-weight: bold; }
 </style>
 </head><body>
 <div class="invoice-box">"""
 
-	# Header
-	html += '<div class="header-row">'
-	html += '<div class="left">GSTIN: ' + (company_doc.get("gstin") or company_doc.get("tax_id") or "") + '</div>'
-	html += '<div class="center">PRODUCT BUNDLE — PRICE LIST</div>'
-	html += '<div class="right">ESTD: 1960</div></div>'
+	gstin = company_doc.get("gstin") or company_doc.get("tax_id") or ""
+
+	# Header row
+	html += '<table class="layout-table"><tr class="hdr-row">'
+	html += '<td style="width:30%%;text-align:left;font-size:10px;">GSTIN: ' + gstin + '</td>'
+	html += '<td style="width:40%%;text-align:center;font-size:12px;">PRODUCT BUNDLE — PRICE LIST</td>'
+	html += '<td style="width:30%%;text-align:right;font-size:10px;">ESTD: 1960</td></tr></table>'
 
 	# Company
 	html += '<div class="company-section">'
 	html += '<div class="company-name">' + (company_doc.company_name or company) + '</div>'
 	html += '<div class="company-sub">Standard Selling Price List</div></div>'
 
-	# Info
-	html += '<div class="info-section">'
-	html += '<div class="info-left"><div class="bundle-name">Bundle: ' + desc + '</div></div>'
-	html += '<div class="info-right">Date: ' + today_str + '<br>Items: ' + str(len(bundle.items)) + '</div></div>'
+	# Info row
+	html += '<table class="layout-table"><tr class="info-row">'
+	html += '<td style="width:60%%;"><span class="bundle-name">Bundle: ' + desc + '</span></td>'
+	html += '<td style="width:40%%;text-align:right;">Date: ' + today_str + ' | Items: ' + str(len(bundle.items)) + '</td></tr></table>'
 
-	# Table with colgroup for fixed widths
-	html += '<table><colgroup>'
+	# Items table
+	html += '<table class="items-table"><colgroup>'
 	html += '<col class="c-sn"><col class="c-desc"><col class="c-qty"><col class="c-unit">'
 	html += '<col class="c-mrp"><col class="c-disc"><col class="c-discamt"><col class="c-amt">'
 	html += '</colgroup><thead><tr>'
-	html += '<th>SN</th><th class="text-left">Description</th>'
+	html += '<th>SN</th><th class="tl">Description</th>'
 	html += '<th>Qty</th><th>Unit</th><th>MRP</th>'
 	html += '<th>Dis%</th><th>Disc Amt</th><th>Amount</th>'
 	html += '</tr></thead><tbody>'
@@ -730,30 +726,30 @@ tr.na-row td { color: #999; }
 			na_cls = ' class="na-row"' if item["na"] else ""
 			na_label = ' <span class="na-label"> [N/A]</span>' if item["na"] else ""
 			html += '<tr' + na_cls + '>'
-			html += '<td class="text-center">' + str(sn) + '</td>'
-			html += '<td class="text-left">' + item["item_name"] + na_label + '</td>'
-			html += '<td class="text-center">' + '{:.0f}'.format(item["qty"]) + '</td>'
-			html += '<td class="text-center">' + item["uom"] + '</td>'
-			html += '<td class="text-right">' + '{:.2f}'.format(item["mrp"]) + '</td>'
-			html += '<td class="text-center">' + ('{:.0f}%'.format(item["disc_pct"]) if item["disc_pct"] else "-") + '</td>'
-			html += '<td class="text-right">' + ('{:.2f}'.format(item["disc_amt"] * item["qty"]) if item["disc_pct"] else "-") + '</td>'
-			html += '<td class="text-right">' + '{:.2f}'.format(item["amount"]) + '</td></tr>'
+			html += '<td class="tc">' + str(sn) + '</td>'
+			html += '<td class="tl">' + item["item_name"] + na_label + '</td>'
+			html += '<td class="tc">' + '{:.0f}'.format(item["qty"]) + '</td>'
+			html += '<td class="tc">' + item["uom"] + '</td>'
+			html += '<td class="tr">' + '{:.2f}'.format(item["mrp"]) + '</td>'
+			html += '<td class="tc">' + ('{:.0f}%'.format(item["disc_pct"]) if item["disc_pct"] else "-") + '</td>'
+			html += '<td class="tr">' + ('{:.2f}'.format(item["disc_amt"] * item["qty"]) if item["disc_pct"] else "-") + '</td>'
+			html += '<td class="tr">' + '{:.2f}'.format(item["amount"]) + '</td></tr>'
 
-		html += '<tr class="group-total"><td colspan="2" class="text-right">Group Total</td>'
-		html += '<td class="text-center">' + '{:.0f}'.format(group_qty) + '</td>'
-		html += '<td colspan="4"></td><td class="text-right">' + '{:.2f}'.format(group_total) + '</td></tr>'
+		html += '<tr class="group-total"><td colspan="2" class="tr">Group Total</td>'
+		html += '<td class="tc">' + '{:.0f}'.format(group_qty) + '</td>'
+		html += '<td colspan="4"></td><td class="tr">' + '{:.2f}'.format(group_total) + '</td></tr>'
 
 	html += '</tbody></table>'
 
 	# Total
-	html += '<div class="total-section">'
-	html += '<div class="total-left">Total Quantity: ' + '{:.0f}'.format(total_qty) + '</div>'
-	html += '<div class="total-right"><div class="grand-total">Total: ₹' + '{:,.2f}'.format(grand_total) + '</div></div></div>'
+	html += '<table class="layout-table"><tr class="total-row">'
+	html += '<td style="width:50%%;">Total Quantity: ' + '{:.0f}'.format(total_qty) + '</td>'
+	html += '<td style="width:50%%;text-align:right;"><span class="grand-total">Total: ₹' + '{:,.2f}'.format(grand_total) + '</span></td></tr></table>'
 
 	# Footer
-	html += '<div class="footer">'
-	html += '<div class="fl">Product Bundle: ' + bundle.name + '</div>'
-	html += '<div class="fr">For ' + (company_doc.company_name or company) + '</div></div>'
+	html += '<table class="layout-table"><tr class="footer-row">'
+	html += '<td style="width:50%%;">Product Bundle: ' + bundle.name + '</td>'
+	html += '<td style="width:50%%;text-align:right;">For ' + (company_doc.company_name or company) + '</td></tr></table>'
 
 	html += '</div></body></html>'
 
