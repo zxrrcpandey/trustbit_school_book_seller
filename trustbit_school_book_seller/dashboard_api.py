@@ -639,10 +639,10 @@ def get_bundle_print_html(product_bundle):
 <style>
 @page { size: A4; margin: 8mm 10mm; }
 body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; padding: 0; color: #000; }
-.invoice-box { border: 2px solid #000; width: 100%%; }
+.invoice-box { border: 2px solid #000; width: 100%; }
 
 /* Use tables for layout (wkhtmltopdf handles tables better than float) */
-.layout-table { width: 100%%; border-collapse: collapse; }
+.layout-table { width: 100%; border-collapse: collapse; }
 .layout-table td { padding: 6px 10px; vertical-align: middle; }
 
 .hdr-row td { border-bottom: 1px solid #000; font-weight: bold; }
@@ -653,15 +653,15 @@ body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; padding: 0; c
 .bundle-name { font-size: 13px; font-weight: bold; }
 
 /* Items Table */
-.items-table { width: 100%%; border-collapse: collapse; table-layout: fixed; }
-.items-table col.c-sn { width: 5%%; }
-.items-table col.c-desc { width: 35%%; }
-.items-table col.c-qty { width: 6%%; }
-.items-table col.c-unit { width: 6%%; }
-.items-table col.c-mrp { width: 10%%; }
-.items-table col.c-disc { width: 7%%; }
-.items-table col.c-discamt { width: 10%%; }
-.items-table col.c-amt { width: 11%%; }
+.items-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.items-table col.c-sn { width: 5%; }
+.items-table col.c-desc { width: 35%; }
+.items-table col.c-qty { width: 6%; }
+.items-table col.c-unit { width: 6%; }
+.items-table col.c-mrp { width: 10%; }
+.items-table col.c-disc { width: 7%; }
+.items-table col.c-discamt { width: 10%; }
+.items-table col.c-amt { width: 11%; }
 
 .items-table th { border: 1px solid #000; padding: 5px 4px; font-size: 10px; font-weight: bold; text-align: center; background: #f0f0f0; }
 .items-table td { border: 1px solid #ddd; border-left: 1px solid #000; border-right: 1px solid #000; padding: 3px 5px; font-size: 10px; }
@@ -689,9 +689,9 @@ tr.na-row td { color: #999; }
 
 	# Header row
 	html += '<table class="layout-table"><tr class="hdr-row">'
-	html += '<td style="width:30%%;text-align:left;font-size:10px;">GSTIN: ' + gstin + '</td>'
-	html += '<td style="width:40%%;text-align:center;font-size:12px;">PRODUCT BUNDLE — PRICE LIST</td>'
-	html += '<td style="width:30%%;text-align:right;font-size:10px;">ESTD: 1960</td></tr></table>'
+	html += '<td style="width:30%;text-align:left;font-size:10px;">GSTIN: ' + gstin + '</td>'
+	html += '<td style="width:40%;text-align:center;font-size:12px;">PRODUCT BUNDLE — PRICE LIST</td>'
+	html += '<td style="width:30%;text-align:right;font-size:10px;">ESTD: 1960</td></tr></table>'
 
 	# Company
 	html += '<div class="company-section">'
@@ -700,8 +700,8 @@ tr.na-row td { color: #999; }
 
 	# Info row
 	html += '<table class="layout-table"><tr class="info-row">'
-	html += '<td style="width:60%%;"><span class="bundle-name">Bundle: ' + desc + '</span></td>'
-	html += '<td style="width:40%%;text-align:right;">Date: ' + today_str + ' | Items: ' + str(len(bundle.items)) + '</td></tr></table>'
+	html += '<td style="width:60%;"><span class="bundle-name">Bundle: ' + desc + '</span></td>'
+	html += '<td style="width:40%;text-align:right;">Date: ' + today_str + ' | Items: ' + str(len(bundle.items)) + '</td></tr></table>'
 
 	# Items table
 	html += '<table class="items-table"><colgroup>'
@@ -743,13 +743,13 @@ tr.na-row td { color: #999; }
 
 	# Total
 	html += '<table class="layout-table"><tr class="total-row">'
-	html += '<td style="width:50%%;">Total Quantity: ' + '{:.0f}'.format(total_qty) + '</td>'
-	html += '<td style="width:50%%;text-align:right;"><span class="grand-total">Total: ₹' + '{:,.2f}'.format(grand_total) + '</span></td></tr></table>'
+	html += '<td style="width:50%;">Total Quantity: ' + '{:.0f}'.format(total_qty) + '</td>'
+	html += '<td style="width:50%;text-align:right;"><span class="grand-total">Total: ₹' + '{:,.2f}'.format(grand_total) + '</span></td></tr></table>'
 
 	# Footer
 	html += '<table class="layout-table"><tr class="footer-row">'
-	html += '<td style="width:50%%;">Product Bundle: ' + bundle.name + '</td>'
-	html += '<td style="width:50%%;text-align:right;">For ' + (company_doc.company_name or company) + '</td></tr></table>'
+	html += '<td style="width:50%;">Product Bundle: ' + bundle.name + '</td>'
+	html += '<td style="width:50%;text-align:right;">For ' + (company_doc.company_name or company) + '</td></tr></table>'
 
 	html += '</div></body></html>'
 
