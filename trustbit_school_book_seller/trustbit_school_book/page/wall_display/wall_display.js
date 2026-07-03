@@ -16,14 +16,25 @@ frappe.pages["wall-display"].on_page_load = function (wrapper) {
 	page.$wall = $('<div class="wall-display"></div>').appendTo(page.body);
 
 	refresh_wall(page);
-	page._refresh_interval = setInterval(function () { refresh_wall(page); }, 30000);
+	// 8 min: each refresh fires 6 aggregate API calls — keep server load low during shop hours
+	page._refresh_interval = setInterval(function () { refresh_wall(page); }, 480000);
+	// clock stays live between data refreshes (client-side only, no server calls)
+	page._clock_interval = setInterval(function () { update_wall_clock(); }, 30000);
 };
 
 frappe.pages["wall-display"].on_page_hide = function () {
 	$(".navbar").show();
 	$("body").css("overflow", "").removeAttr("data-route");
 	if (this._refresh_interval) clearInterval(this._refresh_interval);
+	if (this._clock_interval) clearInterval(this._clock_interval);
 };
+
+function update_wall_clock() {
+	var now = new Date();
+	var time_str = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+	var date_str = now.toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+	$(".wall-datetime").text(date_str + " │ " + time_str);
+}
 
 function refresh_wall(page) {
 	var $w = page.$wall;
