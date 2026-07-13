@@ -6,6 +6,13 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.6.1] - 2026-07-13
+
+### Fixed
+- **Return Scanner non-barcode lookups no longer crash:** removed the stray `item_code = scan_result["item_code"]` reassignment after the fallback chain (`return_scanner_api.py`). Lookups by item code, exact item name, and fuzzy item name now work as documented instead of raising `KeyError` (bug was open since the feature shipped in March; tracked in [1.4.0] Known Issues)
+
+---
+
 ## [1.6.0] - 2026-07-13
 
 ### New Features
@@ -52,7 +59,7 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 - **Fix Product Bundle "Not Available" items:** NA items are skipped when pulling bundle items, the async call is fixed, `custom_bundle_id` is set on inserted rows, and `product_bundle.js` was added to the Sales Order hooks
 
 ### Known Issues
-- **Return Scanner non-barcode lookups crash:** `return_scanner_api.py:186` re-reads `scan_result["item_code"]` after the fallback lookups, so any scan resolved via item code or item name (anything that is not a direct barcode hit) raises `KeyError` instead of returning the item. The README describes the fallback as working — it is not. Open bug, fix pending
+- **Return Scanner non-barcode lookups crash:** `return_scanner_api.py:186` re-reads `scan_result["item_code"]` after the fallback lookups, so any scan resolved via item code or item name (anything that is not a direct barcode hit) raises `KeyError` instead of returning the item. ~~Open bug, fix pending~~ **Fixed in [1.6.1] (2026-07-13)**
 
 ---
 

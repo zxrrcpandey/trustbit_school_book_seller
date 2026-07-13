@@ -382,7 +382,7 @@ A dialog-based tool for scanning barcodes or searching items when creating Sales
 
 **Lookup order:** Barcode (Item Barcode table) → Item Code (exact) → Item Name (exact) → Item Name (fuzzy LIKE)
 
-> **Known Issue (open bug):** the non-barcode fallback lookups currently **crash**. After the fallback chain, `return_scanner_api.py:186` re-assigns `item_code = scan_result["item_code"]`, which raises a `KeyError` whenever ERPNext's `scan_barcode` finds nothing (returns `{}`) and a fallback found the item. In practice only the Barcode (Item Barcode table) path works today — the lookup order above documents the intended behavior, not the current one.
+> **Note:** the non-barcode fallback lookups crashed with a `KeyError` from the feature's release (March 2026) until v1.6.1 (2026-07-13) — a stray reassignment re-read the empty barcode-scan result after a fallback had already found the item. The full lookup order above works as documented since v1.6.1.
 
 **Strict mode features:**
 - Only shows items from the original invoice

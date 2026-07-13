@@ -183,7 +183,6 @@ def scan_return_barcode(barcode, return_against=None, doctype=None):
 	if not item_code:
 		return {"success": False, "message": _("Item not found for: {0}").format(barcode)}
 
-	item_code = scan_result["item_code"]
 	item = frappe.get_doc("Item", item_code)
 
 	result = {

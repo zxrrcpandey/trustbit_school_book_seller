@@ -113,10 +113,10 @@ Custom ERPNext app for **bulk book item creation** for school book sellers. Allo
 
 ## Known Issues & Future Improvements
 
-### Return Scanner Fallback Lookup Crashes (Open Bug)
+### Return Scanner Fallback Lookup Crashes (FIXED 2026-07-13)
 **Severity:** High
-**Status:** Open — do not rely on non-barcode lookups
-**Description:** In `return_scanner_api.py` (line 186), after the fallback lookups (item_code / item_name / fuzzy LIKE) succeed, the code executes `item_code = scan_result["item_code"]` — but `scan_result` only contains `item_code` when the original barcode lookup matched. Every fallback path therefore crashes with a `KeyError`. Only exact barcode scans work; README documentation describing the fallback as working is incorrect.
+**Status:** Fixed in v1.6.1 — the full fallback chain (barcode → item code → item name → fuzzy LIKE) now works
+**Description:** In `return_scanner_api.py`, after the fallback lookups succeeded, the code re-executed `item_code = scan_result["item_code"]` — but `scan_result` only contains `item_code` when the original barcode lookup matched, so every fallback path crashed with a `KeyError`. Fixed by removing the stray reassignment.
 
 ### Book Creation Log Table (Unused)
 **Severity:** Low (Dead Feature)
