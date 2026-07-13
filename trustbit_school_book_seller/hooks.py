@@ -153,6 +153,11 @@ scheduler_events = {
 # 	"frappe.desk.doctype.event.event.get_events": "trustbit_school_book_seller.event.get_events"
 # }
 #
+# Purchase Order PDFs download as "<PO ID> - <Supplier Name>.pdf"
+override_whitelisted_methods = {
+	"frappe.utils.print_format.download_pdf": "trustbit_school_book_seller.api.download_pdf"
+}
+#
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
 # along with any modifications made in other Frappe apps

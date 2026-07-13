@@ -883,3 +883,67 @@ def get_product_bundle_items(product_bundle, qty_sets=1, price_list="", doctype=
 				item["rate"] = plr
 
 	return items
+
+
+def _sanitize_filename_part(value):
+	"""Make a string safe for a Content-Disposition filename.
+
+	frappe.utils.response.as_pdf() runs the filename through
+	.encode("utf-8").decode("unicode-escape"), which corrupts non-ASCII,
+	so keep ASCII printable characters only.
+	"""
+	if not value:
+		return ""
+	value = "".join(c if c.isascii() and c.isprintable() else " " for c in value)
+	for ch in '\\/:*?"<>|;':
+		value = value.replace(ch, " ")
+	return " ".join(value.split())[:60].strip()
+
+
+@frappe.whitelist(allow_guest=True)
+def download_pdf(
+	doctype,
+	name,
+	format=None,
+	doc=None,
+	no_letterhead=0,
+	language=None,
+	letterhead=None,
+	pdf_generator=None,
+):
+	"""Override of frappe.utils.print_format.download_pdf (registered in
+	hooks.py override_whitelisted_methods).
+
+	Purchase Order PDFs download as "<PO ID> - <Supplier Name>.pdf" instead
+	of "<PO ID>.pdf". Every other doctype keeps frappe's default filename.
+
+	The signature must mirror the original exactly: frappe.call filters
+	request args against this signature, and the original is
+	@frappe.whitelist(allow_guest=True) so this wrapper must be too
+	(document permission is still enforced inside via
+	validate_print_permission).
+	"""
+	from frappe.utils.print_format import download_pdf as _download_pdf
+
+	_download_pdf(
+		doctype,
+		name,
+		format=format,
+		doc=doc,
+		no_letterhead=no_letterhead,
+		language=language,
+		letterhead=letterhead,
+		pdf_generator=pdf_generator,
+	)
+
+	if doctype == "Purchase Order":
+		try:
+			supplier_part = _sanitize_filename_part(
+				frappe.db.get_value("Purchase Order", name, "supplier_name")
+			)
+			if supplier_part:
+				safe_name = name.replace(" ", "-").replace("/", "-")
+				frappe.local.response.filename = f"{safe_name} - {supplier_part}.pdf"
+		except Exception:
+			# cosmetic feature — never let it break the PDF download itself
+			pass
