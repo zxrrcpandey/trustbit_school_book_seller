@@ -1,5 +1,7 @@
 # Trustbit School Book Seller - Complete Project Work Log
 
+> **ADDENDUM (2026-07-13):** This log covers work through **2026-02-27** (last commit recorded here: `84d855a`) and is preserved as a historical record — the task entries below are accurate for that period but do NOT reflect current state. Work done after Feb 27, 2026 is documented in [CHANGELOG.md](CHANGELOG.md) and [README.md](README.md) instead, including: Product Bundle "Get Items" + batch pricing, **Privilege Card**, **PO Follow Up**, **Return Scanner**, **Multi Print / User Print Config**, owner/employee/wall-display **dashboards**, Product Bundle print formats, July 2026 performance work (wall display poller 30s → 8 min, backup cron rescheduling), and the July 13, 2026 Purchase Order PDF filename override ("\<PO ID\> - \<Supplier Name\>.pdf"). Note also: the version labels used in this log (1.3.0–1.5.0) were never applied to code metadata — `__init__.py`/`setup.py`/`hooks.py` still declare 1.0.0; CHANGELOG.md now tracks releases through 1.6.0 as documentation-only versions.
+
 ## Project Overview
 
 **App:** Trustbit School Book Seller (ERPNext custom app)
@@ -619,7 +621,7 @@ Created as a new Print Format (not modifying the original) so both are available
 
 ---
 
-## Complete Commit History
+## Complete Commit History (through 2026-02-27 — see addendum for later work)
 
 ```
 84d855a Fix: delete and recreate custom fields to change Data→Link type
@@ -668,7 +670,8 @@ b5d92df Update Quick Add class groupings to match school structure
 - **Company:** Khandelwal General Stores
 
 ## Installed Apps on Server
-frappe, erpnext, payments, webshop, india_compliance, hrms, posawesome, trustbit_advance_search, trustbit_barcode, trustbit_school_pro, trustbit_school_book_seller
+All 13 required apps (canonical list: `scripts/golden_apps.txt` in the KGS workspace):
+frappe, erpnext, payments, webshop, india_compliance, hrms, posawesome, trustbit_advance_search, trustbit_barcode, trustbit_school_pro, trustbit_school_book_seller, trustbit, trustbit_whatsapp_advance
 
 ---
 
@@ -682,4 +685,4 @@ frappe, erpnext, payments, webshop, india_compliance, hrms, posawesome, trustbit
 
 ## Pending / Recommended Actions
 
-_(None at this time — all tasks completed)_
+_(All tasks in this log — i.e., work through 2026-02-27 — were completed. This is NOT a statement of current project status; for everything done since, see the addendum note at the top of this file and CHANGELOG.md / README.md.)_

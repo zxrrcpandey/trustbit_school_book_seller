@@ -2,6 +2,71 @@
 
 All notable changes to the **Trustbit School Book Seller** app are documented here.
 
+> **Note:** In-code version metadata (`trustbit_school_book_seller/__init__.py`, `setup.py`) still reads `1.0.0` and has never been bumped. The version numbers below are release milestones tracked in this changelog only — syncing the code metadata is a known open issue.
+
+---
+
+## [1.6.0] - 2026-07-13
+
+### New Features
+- **Purchase Order PDF filenames:** PDF downloads of Purchase Orders are now named `<PO ID> - <Supplier Name>.pdf` instead of the generic default. Implemented by overriding `frappe.utils.print_format.download_pdf` via `override_whitelisted_methods` (`trustbit_school_book_seller.api.download_pdf`). Only Purchase Order filenames are rewritten — all other DocTypes keep Frappe's default naming. Supplier name is sanitized to printable ASCII because Frappe's PDF response helper mangles non-ASCII in `Content-Disposition`
+- **PO system-print-dialog filenames:** the browser print dialog (Ctrl+P / Print → Save as PDF) names files from the page title, not the download header, so page titles are now set to `<PO ID> - <Supplier Name>` on both the desk print page (`po_print_title.js` via `app_include_js`) and `/printview` (via `update_website_context` hook)
+
+### Performance
+- **Wall Display polling reduced from 30s to 8 minutes:** the 30-second refresh fired 6 aggregate API calls per tick, 24/7 — roughly 8,700 requests/day (~37% of all server traffic) on the 1-core production server. The clock now updates client-side between refreshes so the display stays live
+
+### Known Limitations (accepted)
+- Bulk PDF download from the Purchase Order list view still produces a single merged `Purchase-Order.pdf`
+- Print Format Builder (Beta) formats render via a different path (weasyprint) and bypass the filename override
+
+### Notes
+- The production DB backup cron was rescheduled in early July (09:00 / 22:00 IST, niced, DB-only) to keep heavy jobs out of shop hours — this is a server-side change, not part of this app
+
+---
+
+## [1.5.0] - 2026-04-10
+
+### New Features
+- **Privilege Card system:** discount cards for students, parents, and teachers. New DocTypes: Privilege Card Type (master), Privilege Card (barcode, usage tracking, auto-expiry), Privilege Card Usage Log (child table). Custom fields on Sales Order/Sales Invoice for card selection and discount display. "Apply Privilege Card" button with barcode scan support, server-side card validation and usage logging on submit, daily scheduler to auto-expire cards, usage report with chart, and a printable card format. Follow-up fixes: discount applied via `before_validate` hook with item rate recalculation, and `discount_percent` made non-mandatory
+- **Multi Print Setting (Sales Invoice auto-printing):** auto-print Sales Invoices on submit via QZ Tray, configured in a Multi Print Setting single DocType with a Multi Print Format child table (print format + printer + copies). Realtime-based multi-print works from POS Awesome as well as standard forms, with a default-fallback toggle, trigger timing setting, configurable paper size per print format, and iframe-based print preview. Adds the 80MM Token print format for Sales Invoice thermal receipts
+- **User Print Config:** per-user printer configuration with QZ Tray printer detection and availability checking, plus print preview
+- **Dashboards:** three new dashboards — Owner (`/app/owner-dashboard`), Employee, and Wall Display — backed by `dashboard_api.py` with 9 whitelisted endpoints (KPIs, bundle stock report, short items, PO status, employee performance, loose sales, revenue trend, payment breakdown, recent invoices). Adds `custom_sell_goal` field on Product Bundle. Wall Display is a fullscreen dark-theme view for the shop TV
+- **Product Bundle printing:** Print button on the Product Bundle form plus Bulk Print in List View, with wkhtmltopdf-compatible PDF layout
+
+### Bug Fixes
+- **Fix duplicate prints from POS:** realtime multi-print is skipped when Fast Print already handled the invoice, and matching uses `doc.owner` instead of `session.user` so prints fire correctly from POS submissions
+- **Fix 80MM receipt blank space and A4 shrinking:** receipts print via QZ Tray at true 80mm height with the Frappe HTML wrapper stripped; A4 formats use browser print so content is no longer scaled down
+
+---
+
+## [1.4.0] - 2026-03-29
+
+### New Features
+- **PO Follow Up:** new DocType for the Purchase Manager to track supplier follow-ups on Purchase Orders — per-item delivery tracking, summary fields on the PO form, automatic reminders via scheduler, and a filterable report with chart
+- **Return Scanner:** barcode-driven scanning page for building Sales/Purchase Returns. Strict mode pulls rate and qty from the original invoice; also intended to support lookup by item code and item name for items without barcodes (see Known Issues below)
+- **Product Bundle rate/discount/account fetching:** when pulling bundle items into PO/SO, rates are fetched with a single batched Item Price query instead of one server call per item; discounts come from the Item UOM Discount child table (same source as POS Awesome); income/expense accounts fall back to Company defaults when Item Default is empty; server-side `fill_missing_item_defaults` runs on `before_validate`
+- **Advanced Search for Product Bundle:** advanced item search in the bundle selection dialog and on the Product Bundle form (Ctrl+Q quick add, Ctrl+B)
+
+### Bug Fixes
+- **Fix duplicate Item Price entries:** when multiple Item Price rows exist for an item, use the latest (`order_by modified desc`)
+- **Fix Product Bundle "Not Available" items:** NA items are skipped when pulling bundle items, the async call is fixed, `custom_bundle_id` is set on inserted rows, and `product_bundle.js` was added to the Sales Order hooks
+
+### Known Issues
+- **Return Scanner non-barcode lookups crash:** `return_scanner_api.py:186` re-reads `scan_result["item_code"]` after the fallback lookups, so any scan resolved via item code or item name (anything that is not a direct barcode hit) raises `KeyError` instead of returning the item. The README describes the fallback as working — it is not. Open bug, fix pending
+
+---
+
+## [1.3.0] - 2026-02-28
+
+### New Features
+- **Get Items from Product Bundle:** "Get Items from Product Bundle" button on Sales Order, Sales Invoice, Purchase Order, Purchase Invoice, and Material Request — select a bundle and its child items are appended to the item table. The dialog previews the bundle's items and shows the parent item name and description
+- **School Name field on SO/PO/SI:** new `custom_school_name` field on Sales Order, Purchase Order, and Sales Invoice, plus the KGS Purchase Order print format and a `setup_school_fields` API for remote deployment. Initially added as a Data field, then converted to a Link to the School master — Frappe forbids fieldtype changes on save, so the old Data fields are deleted and recreated as Link, with upgrade logic in `setup_school_fields()` for production
+- **Transport Name field on Purchase Order** plus Remark field rename, and KGS Purchase Order print format enhancements: Rate and Amount columns, purchase manager contact info in the header, company-standard footer layout with reduced spacing
+
+### Bug Fixes
+- **Fix Brand field hidden by book_sample_section:** repaired the Item field chain and re-exported fixtures; also added missing custom fields to the `custom_field.json` fixture
+- **Fix PO print format crash on missing supplier address:** `s_addr` was undefined when the supplier had no address; the format is now hardened against missing data generally
+
 ---
 
 ## [1.2.0] - 2026-02-26

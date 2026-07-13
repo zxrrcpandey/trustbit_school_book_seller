@@ -20,6 +20,7 @@ A custom ERPNext application for school book sellers to manage bulk book item cr
   - [Privilege Card (23-25)](#23-privilege-card-system)
   - [PO Follow Up (26-28)](#26-po-follow-up-tracking)
   - [Return Scanner (29)](#29-return-scanner-for-salespurchase-returns)
+  - [PO PDF Filenames (30)](#30-purchase-order-pdf-filenames-july-13-2026)
 - [DocTypes](#doctypes)
 - [Reports](#reports)
 - [Custom Fields on Item](#custom-fields-on-item)
@@ -69,7 +70,7 @@ Quickly populate class rows using predefined groups:
 
 | Button | Classes Added |
 |--------|-------------|
-| **All Classes** | Nursery, LKG, UKG, Class 1-12 (15 total) |
+| **All Classes** | Every enabled Class Master record (43 with the shipped fixtures — see [Pre-loaded Master Data](#pre-loaded-master-data)) |
 | **Pre-Primary** | Nursery, LKG, UKG |
 | **Primary (1-5)** | Class 1, Class 2, Class 3, Class 4, Class 5 |
 | **Middle (6-8)** | Class 6, Class 7, Class 8 |
@@ -184,7 +185,7 @@ Custom A4 print formats for Sales Invoices that group items by Item Group, with 
 - **UPI QR code** — generates a scannable QR code for UPI payment with the correct displayed total
 - **Amount in words** — recalculated from the displayed total
 
-All three are stored as Print Format DocType records on the server (not in app fixtures). Source HTML is in the `Print Format/` directory.
+All three are stored as Print Format DocType records on the server (not in app fixtures). Source HTML is kept **outside this repo**, in the parent KGS workspace's `Print Format/` directory, as `SchoolProductBundleV1.html`, `SchoolProductBundleT2.html`, and `SchoolProductBundleT3.html` (the filenames omit the "A4" used in the DocType record names).
 
 ### 16. Advanced Search on Product Bundle Form
 The Product Bundle form includes **Ctrl+Q Quick Add** and **Ctrl+B Barcode Scan** for rapidly adding component items — the same advanced search experience as `trustbit_advance_search`.
@@ -381,11 +382,25 @@ A dialog-based tool for scanning barcodes or searching items when creating Sales
 
 **Lookup order:** Barcode (Item Barcode table) → Item Code (exact) → Item Name (exact) → Item Name (fuzzy LIKE)
 
+> **Known Issue (open bug):** the non-barcode fallback lookups currently **crash**. After the fallback chain, `return_scanner_api.py:186` re-assigns `item_code = scan_result["item_code"]`, which raises a `KeyError` whenever ERPNext's `scan_barcode` finds nothing (returns `{}`) and a fallback found the item. In practice only the Barcode (Item Barcode table) path works today — the lookup order above documents the intended behavior, not the current one.
+
 **Strict mode features:**
 - Only shows items from the original invoice
 - Calculates already-returned qty from submitted return invoices
 - Caps return qty at remaining returnable amount
 - Uses rates from the original invoice
+
+### 30. Purchase Order PDF Filenames (July 13, 2026)
+
+Purchase Order PDFs download as **`<PO ID> - <Supplier Name>.pdf`** instead of Frappe's default `<PO ID>.pdf`, so a folder of downloaded POs is identifiable by supplier at a glance. All other doctypes keep the default filename.
+
+**How it works:**
+- `override_whitelisted_methods` in `hooks.py` routes `frappe.utils.print_format.download_pdf` to `trustbit_school_book_seller.api.download_pdf` — a wrapper that calls Frappe's original and then rewrites `frappe.local.response.filename` for Purchase Orders. The wrapper mirrors the original's signature and `allow_guest=True` whitelisting (document permission is still enforced inside via `validate_print_permission`), and the filename rewrite is wrapped in try/except so it can never break the PDF download itself
+- **System print dialog flows** (browser "Save as PDF") are covered via page titles, since browsers suggest the page title as the filename: `po_print_title.js` (loaded globally via `app_include_js`) retitles the desk print page, and the `update_website_context` hook (`api.update_website_context`) titles the `/printview` page — both as `<PO ID> - <Supplier Name>`
+
+**Accepted gaps (known, by design):**
+- Bulk PDF from the Purchase Order list view still downloads as a merged `Purchase-Order.pdf`
+- Print Format Builder "Beta" formats would bypass the override (they route through weasyprint)
 
 ---
 
@@ -404,6 +419,7 @@ A dialog-based tool for scanning barcodes or searching items when creating Sales
 | **User Print Config** | Master | By `user` (unique) | Per-user printer mapping — overrides global Multi Print Setting |
 | **Privilege Card Type** | Master | By `card_type_name` | Card categories (Student, Parent, Teacher) with discount % |
 | **Privilege Card** | Master | Auto | Issued to customer, links card type, expiry date, active/expired status |
+| **Privilege Card Usage Log** | Master | Auto | One record per privilege-card discount application (invoice, amount, date) |
 | **PO Follow Up** | Master | `PO-FU-.#####` | Per-PO follow-up log: contact, transport, status, remarks |
 | **PO Follow Up Item** | Child Table | — | Per-item tracking: ordered qty, expected qty, delivery date, status |
 | **Return Scanner Settings** | Single (Settings) | — | Return scanner config: mode (Strict/Free/Hybrid), sounds, qty limits |
@@ -496,12 +512,14 @@ The app adds 17 custom fields to the standard ERPNext **Item** doctype:
 | Sales Invoice | `custom_privilege_card` | Link | Privilege Card |
 | Sales Invoice | `custom_privilege_card_discount` | Percent (read-only) | — |
 
+> **Note:** `hooks.py` also lists a **33rd** exported custom field — `Product Bundle-custom_sell_goal` (Int, "Sell Goal": target number of sets to sell this season, created by `install.py` and used by the dashboard APIs). It is not yet present in `fixtures/custom_field.json` (currently 32 records); the next `export-fixtures` run will add it and bump the fixture count to 33.
+
 **School Name Propagation:**
 - Sales Order → Set School Name (linked to School master)
 - "PO (Supplier Wise)" button → School Name copied to Purchase Order
 - "Make Sales Invoice" → School Name copied to Sales Invoice (via `before_save` hook)
 
-> **Dependency:** School Name fields require the `trustbit_school_pro` app (provides the `School` DocType). If not installed, these fields are created as Data type instead of Link.
+> **Dependency:** School Name fields require the `trustbit_school_pro` app (provides the `School` DocType). If not installed, these fields are created as Data type instead of Link. The Item field `custom_class_grades` (Table MultiSelect) likewise depends on `trustbit_school_pro`, which provides the **Item Class Grade** DocType — importing `custom_field.json` on a bench without it will fail on that field.
 
 **PO Follow Up Summary:** The 6 fields on Purchase Order (section + column break + 4 data fields) are auto-updated whenever a PO Follow Up is saved or deleted. They provide a quick-glance view of follow-up activity without opening the follow-up records.
 
@@ -509,7 +527,9 @@ The app adds 17 custom fields to the standard ERPNext **Item** doctype:
 
 ## Pre-loaded Master Data
 
-### Classes (15)
+> **Note:** the fixtures currently carry **43 Class Master** and **46 Subject** records — KGS production data (entries like `1`–`12`, `Pre`, `9 & 10`, `Book Set`, `EVS`, `Cursive Handwriting`) was exported into the fixtures on top of the original canonical set. A fresh install therefore pre-loads all 43 classes and 46 subjects, not just the canonical records tabled below.
+
+### Classes (canonical 15 — fixtures carry 43)
 
 | Class | Short Code | Sort Order |
 |-------|-----------|------------|
@@ -529,7 +549,7 @@ The app adds 17 custom fields to the standard ERPNext **Item** doctype:
 | Class 11 | C11 | 14 |
 | Class 12 | C12 | 15 |
 
-### Subjects (20)
+### Subjects (canonical 20 — fixtures carry 46)
 
 | Subject | Short Code | Subject | Short Code |
 |---------|-----------|---------|-----------|
@@ -579,8 +599,8 @@ sudo supervisorctl restart all
 ### Verify Installation
 
 1. Search **"Publication"** — should open the doctype
-2. Search **"Subject"** — should show 20 pre-loaded subjects
-3. Search **"Class Master"** — should show 15 pre-loaded classes
+2. Search **"Subject"** — should show 46 pre-loaded subjects (fixtures include exported production data)
+3. Search **"Class Master"** — should show 43 pre-loaded classes (fixtures include exported production data)
 4. Search **"Book Item Creator"** — should open with Quick Add buttons
 5. Search **"School Book Seller"** — workspace should appear in sidebar
 
@@ -686,6 +706,31 @@ All whitelisted API methods are at:
 | `get_followup_summary` | `purchase_order` | Returns all follow-ups for a PO with status and dates |
 | `create_followup_from_po` | `purchase_order` | Creates a pre-filled PO Follow Up with all PO items, returns name for routing |
 
+**Return Scanner API** (`trustbit_school_book_seller.return_scanner_api`):
+
+| Method | Arguments | Description |
+|--------|-----------|-------------|
+| `get_return_scanner_settings` | — | Returns Return Scanner Settings (mode, sounds, qty/amount limits) with sane defaults |
+| `get_original_invoice_items` | `return_against`, `doctype` | Items from the original invoice with already-returned quantities calculated (Strict mode) |
+| `scan_return_barcode` | `barcode`, `return_against` (optional), `doctype` (optional) | Looks up an item by barcode; in strict mode also returns available qty from the original invoice. **Known Issue:** the non-barcode fallback lookups crash — see [feature 29](#29-return-scanner-for-salespurchase-returns) |
+| `search_return_items` | `query`, `return_against` (optional), `doctype` (optional) | Item search for the return dialog — original-invoice items only in strict mode, all items in free mode |
+
+**Dashboard API** (`trustbit_school_book_seller.dashboard_api`) — 11 whitelisted methods powering the Employee Dashboard, Owner Dashboard, and Wall Display desk pages:
+
+| Method | Arguments | Description |
+|--------|-----------|-------------|
+| `get_dashboard_kpis` | `from_date`, `to_date`, `user` (all optional) | Key metrics: revenue, orders, bundles sold, loose sales |
+| `get_bundle_stock_report` | — | Sellable sets per Product Bundle based on component stock |
+| `get_short_items` | — | Items where stock is less than total demand across bundles with Sell Goals |
+| `get_po_status` | — | Purchase Order status breakdown: pending, stuck, on the way, received |
+| `get_employee_performance` | `date` (optional) | Per-employee sales performance for a date |
+| `get_loose_sales` | `date` (optional) | Items sold outside bundles for a date |
+| `get_revenue_trend` | `days` (default 7) | Daily revenue for the last N days |
+| `get_payment_breakdown` | `date` (optional) | Payment method breakdown for a date |
+| `get_recent_invoices` | `limit` (default 10), `user` (optional) | Recent Sales Invoices for the invoice ticker/list |
+| `get_bundle_print_html` | `product_bundle` | KGS School Book V5-style print HTML for a Product Bundle (Standard Selling rates) |
+| `get_bundle_pdf` | `product_bundle` | PDF version of the Product Bundle price list |
+
 **Privilege Card API** (`trustbit_school_book_seller.api` + `trustbit_school_book_seller.privilege_card`):
 
 | Function | Trigger | Description |
@@ -771,7 +816,7 @@ sudo supervisorctl restart all
 | **Realtime Events** | `book_item_creation_progress`, `multi_print_invoice` |
 | **QZ Tray** | Required for multi-print (loaded globally by `trustbit_barcode` app) |
 | **Barcode Type** | Empty string (accepts any format) |
-| **Fixtures** | Subject, Class Master, Custom Field (32 fields), Print Format (KGS Purchase Order, 80MM Token). SchoolProductBundleA4V1/T2/T3 print formats are stored in server's Print Format DocType (not in fixtures). |
+| **Fixtures** | Subject (46 records), Class Master (43 records), Custom Field (32 in fixture; hooks list a 33rd, `Product Bundle-custom_sell_goal`, not yet exported), Print Format (KGS Purchase Order, 80MM Token). SchoolProductBundleA4V1/T2/T3 print formats are stored in server's Print Format DocType (not in fixtures). |
 | **Build System** | Flit (`flit_core >= 3.4, < 4`) |
 
 ### File Structure
@@ -793,11 +838,13 @@ trustbit_school_book_seller/
     ├── api.py                          # Product Bundle, search, multi-print & hook APIs
     ├── privilege_card.py               # Privilege card validation, usage logging, expiry
     ├── followup_api.py                 # PO Follow Up APIs + scheduler functions
+    ├── return_scanner_api.py           # Return Scanner APIs (settings, invoice items, scan, search)
+    ├── dashboard_api.py                # Dashboard APIs (11 whitelisted methods for the 3 desk pages)
     ├── modules.txt
     ├── patches.txt
     ├── fixtures/
-    │   ├── class_master.json           # 15 default classes
-    │   ├── subject.json                # 20 default subjects
+    │   ├── class_master.json           # 43 Class Master records (production data exported into fixtures)
+    │   ├── subject.json                # 46 Subject records (production data exported into fixtures)
     │   ├── custom_field.json           # 32 custom field definitions (Item, SO, PO, SI)
     │   └── print_format.json           # Print formats (KGS Purchase Order, 80MM Token)
     ├── public/js/
@@ -805,10 +852,13 @@ trustbit_school_book_seller/
     │   ├── product_bundle.js           # Get Items from Product Bundle (MR, SI, SO, PO, PI)
     │   ├── product_bundle_form.js      # Advanced Search on Product Bundle form (Ctrl+Q, Ctrl+B)
     │   ├── sales_invoice_print.js      # Multi Print realtime listener + manual reprint (global JS)
+    │   ├── po_print_title.js           # PO print page titles for "<PO ID> - <Supplier>" PDF filenames (global JS)
     │   ├── sales_order.js              # Sales Order custom buttons
     │   ├── user_print_config.js        # Printer detection & status for User Print Config
+    │   ├── multi_print_setting.js      # Multi Print Setting form logic
     │   ├── privilege_card_so_si.js     # Privilege card discount handling on SO/SI
-    │   └── purchase_order_followup.js  # PO Follow Up buttons + dashboard indicators
+    │   ├── purchase_order_followup.js  # PO Follow Up buttons + dashboard indicators
+    │   └── return_scanner.js           # Return Scanner dialog on SI/PI (Tools > Scan Return Items)
     └── trustbit_school_book/
         ├── doctype/
         │   ├── book_item_creator/      # Main transaction DocType
@@ -822,8 +872,14 @@ trustbit_school_book_seller/
         │   ├── class_master/           # Class/Grade master
         │   ├── privilege_card_type/    # Card categories with discount %
         │   ├── privilege_card/         # Issued cards with expiry
+        │   ├── privilege_card_usage_log/ # Usage log entries created on SO/SI submit
         │   ├── po_follow_up/           # PO Follow Up parent DocType
-        │   └── po_follow_up_item/      # PO Follow Up child table
+        │   ├── po_follow_up_item/      # PO Follow Up child table
+        │   └── return_scanner_settings/ # Return scanner config (Single DocType)
+        ├── page/
+        │   ├── employee_dashboard/     # Employee sales dashboard (desk page)
+        │   ├── owner_dashboard/        # Owner KPI dashboard (desk page)
+        │   └── wall_display/           # Wall display dashboard (desk page)
         ├── report/
         │   ├── book_creation_summary/  # Summary report
         │   ├── book_items_report/      # Items report
