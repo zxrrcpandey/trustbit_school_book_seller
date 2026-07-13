@@ -14,7 +14,10 @@ required_apps = ["frappe", "erpnext"]
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/trustbit_school_book_seller/css/trustbit_school_book_seller.css"
-app_include_js = "/assets/trustbit_school_book_seller/js/sales_invoice_print.js"
+app_include_js = [
+	"/assets/trustbit_school_book_seller/js/sales_invoice_print.js",
+	"/assets/trustbit_school_book_seller/js/po_print_title.js",
+]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/trustbit_school_book_seller/css/trustbit_school_book_seller.css"
@@ -157,6 +160,10 @@ scheduler_events = {
 override_whitelisted_methods = {
 	"frappe.utils.print_format.download_pdf": "trustbit_school_book_seller.api.download_pdf"
 }
+
+# Purchase Order /printview page titled "<PO ID> - <Supplier Name>" so
+# browser print -> Save as PDF suggests that filename
+update_website_context = "trustbit_school_book_seller.api.update_website_context"
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

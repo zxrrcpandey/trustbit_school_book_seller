@@ -947,3 +947,29 @@ def download_pdf(
 		except Exception:
 			# cosmetic feature — never let it break the PDF download itself
 			pass
+
+
+def update_website_context(context):
+	"""hooks.update_website_context: give the /printview page of a
+	Purchase Order the title "<PO ID> - <Supplier Name>".
+
+	Browser print (trigger_print / Ctrl+P -> Save as PDF) suggests the
+	page title as the filename; frappe's printview titles the page from
+	the doctype's title_field (supplier only, no PO ID).
+	"""
+	try:
+		path = (getattr(frappe.local, "path", "") or "").strip("/")
+		if (
+			path == "printview"
+			and frappe.form_dict.get("doctype") == "Purchase Order"
+			and frappe.form_dict.get("name")
+		):
+			name = frappe.form_dict.get("name")
+			supplier_part = _sanitize_filename_part(
+				frappe.db.get_value("Purchase Order", name, "supplier_name")
+			)
+			if supplier_part:
+				context["title"] = f"{name} - {supplier_part}"
+	except Exception:
+		# cosmetic — never break website page rendering
+		pass
