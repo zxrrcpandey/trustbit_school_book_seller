@@ -1,8 +1,18 @@
-name: Deploy to Production (kgs.trustbit.cloud)
+name: Deploy to Production (splashbox.in) — MANUAL ONLY
 
+# The push trigger is deliberately REMOVED.
+#
+# This workflow SSHes to `secrets.SERVER_HOST` and runs `bench backup`,
+# `bench migrate`, `bench build` and `supervisorctl restart all`. On the push
+# trigger, merging any documentation typo into `main` restarted production
+# services — and it still named the decommissioned host `kgs.trustbit.cloud`,
+# so it would either deploy to a dead box or run a migrate for a site that does
+# not exist on the live one.
+#
+# Production also trades 10:30-19:30 IST on a 1-core server, and CLAUDE.md
+# forbids backups, migrates, builds and restarts inside that window — which an
+# automatic trigger cannot know about. Run it by hand, outside shop hours.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -19,7 +29,7 @@ jobs:
           script: |
             set -e
             BENCH_PATH="/home/frappe_user/frappe-bench"
-            SITE="kgs.trustbit.cloud"
+            SITE="splashbox.in"
             APP="trustbit_school_book_seller"
             BACKUP_DIR="$BENCH_PATH/sites/$SITE/private/backups"
             TIMESTAMP=$(date +%Y%m%d_%H%M%S)

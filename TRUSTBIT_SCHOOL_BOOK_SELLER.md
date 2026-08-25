@@ -4,7 +4,7 @@
 Custom ERPNext app for **bulk book item creation** for school book sellers. Allows creating multiple Items (one per class) from a single form, with automatic Price List entries, Stock Entries (opening stock), and barcode assignment. Since March 2026 the app has grown to also cover Privilege Cards, PO Follow Up, Return Scanner, Multi Print, Product Bundle helpers, and desk dashboards.
 
 **GitHub:** https://github.com/zxrrcpandey/trustbit_school_book_seller
-**Production:** kgs.trustbit.cloud
+**Production:** splashbox.in (200.234.38.57) since 2026-08-23 — the old `kgs.trustbit.cloud` box is parked and being deleted; never deploy to it
 **Version:** 1.0.0 (code metadata — `__init__.py`, `setup.py`, `hooks.py` all declare 1.0.0; CHANGELOG.md documents releases through 1.6.0 as documentation-only versions — the bumps were never applied to the code, so `bench version` reports 1.0.0)
 
 ---

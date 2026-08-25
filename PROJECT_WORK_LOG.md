@@ -6,7 +6,7 @@
 
 **App:** Trustbit School Book Seller (ERPNext custom app)
 **GitHub:** https://github.com/zxrrcpandey/trustbit_school_book_seller
-**Production:** kgs.trustbit.cloud (82.25.105.136)
+**Production (at the time):** kgs.trustbit.cloud (82.25.105.136) — **since 2026-08-23 production is splashbox.in / 200.234.38.57; the old box is parked and being deleted**
 **Work Period:** February 2026
 **Starting Version:** 1.0.0 | **Final Version:** 1.5.0
 
@@ -660,8 +660,12 @@ b5d92df Update Quick Add class groupings to match school structure
 
 ## Production Server Details
 
-- **Site:** kgs.trustbit.cloud
-- **Server:** 82.25.105.136 (Ubuntu 22.04)
+> ⚠️ **SUPERSEDED 2026-08-23.** Production is now **splashbox.in / 200.234.38.57**. The host and IP below
+> describe the server as it was during this February 2026 work; that box is parked and being deleted —
+> **do not run anything against it.** Bench path, user, git remote and both Redis ports are unchanged.
+
+- **Site:** kgs.trustbit.cloud *(historical — now splashbox.in)*
+- **Server:** 82.25.105.136 (Ubuntu 22.04) *(historical — now 200.234.38.57)*
 - **Bench path:** `/home/frappe_user/frappe-bench`
 - **User:** frappe_user
 - **Git remote on server:** `upstream` (not `origin`)

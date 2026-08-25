@@ -2,7 +2,8 @@
 
 A custom ERPNext application for school book sellers to manage bulk book item creation with class-wise pricing, ISBN tracking, and automated stock management.
 
-**Production:** kgs.trustbit.cloud
+**Production:** splashbox.in (200.234.38.57) — moved 2026-08-23. The former host `kgs.trustbit.cloud`
+(82.25.105.136) is parked and is being deleted; **never deploy to it.** See `KGS/scripts/SERVER_MIGRATION_2026-08.md`.
 **License:** MIT
 **Compatibility:** ERPNext v14 / v15
 **Python:** >= 3.10
@@ -785,23 +786,30 @@ The app includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that
 
 ### Manual Deployment
 
+Production is **splashbox.in on 200.234.38.57** (since 2026-08-23). Outside shop hours only
+(10:30–19:30 IST). The server git remote is `upstream`, not `origin`.
+
 ```bash
-ssh user@your-server
+ssh root@200.234.38.57              # splashbox.in
 cd /home/frappe_user/frappe-bench
 
 # Always backup first!
-su - frappe_user -c "bench --site kgs.trustbit.cloud backup --with-files"
+su - frappe_user -c "cd /home/frappe_user/frappe-bench && bench --site splashbox.in backup --with-files"
 
 # Update code
 cd apps/trustbit_school_book_seller
-git pull origin main
+git pull upstream main
 
 # Apply changes
-su - frappe_user -c "cd /home/frappe_user/frappe-bench && bench --site kgs.trustbit.cloud migrate"
+su - frappe_user -c "cd /home/frappe_user/frappe-bench && bench --site splashbox.in migrate"
 su - frappe_user -c "cd /home/frappe_user/frappe-bench && bench build --app trustbit_school_book_seller"
-su - frappe_user -c "cd /home/frappe_user/frappe-bench && bench --site kgs.trustbit.cloud clear-cache"
+su - frappe_user -c "cd /home/frappe_user/frappe-bench && bench --site splashbox.in clear-cache"
 sudo supervisorctl restart all
 ```
+
+> ⚠️ **`.github/workflows/deploy.yml` in this repo still targets the OLD, decommissioned server**
+> (`SITE="kgs.trustbit.cloud"` and a `secrets.SERVER_HOST` of 82.25.105.136). **Do not push to `main`**
+> until that workflow is corrected or disabled — a push would run `bench migrate` on the parked box.
 
 ---
 
