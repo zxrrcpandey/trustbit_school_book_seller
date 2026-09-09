@@ -262,5 +262,14 @@ fixtures = [
         "filters": [
             ["name", "in", ["KGS Purchase Order", "80MM Token"]]
         ]
+    },
+    {
+        # Name-filtered on purpose: the site has other Client Scripts
+        # (e.g. "Privilege Card SI Rate Fix") that are NOT owned by this app.
+        # Adding them here would make bench migrate overwrite the DB copy.
+        "doctype": "Client Script",
+        "filters": [
+            ["name", "in", ["Sales Invoice - Update Stock default for new invoices"]]
+        ]
     }
 ]

@@ -1,0 +1,13 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Client Script",
+  "dt": "Sales Invoice",
+  "enabled": 1,
+  "modified": "2026-09-09 12:08:40.842693",
+  "module": null,
+  "name": "Sales Invoice - Update Stock default for new invoices",
+  "script": "frappe.ui.form.on(\"Sales Invoice\", {\n\tonload(frm) {\n\t\t// Pre-tick \"Update Stock\" on a brand-new Sales Invoice typed on the desk\n\t\t// form. Runs once, on load of a new form only; saved invoices are never\n\t\t// touched and the user stays free to untick it.\n\t\t//\n\t\t// Matches actual practice: every non-POS, non-return invoice since\n\t\t// Mar 2026 was saved with Update Stock ticked.\n\t\tif (!frm.is_new()) return;\n\n\t\t// 1. Returns / credit notes mirror the invoice they came from — some\n\t\t//    legitimately carry Update Stock = 0, so never force them to 1.\n\t\tif (frm.doc.is_return) return;\n\n\t\t// 2. Amended documents inherit the original's value; leave it alone.\n\t\tif (frm.doc.amended_from) return;\n\n\t\t// 3. POS invoices: the server overwrites update_stock from the POS\n\t\t//    Profile (sales_invoice.py set_pos_fields), so don't fight it.\n\t\tif (frm.doc.is_pos) return;\n\n\t\t// 4. Invoices raised from a Delivery Note: the stock already left on the\n\t\t//    note. ERPNext rejects Update Stock here, and depends_on hides the\n\t\t//    checkbox, so a forced tick would be an error nobody can clear.\n\t\tconst from_delivery_note = (frm.doc.items || []).some(\n\t\t\t(i) => i.dn_detail || i.delivery_note\n\t\t);\n\t\tif (from_delivery_note) return;\n\n\t\tif (!frm.doc.update_stock) {\n\t\t\tfrm.set_value(\"update_stock\", 1);\n\t\t}\n\t},\n\n\trefresh(frm) {\n\t\t// Safety net for \"Get Items From > Delivery Note\" on a draft that\n\t\t// already has Update Stock ticked. Only ever turns the flag OFF — in a\n\t\t// state ERPNext would refuse to save anyway — and says why.\n\t\tif (frm.doc.docstatus !== 0 || !frm.doc.update_stock) return;\n\n\t\tconst from_delivery_note = (frm.doc.items || []).some(\n\t\t\t(i) => i.dn_detail || i.delivery_note\n\t\t);\n\t\tif (from_delivery_note) {\n\t\t\tfrm.set_value(\"update_stock\", 0);\n\t\t\tfrappe.show_alert(\n\t\t\t\t{\n\t\t\t\t\tmessage: __(\n\t\t\t\t\t\t\"Update Stock turned off — this stock has already left on the Delivery Note.\"\n\t\t\t\t\t),\n\t\t\t\t\tindicator: \"orange\",\n\t\t\t\t},\n\t\t\t\t7\n\t\t\t);\n\t\t}\n\t},\n});\n",
+  "view": "Form"
+ }
+]
