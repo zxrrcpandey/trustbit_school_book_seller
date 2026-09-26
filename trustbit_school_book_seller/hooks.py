@@ -34,7 +34,7 @@ doctype_js = {
     "Book Item Creator": "public/js/book_item_creator.js",
     "Sales Order": ["public/js/sales_order.js", "public/js/product_bundle.js", "public/js/privilege_card_so_si.js"],
     "Sales Invoice": ["public/js/product_bundle.js", "public/js/privilege_card_so_si.js", "public/js/return_scanner.js"],
-    "Purchase Order": ["public/js/product_bundle.js", "public/js/purchase_order_followup.js"],
+    "Purchase Order": ["public/js/product_bundle.js", "public/js/purchase_order_followup.js", "public/js/purchase_order_approval.js"],
     "Purchase Invoice": ["public/js/product_bundle.js", "public/js/return_scanner.js"],
     "Material Request": "public/js/product_bundle.js",
     "Product Bundle": "public/js/product_bundle_form.js",
@@ -127,6 +127,11 @@ doc_events = {
 	},
 	"Purchase Order": {
 		"before_validate": "trustbit_school_book_seller.api.fill_missing_item_defaults",
+		# Shop Owner approval (workflow "Purchase Order Approval") — see po_approval.py
+		"validate": "trustbit_school_book_seller.po_approval.clear_stale_rejection_reason",
+		"on_update": "trustbit_school_book_seller.po_approval.notify_on_state_change",
+		"before_submit": "trustbit_school_book_seller.po_approval.only_shop_owner",
+		"before_cancel": "trustbit_school_book_seller.po_approval.only_shop_owner",
 	},
 	"Purchase Invoice": {
 		"before_validate": "trustbit_school_book_seller.api.fill_missing_item_defaults",
@@ -253,7 +258,8 @@ fixtures = [
                 "Purchase Order-custom_column_break_followup",
                 "Purchase Order-custom_next_followup_date",
                 "Purchase Order-custom_total_followups",
-                "Product Bundle-custom_sell_goal"
+                "Product Bundle-custom_sell_goal",
+                "Purchase Order-custom_rejection_reason"
             ]]
         ]
     },
@@ -271,5 +277,18 @@ fixtures = [
         "filters": [
             ["name", "in", ["Sales Invoice - Update Stock default for new invoices"]]
         ]
-    }
+    },
+    # Purchase Order approval by the Shop Owners (po_approval.py). Re-importing a
+    # Role on migrate does NOT remove it from users (Has Role rows belong to User).
+    {"doctype": "Role", "filters": [["name", "in", ["Shop Owner"]]]},
+    {
+        "doctype": "Workflow State",
+        "filters": [["name", "in", ["Draft", "Pending Approval", "Approved", "Rejected", "Cancelled"]]]
+    },
+    {
+        "doctype": "Workflow Action Master",
+        "filters": [["name", "in", ["Send for Approval", "Approve", "Reject", "Cancel"]]]
+    },
+    {"doctype": "Email Template", "filters": [["name", "in", ["Purchase Order Approval Request"]]]},
+    {"doctype": "Workflow", "filters": [["name", "in", ["Purchase Order Approval"]]]}
 ]

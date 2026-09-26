@@ -1,0 +1,12 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Email Template",
+  "modified": "2026-09-26 18:30:00.000000",
+  "name": "Purchase Order Approval Request",
+  "response": null,
+  "response_html": "<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.6;\"><p>{{ frappe.get_fullname(owner) }} has sent a Purchase Order for your approval.</p><table style=\"border-collapse:collapse;background:#f8fafc;border:1px solid #e5e7eb;margin:8px 0 14px 0;\"><tr><td style=\"padding:6px 12px;font-weight:600;color:#374151;width:150px;\">Supplier</td><td style=\"padding:6px 12px;color:#111827;\">{{ supplier_name or supplier }}</td></tr><tr><td style=\"padding:6px 12px;font-weight:600;color:#374151;width:150px;\">PO Number</td><td style=\"padding:6px 12px;color:#111827;\">{{ name }}</td></tr><tr><td style=\"padding:6px 12px;font-weight:600;color:#374151;width:150px;\">PO Date</td><td style=\"padding:6px 12px;color:#111827;\">{{ frappe.utils.formatdate(transaction_date) }}</td></tr><tr><td style=\"padding:6px 12px;font-weight:600;color:#374151;width:150px;\">Required By</td><td style=\"padding:6px 12px;color:#111827;\">{{ frappe.utils.formatdate(schedule_date) }}</td></tr><tr><td style=\"padding:6px 12px;font-weight:600;color:#374151;width:150px;\">Items</td><td style=\"padding:6px 12px;color:#111827;\">{{ items|length }} lines, total qty {{ frappe.utils.flt(items|sum(attribute='qty'), 2) }}</td></tr><tr><td style=\"padding:6px 12px;font-weight:600;color:#374151;width:150px;\">Grand Total</td><td style=\"padding:6px 12px;color:#111827;\"><b>{{ frappe.utils.fmt_money(grand_total, currency=currency) }}</b></td></tr>{% if custom_school_name %}<tr><td style=\"padding:6px 12px;font-weight:600;color:#374151;width:150px;\">School</td><td style=\"padding:6px 12px;color:#111827;\">{{ custom_school_name }}</td></tr>{% endif %}{% if custom_remark %}<tr><td style=\"padding:6px 12px;font-weight:600;color:#374151;width:150px;\">Remark</td><td style=\"padding:6px 12px;color:#111827;\">{{ custom_remark }}</td></tr>{% endif %}</table><p>The Purchase Order is attached as a PDF. Click <b>Approve</b> below to approve it &mdash; it is submitted at once and emailed to the supplier.</p><p>To <b>reject</b> it, open it in ERPNext and click the red <b>Reject</b> button (a reason is required): <a href=\"{{ frappe.utils.get_url_to_form('Purchase Order', name) }}\">open {{ name }}</a>.</p></div>",
+  "subject": "Approve PO {{ name }}: {{ supplier_name or supplier }}, {{ frappe.utils.fmt_money(grand_total, currency=currency) }}",
+  "use_html": 1
+ }
+]
