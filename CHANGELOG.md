@@ -6,6 +6,13 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.6.2] - 2026-09-26
+
+### Fixed
+- **KGS Purchase Order print shows the right Purchase Manager mobile:** the number hardcoded in the header (since `1927dac`) was wrong — `8989434243` → `8989404242` (`fixtures/print_format.json`). It lived only in this template; no other print format, Letter Head, Company, Address or Contact on production carried it
+
+---
+
 ## [1.6.1] - 2026-07-13
 
 ### Fixed
