@@ -163,7 +163,11 @@ scheduler_events = {
 #
 # Purchase Order PDFs download as "<PO ID> - <Supplier Name>.pdf"
 override_whitelisted_methods = {
-	"frappe.utils.print_format.download_pdf": "trustbit_school_book_seller.api.download_pdf"
+	"frappe.utils.print_format.download_pdf": "trustbit_school_book_seller.api.download_pdf",
+	# One-tap Approve from the Shop Owners' PO approval email (po_approval.py); every
+	# other workflow email link falls through to frappe's own functions.
+	"frappe.workflow.doctype.workflow_action.workflow_action.apply_action": "trustbit_school_book_seller.po_approval.apply_action",
+	"frappe.workflow.doctype.workflow_action.workflow_action.confirm_action": "trustbit_school_book_seller.po_approval.confirm_action",
 }
 
 # Purchase Order /printview page titled "<PO ID> - <Supplier Name>" so

@@ -14,17 +14,32 @@ Shop Owners an Approve button. This module adds what the workflow cannot do:
 - a bell notification to the Shop Owners when a PO is sent for approval, and a
   bell + email to the creator when it is approved or rejected.
 - the approved PO is emailed to the supplier with its PDF.
+- the Approve button in the owners' email works without logging in (apply_action /
+  confirm_action below). frappe >= 15.1xx made the email's confirm step login-only,
+  and on this site a login means password + authenticator code with a 1-hour session.
 
 Every hook is a no-op unless this workflow is the active one on Purchase Order,
 so deactivating the workflow switches the whole feature off.
 """
 
 from email.utils import formataddr
+from urllib.parse import urlencode
 
 import frappe
 from frappe import _
 from frappe.model.workflow import apply_workflow, get_workflow_name
-from frappe.utils import escape_html, fmt_money, formatdate, get_fullname, get_url_to_form, validate_email_address
+from frappe.utils import (
+	add_days,
+	escape_html,
+	fmt_money,
+	formatdate,
+	get_datetime,
+	get_fullname,
+	get_url_to_form,
+	today,
+	validate_email_address,
+)
+from frappe.utils.verified_command import verify_request
 
 WORKFLOW = "Purchase Order Approval"
 SHOP_OWNER = "Shop Owner"
@@ -105,6 +120,110 @@ def reject_purchase_order(name, reason):
 	doc = apply_workflow(doc.as_dict(), "Reject")
 	doc.add_comment("Comment", _("Rejected: {0}").format(escape_html(reason)))
 	return doc.as_dict()
+
+
+# --------------------------------------------------------------------------
+# One-tap Approve from the owners' email (hooks: override_whitelisted_methods)
+# --------------------------------------------------------------------------
+
+
+def _one_tap(doctype, action, user):
+	"""A Shop Owner's Approve link for a Purchase Order. Anything else — other
+	doctypes, Reject/Cancel, other users — keeps frappe's own login-only flow."""
+	return (
+		doctype == "Purchase Order"
+		and action == "Approve"
+		and _approval_active()
+		and bool(user)
+		and bool(frappe.db.get_value("User", user, "enabled"))
+		and SHOP_OWNER in frappe.get_roles(user)
+	)
+
+
+@frappe.whitelist(allow_guest=True)
+def apply_action(action, doctype, docname, current_state, user=None, last_modified=None):
+	"""The page the email's Approve button opens. For a one-tap link its button
+	confirms directly (no login) and "View document" opens the CURRENT PO as a PDF
+	through a share key, so an owner can check a PO edited after the email."""
+	from frappe.workflow.doctype.workflow_action import workflow_action as wa
+
+	if not _one_tap(doctype, action, user):
+		return wa.apply_action(action, doctype, docname, current_state, user=user, last_modified=last_modified)
+	if not verify_request():
+		return
+
+	doc = frappe.get_doc(doctype, docname)
+	state = wa.get_doc_workflow_state(doc)
+	if state != current_state:
+		return wa.return_link_expired_page(doc, state)
+
+	key = doc.get_document_share_key(expires_on=add_days(today(), 7))
+	frappe.db.commit()  # a GET request is rolled back at the end, and the key must exist
+	frappe.respond_as_web_page(
+		title=None,
+		html=None,
+		indicator_color="blue",
+		template="confirm_workflow_action",
+		context={
+			"title": doc.name,
+			"doctype": doctype,
+			"docname": doc.name,
+			"action": action,
+			"action_link": wa.get_confirm_workflow_action_url(doc, action, user),
+			# edits made after the email are allowed; the page just says so
+			"alert_doc_change": bool(last_modified) and get_datetime(doc.modified) != get_datetime(last_modified),
+			"is_guest": False,  # button goes straight to confirm_action, which lets the owner through
+			"pdf_link": "/api/method/frappe.utils.print_format.download_pdf?"
+			+ urlencode(
+				{
+					"doctype": doctype,
+					"name": doc.name,
+					"format": doc.meta.default_print_format or "Standard",
+					"no_letterhead": 0,
+					"key": key,
+				}
+			),
+		},
+	)
+
+
+@frappe.whitelist(allow_guest=True)
+def confirm_action(doctype, docname, user, action):
+	"""Approve from a signed one-tap link without a login session, acting as the
+	Shop Owner named in the link (signature checked by verify_request)."""
+	from frappe.workflow.doctype.workflow_action import workflow_action as wa
+
+	if frappe.session.user != "Guest" or not _one_tap(doctype, action, user):
+		if frappe.session.user == "Guest":
+			raise frappe.PermissionError  # frappe's own confirm_action is login-only
+		return wa.confirm_action(doctype, docname, user, action)
+	if not verify_request():
+		return
+
+	frappe.set_user(user)
+	try:
+		doc = frappe.get_doc(doctype, docname)
+		state = wa.get_doc_workflow_state(doc)
+		if state != PENDING:
+			return wa.return_link_expired_page(doc, state)
+		try:
+			doc = apply_workflow(doc, action)
+		except Exception as e:
+			frappe.db.rollback()
+			frappe.log_error(f"Purchase Order email approval failed: {docname}")
+			frappe.db.commit()  # keep the Error Log: a GET request is rolled back at the end
+			frappe.respond_as_web_page(
+				_("Not approved"),
+				_("{0} could not be approved: {1}<br><br>Please open it in ERPNext.").format(
+					frappe.bold(docname), escape_html(frappe.utils.strip_html(str(e)))
+				),
+				indicator_color="red",
+			)
+			return
+		frappe.db.commit()
+		wa.return_success_page(doc)
+	finally:
+		frappe.set_user("Guest")
 
 
 # --------------------------------------------------------------------------
