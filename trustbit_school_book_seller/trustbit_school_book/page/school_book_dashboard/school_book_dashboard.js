@@ -88,13 +88,43 @@ class SchoolBookDashboard {
 				options: "Item Group",
 				default: "Books",
 			}),
+			// Autocomplete, not Link: a Link shows only the bundle's ID (its parent item code)
 			product_bundle: add({
 				fieldname: "product_bundle",
 				label: __("Product Bundle"),
-				fieldtype: "Link",
-				options: "Product Bundle",
+				fieldtype: "Autocomplete",
 			}),
 		};
+		this.setup_bundle_search(this.filters.product_bundle);
+	}
+
+	setup_bundle_search(control) {
+		// The dropdown shows the bundle's name ("RDPS 3 Book Set") with its code and item count
+		// underneath; the value stays the code. Every bundle fetched is kept, so a chosen one
+		// still maps back to its code after a later search.
+		const known = new Map();
+		const clean = (text) => String(text || "").replace(/[<>]/g, "");
+		const search = frappe.utils.debounce((text) => {
+			frappe
+				.xcall("trustbit_school_book_seller.api.search_product_bundles", { search_text: text || "", limit: 30 })
+				.then((bundles) => {
+					for (const b of bundles || []) {
+						known.set(b.name, {
+							value: b.name,
+							label: clean(b.item_name || b.name),
+							description: clean(`${b.name} · ${__("{0} items", [b.items_count])}`),
+						});
+					}
+					control.set_data([...known.values()]);
+					if (control.$input.is(":focus")) control.awesomplete.evaluate();
+				});
+		}, 250);
+		control.$input.on("input focus", () => search(control.$input.val()));
+	}
+
+	bundle_label() {
+		const control = this.filters.product_bundle;
+		return control.get_value() ? control.$input.val() || control.get_value() : "";
 	}
 
 	args() {
@@ -178,7 +208,7 @@ class SchoolBookDashboard {
 	hero_html(d) {
 		const t = d.totals;
 		const f = d.filters;
-		const scope = [d.school_label, f.item_group || __("All items"), f.product_bundle]
+		const scope = [d.school_label, f.item_group || __("All items"), f.product_bundle ? this.bundle_label() : ""]
 			.filter(Boolean)
 			.map(sbd_esc)
 			.join(" · ");
