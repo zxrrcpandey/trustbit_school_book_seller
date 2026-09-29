@@ -46,6 +46,14 @@ frappe.query_reports["School Book Sales Report"] = {
 			get_data: (txt) => frappe.db.get_link_options("Item", txt),
 		},
 		{
+			fieldname: "item_group",
+			label: __("Item Group"),
+			fieldtype: "MultiSelectList",
+			options: "Item Group",
+			// sub-groups are included; defaults to "Books" in onload below
+			get_data: (txt) => frappe.db.get_link_options("Item Group", txt),
+		},
+		{
 			fieldname: "school",
 			label: __("School (Customer Group)"),
 			fieldtype: "MultiSelectList",
@@ -66,6 +74,14 @@ frappe.query_reports["School Book Sales Report"] = {
 			default: 1,
 		},
 	],
+
+	onload(report) {
+		// Books only by default: bundles also hold copies and stationery. Set here because the
+		// report page applies `default` with set_input, which MultiSelectList ignores.
+		if (!(report.get_filter_value("item_group") || []).length) {
+			report.set_filter_value("item_group", ["Books"]);
+		}
+	},
 
 	formatter(value, row, column, data, default_formatter) {
 		// MRP is not added up in the total row (disable_total) and some items have no price:

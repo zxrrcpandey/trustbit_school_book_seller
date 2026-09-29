@@ -24,7 +24,7 @@ def execute(filters=None):
 
 	items = get_items(filters)
 	if not items:
-		return get_columns(filters, [], False), []
+		return get_columns(filters, [], False), [], _("No items match the selected Product Bundle / Item and Item Group.")
 
 	item_codes = [d.item_code for d in items]
 	sales = get_sales(filters, item_codes)
@@ -36,7 +36,7 @@ def execute(filters=None):
 
 
 def validate_filters(filters):
-	for key in ("product_bundle", "item_code", "school", "customer"):
+	for key in ("product_bundle", "item_code", "item_group", "school", "customer"):
 		filters[key] = as_list(filters.get(key))
 
 	if not filters.company:
@@ -59,7 +59,8 @@ def as_list(value):
 
 
 def get_items(filters):
-	"""Components of the selected Product Bundles plus the selected Items, by item code."""
+	"""Components of the selected Product Bundles plus the selected Items, by item code,
+	kept only if they sit in one of the selected Item Groups or their sub-groups."""
 	item_codes = set(filters.item_code)
 	if filters.product_bundle:
 		item_codes.update(
@@ -75,14 +76,24 @@ def get_items(filters):
 	if not item_codes:
 		return []
 
+	item_group_condition = ""
+	if filters.item_group:
+		item_group_condition = """
+			AND item_group IN (
+				SELECT child.name
+				FROM `tabItem Group` child
+				INNER JOIN `tabItem Group` selected ON child.lft >= selected.lft AND child.rgt <= selected.rgt
+				WHERE selected.name IN %(item_groups)s
+			)"""
+
 	return frappe.db.sql(
-		"""
+		f"""
 		SELECT name AS item_code, item_name, stock_uom
 		FROM `tabItem`
-		WHERE name IN %(items)s
+		WHERE name IN %(items)s {item_group_condition}
 		ORDER BY name
 		""",
-		{"items": tuple(item_codes)},
+		{"items": tuple(item_codes), "item_groups": tuple(filters.item_group)},
 		as_dict=True,
 	)
 
