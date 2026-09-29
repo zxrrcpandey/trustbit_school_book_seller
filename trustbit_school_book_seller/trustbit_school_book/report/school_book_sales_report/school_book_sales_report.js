@@ -66,4 +66,13 @@ frappe.query_reports["School Book Sales Report"] = {
 			default: 1,
 		},
 	],
+
+	formatter(value, row, column, data, default_formatter) {
+		// MRP is not added up in the total row (disable_total) and some items have no price:
+		// show those cells blank, not "₹ 0.00"
+		if (column.fieldname === "mrp" && (value === "" || value == null)) {
+			return "";
+		}
+		return default_formatter(value, row, column, data);
+	},
 };
