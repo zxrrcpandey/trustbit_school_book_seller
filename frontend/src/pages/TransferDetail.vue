@@ -9,6 +9,10 @@
         </div>
       </div>
 
+      <div v-if="recos.length" class="rounded-xl border-2 border-warn-text bg-warn-bg p-4 text-warn-text">
+        <div class="font-bold">Stock reconciled first</div>
+        <div v-for="r in recos" :key="r.name" class="tnum text-[14px]">{{ r.name }} — stock value change ₹{{ Number(r.value).toLocaleString("en-IN", { minimumFractionDigits: 2 }) }}</div>
+      </div>
       <div v-if="error" class="rounded-lg bg-danger-bg p-3 text-danger-text">{{ error }}</div>
       <div v-else-if="!doc" class="space-y-2"><div class="skeleton h-24" /><div class="skeleton h-40" /></div>
       <template v-else>
@@ -63,6 +67,9 @@ const props = defineProps({ name: { type: String, required: true } })
 const route = useRoute()
 const done = computed(() => route.query.done === "1")
 const already = computed(() => route.query.already === "1")
+const recos = computed(() =>
+  String(route.query.recos || "").split(",").filter(Boolean).map((x) => ({ name: x.split(":")[0], value: x.split(":")[1] || 0 }))
+)
 const doc = ref(null)
 const error = ref("")
 

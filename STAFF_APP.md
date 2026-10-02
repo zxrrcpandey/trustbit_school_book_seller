@@ -37,6 +37,30 @@ the 1-vCPU server, i.e. all of SBGD (~12,000 items ≈ 80 parts) ≈ 15–30 min
 ⚠ Don't use frappe.cache.get_value/set_value(expires) for state read back in the same request/job — a miss is cached
 in frappe.local and set_value with an expiry writes Redis only (bit us in the bulk tests).
 
+## Short stock → Stock Reconciliation (built 2026-10-03 — owner decisions; NOT deployed yet)
+When a transfer asks for more than the system holds in From, a **Stock Manager** (only) can fix it at review instead
+of being blocked (Stock Users still get the red "Only X in …" and must ask a manager):
+- Managers can scan/add items with **no stock at all** in From (school sets and sheets keep them as short lines);
+  zero-cost items stay refused for everyone. Short lines are amber, not red.
+- Review shows a red warning with the total stock-value change, and one card per short item: system qty, what the
+  transfer needs, **"Physically in <From> now"** (prefilled with the need), **rate for the extra** (prefilled: last
+  purchase rate → else current valuation → else must be typed; never 0; warning if > 50% from the last purchase
+  rate), **reason** (mandatory: Found extra stock / Count was wrong / Unit mistake / Purchase receipt not entered
+  (allowed, with a double-count caution) / Other + note), and the value change. **Reject** / **Accept**.
+- Count below the need → not blocked: that item's transfer is reduced to the count (one line in the stock unit);
+  count not above the system qty → no reconciliation, transfer reduced to what the system has.
+- Accept = one request, all or nothing (`create_transfer(..., recos=[{item_code, counted, rate, reason, note}])`):
+  Stock Reconciliation(s) of ≤ 100 rows (ERPNext queues > 100), posted now, Stock Adjustment account, then the
+  transfer. Row valuation rate is blended so existing units keep their value and only the extra gets the chosen
+  rate; the reported value change is read back from the Stock Ledger (ERPNext rounds the rate to paise).
+- Audit: each reconciliation gets a timeline comment `[Staff app · reco · ref:…]` with system → counted qty, rate,
+  last purchase rate, value change and reason; the transfer remarks say "Stock reconciled first: MAT-RECO-…"
+  (printed on the slip). Weekly e-mail `send_reco_digest` — **off unless** site_config `kgs_staff_reco_digest_to`
+  (comma-separated addresses).
+- Not on the bulk (> 150 lines) background path.
+- Production context (2026-10-02): SBGD has 1,440 negative items (−97,115 units) and 2,749 at zero; 1,408 of them have
+  no valuation and only 93 of those a last purchase rate — expect managers to type rates often.
+
 ## Owner decisions (2026-10-02)
 | Question | Answer |
 |---|---|
@@ -118,6 +142,7 @@ existing ones live until they expire — to end them now, clear those users' ses
 - `kgs_staff_app_sw_off: 1` — every phone unregisters its service worker on next launch.
 - `kgs_staff_session_days: 0` — no new long sessions.
 - `kgs_staff_bulk_in_shop_hours: 1` — allow >150-line background transfers during shop hours (default: refused).
+- `kgs_staff_reco_digest_to: "a@x, b@y"` — weekly e-mail of app-made reconciliations (default: off).
 
 ## Scanning
 Android Chrome uses the native `BarcodeDetector`. iPhone Safari has none, so the `barcode-detector` polyfill
@@ -167,5 +192,6 @@ draft survives reload, submit, slip link, lists) · `check_wasm_mime.py` (nginx 
 Bulk (2026-10-02 evening): `check_staff_bulk.py` 43/43 (set expansion, all stock, CSV + XLSX, 320 lines → 3 parts,
 re-run safety, stop mid-way, shop-hours + manager gates) · `check_staff_bulk_browser.py` 18/18 with a real local
 `bench worker --queue long` (set + CSV merge, Stock User blocked >150, all stock there and back in the background).
+Reconciliation (2026-10-03): `check_staff_reco.py` 39/39 · `check_staff_reco_browser.py` 17/17 (both make fresh items per run).
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.

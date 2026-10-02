@@ -164,7 +164,10 @@ def _item_payload(item_code, from_warehouse=None, to_warehouse=None, scanned_uom
 	if item.has_variants:
 		problems.append(_("This is a template item — scan the actual variant."))
 	if from_warehouse and flt(src.actual_qty) <= _EPS:
-		problems.append(_("No stock in {0}.").format(from_warehouse))
+		# a Stock Manager may still add it: it comes in short and is counted +
+		# reconciled at review (owner decision 2026-10-02)
+		if not _is_manager():
+			problems.append(_("No stock in {0}.").format(from_warehouse))
 	elif from_warehouse and flt(src.valuation_rate) <= 0:
 		problems.append(_("Has no cost price in {0} — ask accounts to fix it first.").format(from_warehouse))
 	default_uom = scanned_uom if scanned_uom in {u["uom"] for u in uoms} else item.stock_uom
@@ -221,6 +224,7 @@ def boot():
 		"warehouses": warehouses,
 		"default_from": default_from if default_from in names else None,
 		"max_lines": MAX_LINES,
+		"reco_reasons": RECO_REASONS,
 	}
 
 
@@ -302,7 +306,7 @@ def search_items(txt, from_warehouse=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def create_transfer(from_warehouse, to_warehouse, items, client_ref, remarks=None):
+def create_transfer(from_warehouse, to_warehouse, items, client_ref, remarks=None, recos=None):
 	"""Create AND submit one Material Transfer.
 
 	items: [{item_code, qty, uom}] (JSON). Line problems come back as
@@ -325,6 +329,10 @@ def create_transfer(from_warehouse, to_warehouse, items, client_ref, remarks=Non
 	if not frappe.cache.set(lock_key, 1, ex=180, nx=True):
 		frappe.throw(_("This transfer is already being saved. Please wait a moment."))
 	try:
+		if isinstance(recos, str):
+			recos = json.loads(recos or "[]")
+		if recos:
+			return _create_transfer_with_recos(from_warehouse, to_warehouse, items, tag, remarks, recos)
 		return _create_transfer(user, from_warehouse, to_warehouse, items, tag, remarks)
 	finally:
 		frappe.cache.delete(lock_key)
@@ -344,7 +352,7 @@ def _existing_transfer(user, tag):
 	)
 
 
-def _created_response(name, already=0):
+def _created_response(name, already=0, recos=None):
 	se = frappe.db.get_value(
 		"Stock Entry", name, ["name", "docstatus", "from_warehouse", "to_warehouse"], as_dict=True
 	)
@@ -358,6 +366,7 @@ def _created_response(name, already=0):
 		"to_warehouse": se.to_warehouse,
 		"lines": lines,
 		"pdf_url": _pdf_url(se.name),
+		"recos": recos or [],
 	}
 
 
@@ -661,6 +670,7 @@ def _bulk_payloads(wanted, from_warehouse, to_warehouse):
 	src = _batch_bins(codes, from_warehouse)
 	dst = _batch_bins(codes, to_warehouse) if to_warehouse else {}
 	lines, skipped = [], []
+	manager = _is_manager()
 	for code, qty, uom in wanted:
 		it = items.get(code)
 		b = src.get(code)
@@ -671,9 +681,9 @@ def _bulk_payloads(wanted, from_warehouse, to_warehouse):
 			reason = _("This item is disabled.")
 		elif not it.is_stock_item or it.has_variants:
 			reason = _("Not a stock item / template item.")
-		elif not b or flt(b.actual_qty) <= _EPS:
+		elif (not b or flt(b.actual_qty) <= _EPS) and not manager:
 			reason = _("No stock in {0}.").format(from_warehouse)
-		elif flt(b.valuation_rate) <= 0:
+		elif b and flt(b.actual_qty) > _EPS and flt(b.valuation_rate) <= 0:
 			reason = _("Has no cost price in {0} — ask accounts to fix it first.").format(from_warehouse)
 		elif uom and uom not in uoms[code]:
 			reason = _("{0} is not a unit of this item.").format(uom)
@@ -695,7 +705,7 @@ def _bulk_payloads(wanted, from_warehouse, to_warehouse):
 				"uoms": list(uoms[code].values()),
 				"uom": unit,
 				"qty": qty,
-				"available": flt(b.actual_qty),
+				"available": flt(b.actual_qty) if b else 0.0,
 				"at_target": flt(dst[code].actual_qty) if code in dst else (0.0 if to_warehouse else None),
 				"valuation_ok": 1,
 				"problems": [],
@@ -1009,3 +1019,212 @@ def bulk_status(ref):
 		"lines": meta.get("lines"), "from_warehouse": meta.get("from_warehouse"), "to_warehouse": meta.get("to_warehouse"),
 		"transfers": transfers,
 	}
+
+
+
+# ── shortfall → Stock Reconciliation (Stock Manager) ─────────────────────────
+# Owner decisions 2026-10-02: when a transfer asks for more than the system
+# holds in From, a Stock Manager may count the item and accept a Stock
+# Reconciliation for the EXTRA before the transfer, in the same request (both
+# or neither). Rate defaults to the last purchase rate, can be changed, never
+# 0; a reason is mandatory ("Purchase receipt not entered" is allowed — the
+# app warns it will double-count once that receipt is entered). Posted now, so
+# no repost backlog. Normal transfers only (not the background bulk path).
+#
+# ERPNext values the WHOLE reconciled quantity at the row's valuation_rate, so
+# the row rate is blended: existing units keep their current value and only
+# the extra units get the chosen rate. Effect on stock value = extra × rate
+# (or counted × rate − current value when current stock is ≤ 0).
+
+RECO_REASONS = [
+	"Found extra stock",
+	"Count was wrong",
+	"Unit mistake (packet / piece)",
+	"Purchase receipt not entered",
+	"Other",
+]
+RECO_MAX_ROWS = 100  # ERPNext queues the submit of a reconciliation with > 100 rows
+_RECO_TAG = "[Staff app · reco · ref:{0}]"
+
+
+def _require_manager():
+	if not _is_manager():
+		raise frappe.PermissionError(_("Only a Stock Manager can reconcile stock from the app."))
+
+
+def _rate_info(item_codes, warehouse):
+	"""{item_code: {current_qty, current_value, valuation_rate, last_purchase_rate, suggested_rate, rate_source}}"""
+	items = _batch_items(item_codes)
+	lpr = {}
+	for part in _chunks(items):
+		for r in frappe.db.sql("select name, last_purchase_rate from `tabItem` where name in %s", (tuple(part),), as_dict=True):
+			lpr[r.name] = flt(r.last_purchase_rate)
+	bins = {}
+	for part in _chunks(items):
+		for r in frappe.db.sql(
+			"""select item_code, actual_qty, stock_value, valuation_rate from `tabBin`
+			where warehouse = %s and item_code in %s""",
+			(warehouse, tuple(part)),
+			as_dict=True,
+		):
+			bins[r.item_code] = r
+	out = {}
+	for code, it in items.items():
+		b = bins.get(code) or frappe._dict(actual_qty=0, stock_value=0, valuation_rate=0)
+		if lpr.get(code, 0) > 0:
+			rate, src = lpr[code], "last purchase rate"
+		elif flt(b.valuation_rate) > 0:
+			rate, src = flt(b.valuation_rate), "current valuation"
+		else:
+			rate, src = 0, ""
+		out[code] = {
+			"item_code": code, "item_name": it.item_name, "stock_uom": it.stock_uom,
+			"current_qty": flt(b.actual_qty), "current_value": flt(b.stock_value, 2),
+			"valuation_rate": flt(b.valuation_rate), "last_purchase_rate": lpr.get(code, 0),
+			"suggested_rate": rate, "rate_source": src,
+		}
+	return out
+
+
+@frappe.whitelist(methods=["POST"])
+def reco_preview(from_warehouse, item_codes):
+	"""Numbers for the count screen: system qty and value, last purchase rate, suggested rate."""
+	_guard()
+	_require_manager()
+	if isinstance(item_codes, str):
+		item_codes = json.loads(item_codes or "[]")
+	item_codes = list(dict.fromkeys(str(c) for c in item_codes or []))[:MAX_LINES]
+	return {"reasons": RECO_REASONS, "items": _rate_info(item_codes, from_warehouse)}
+
+
+def _create_transfer_with_recos(from_warehouse, to_warehouse, items, tag, remarks, recos):
+	_require_manager()
+	if isinstance(recos, str):
+		recos = json.loads(recos or "[]")
+	company = _validate_warehouses(from_warehouse, to_warehouse)
+	lines = _parse_lines(items)  # ≤ MAX_LINES: never on the bulk path
+	if not isinstance(recos, list) or len(recos) > MAX_LINES:
+		frappe.throw(_("Could not read the reconciliation list."))
+
+	# stock qty this transfer needs per item (units checked again in _validate_transfer)
+	item_rows = _batch_items(l.item_code for l in lines if l.item_code)
+	uoms = _batch_uoms(item_rows)
+	needed = {}
+	for l in lines:
+		u = uoms.get(l.item_code, {}).get(l.uom or (item_rows[l.item_code].stock_uom if l.item_code in item_rows else ""))
+		if u:
+			needed[l.item_code] = needed.get(l.item_code, 0) + flt(l.qty) * u["factor"]
+
+	info = _rate_info([str(r.get("item_code") or "") for r in recos], from_warehouse)
+	# lock the source bins before reading the current quantity used for the extra
+	_batch_bins(info, from_warehouse, for_update=True)
+	info = _rate_info(list(info), from_warehouse)
+	problems, rows, seen = [], [], set()
+	whole = {}
+	for r in recos:
+		code = str(r.get("item_code") or "")
+		counted, rate = flt(r.get("counted")), flt(r.get("rate"))
+		reason, note = str(r.get("reason") or ""), str(r.get("note") or "").strip()[:200]
+		i = info.get(code)
+
+		def bad(msg):
+			problems.append({"idx": 0, "item_code": code, "message": msg})
+
+		if not i or code in seen or code not in needed:
+			bad(_("Not an item of this transfer."))
+			continue
+		seen.add(code)
+		if code not in whole:
+			whole[code] = i["stock_uom"] in _whole_number_uoms({i["stock_uom"]})
+		if counted <= i["current_qty"] + _EPS:
+			bad(_("Counted {0} is not more than the system's {1} — nothing to reconcile.").format(_fmt(counted), _fmt(i["current_qty"])))
+		elif counted + _EPS < needed[code]:
+			bad(_("Counted {0} but the transfer needs {1}. Reduce the transfer first.").format(_fmt(counted), _fmt(needed[code])))
+		elif whole[code] and abs(counted - round(counted)) > _EPS:
+			bad(_("{0} must be a whole number.").format(i["stock_uom"]))
+		elif rate <= 0:
+			bad(_("Enter a rate above zero."))
+		elif reason not in RECO_REASONS:
+			bad(_("Choose a reason."))
+		elif reason == "Other" and not note:
+			bad(_("Write what happened (reason: Other)."))
+		else:
+			q0, v0 = i["current_qty"], i["current_value"]
+			extra = counted - q0
+			row_rate = (v0 + extra * rate) / counted if (q0 > 0 and v0 > 0) else rate
+			rows.append(frappe._dict(item_code=code, item_name=i["item_name"], stock_uom=i["stock_uom"], current=q0,
+				counted=counted, extra=extra, rate=rate, row_rate=flt(row_rate, 6),
+				effect=flt(counted * flt(row_rate, 6) - v0, 2), reason=reason, note=note,
+				lpr=i["last_purchase_rate"]))
+	if problems:
+		return {"ok": 0, "problems": problems}
+
+	comp = frappe.get_cached_doc("Company", company)
+	reco_tag = _RECO_TAG.format(tag[tag.find("ref:") + 4 : -1])
+	made = []
+	for part in [rows[i : i + RECO_MAX_ROWS] for i in range(0, len(rows), RECO_MAX_ROWS)]:
+		reco = frappe.new_doc("Stock Reconciliation")
+		reco.purpose = "Stock Reconciliation"
+		reco.company = company
+		reco.set_posting_time = 0  # now — never back-dated (Rule 15)
+		reco.expense_account = comp.stock_adjustment_account
+		reco.cost_center = comp.cost_center
+		for row in part:
+			reco.append("items", {"item_code": row.item_code, "warehouse": from_warehouse, "qty": row.counted,
+				"valuation_rate": row.row_rate})
+		reco.insert()  # Stock Manager: create + submit
+		reco.submit()  # ≤ 100 rows, so ERPNext submits now instead of queueing
+		# ERPNext rounds the row valuation rate to paise, so the booked change can
+		# differ from extra × rate by a few rupees on big counts — report the real one.
+		actual = dict(frappe.db.sql(
+			"""select item_code, sum(stock_value_difference) from `tabStock Ledger Entry`
+			where voucher_type = 'Stock Reconciliation' and voucher_no = %s and is_cancelled = 0
+			group by item_code""", reco.name))
+		for row in part:
+			row.effect = flt(actual.get(row.item_code, row.effect), 2)
+		lines_txt = "\n".join(
+			f"- {row.item_name} ({row.item_code}): system {_fmt(row.current)} → counted {_fmt(row.counted)} {row.stock_uom}, "
+			f"extra {_fmt(row.extra)} @ ₹{row.rate:,.2f} (last purchase ₹{row.lpr:,.2f}), value change ₹{row.effect:,.2f} — "
+			f"{row.reason}{': ' + row.note if row.note else ''}"
+			for row in part
+		)
+		reco.add_comment("Comment", f"{reco_tag}\nMade from the KGS Staff app before a transfer out of {from_warehouse}.\n{lines_txt}")
+		made.append({"name": reco.name, "lines": len(part), "value": flt(sum(r.effect for r in part), 2)})
+
+	note = (remarks or "").strip()
+	note = (note + "\n" if note else "") + _("Stock reconciled first: {0}").format(", ".join(m["name"] for m in made))
+	company, lines, problems = _validate_transfer(from_warehouse, to_warehouse, items)
+	if problems:
+		# still short (e.g. a second line of the same item): undo everything
+		frappe.db.rollback()
+		return {"ok": 0, "problems": problems}
+	name = _make_entry(company, from_warehouse, to_warehouse, lines, tag, note)
+	return _created_response(name, recos=made)
+
+
+def send_reco_digest():
+	"""Weekly e-mail of reconciliations made from the app (scheduler). Off unless
+	site_config kgs_staff_reco_digest_to lists recipients."""
+	to = frappe.conf.get("kgs_staff_reco_digest_to")
+	if not to:
+		return
+	rows = frappe.db.sql(
+		"""select c.reference_name, c.owner, c.creation, c.content from `tabComment` c
+		where c.reference_doctype = 'Stock Reconciliation' and c.comment_type = 'Comment'
+			and c.content like %s and c.creation >= %s order by c.creation""",
+		("%[Staff app · reco%", frappe.utils.add_days(now_datetime(), -7)),
+		as_dict=True,
+	)
+	if not rows:
+		return
+	body = "".join(
+		f"<h4>{frappe.utils.escape_html(r.reference_name)} — {frappe.utils.escape_html(frappe.utils.get_fullname(r.owner))}, "
+		f"{frappe.utils.format_datetime(r.creation)}</h4><pre>{frappe.utils.escape_html(r.content)}</pre>"
+		for r in rows
+	)
+	frappe.sendmail(
+		recipients=to if isinstance(to, list) else [x.strip() for x in str(to).split(",") if x.strip()],
+		subject=f"Stock reconciliations from the Staff app — last 7 days ({len(rows)})",
+		message="<p>Stock Reconciliations made from the KGS Staff app before a transfer. Each one changes stock value "
+		"via Stock Adjustment; please review.</p>" + body,
+	)

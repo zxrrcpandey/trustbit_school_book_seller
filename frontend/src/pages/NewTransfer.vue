@@ -84,6 +84,7 @@
           :key="line.item_code + '|' + line.uom"
           :line="line"
           :problem="problems[i]"
+          :warning="warnings[i]"
           :class="locked ? 'pointer-events-none opacity-70' : ''"
           @update="(patch) => updateLine(i, patch)"
           @remove="removeLine(i)"
@@ -122,6 +123,29 @@
           <div class="text-[13px] font-semibold uppercase tracking-wide text-ink-faint">To</div>
           <div class="text-[18px] font-bold">{{ draft.to }}</div>
         </div>
+        <template v-if="reconciling">
+          <div class="rounded-xl border-2 border-danger-text bg-danger-bg p-3 text-[14px] text-danger-text">
+            <div class="text-[16px] font-bold">⚠ {{ shortItems.length }} item{{ shortItems.length === 1 ? " is" : "s are" }} short in {{ draft.from }}</div>
+            Accepting creates a <b>Stock Reconciliation</b> that sets each item to the count you enter, then makes the transfer.
+            The extra stock is valued at the rate below and booked to <b>Stock Adjustment</b>
+            (total <b>₹{{ money(recoTotal) }}</b>). Only accept if the stock is really there.
+          </div>
+          <div v-if="recoLoading" class="skeleton h-40" />
+          <p v-else-if="recoLoadError" class="rounded-lg bg-danger-bg p-3 font-semibold text-danger-text">{{ recoLoadError }}</p>
+          <template v-else>
+            <RecoCard
+              v-for="s in shortItems"
+              :key="s.item_code"
+              :info="recoInfo[s.item_code]"
+              :needed="s.needed"
+              :model="recoModels[s.item_code]"
+              :reasons="info.reco_reasons || []"
+              :from="draft.from"
+              :whole="s.whole"
+              @update="(m) => (recoModels[s.item_code] = m)"
+            />
+          </template>
+        </template>
         <div class="rounded-xl border border-surface-line bg-surface">
           <div v-for="line in draft.lines.slice(0, 100)" :key="line.item_code + '|' + line.uom" class="flex items-start justify-between gap-3 border-b border-surface-line px-4 py-3 last:border-0">
             <span class="min-w-0 font-semibold">{{ line.item_name }}</span>
@@ -140,7 +164,14 @@
         <router-link v-if="signedOut" to="/login" class="block text-center font-bold text-brand-deep">Sign in again (your items are kept)</router-link>
       </div>
       <div class="safe-bottom border-t border-surface-line bg-surface px-4 pt-3">
-        <button type="button" class="min-h-action w-full rounded-xl bg-brand-deep text-[17px] font-bold text-white disabled:opacity-40" :disabled="submitting" @click="submit">
+        <p v-if="reconciling && recoBlock" class="mb-2 text-center text-[14px] font-semibold text-danger-text">{{ recoBlock }}</p>
+        <div v-if="reconciling" class="grid grid-cols-3 gap-2">
+          <button type="button" class="min-h-action rounded-xl border-2 border-danger-text font-bold text-danger-text" :disabled="submitting" @click="reviewing = false">Reject</button>
+          <button type="button" class="col-span-2 min-h-action rounded-xl bg-brand-deep text-[16px] font-bold text-white disabled:opacity-40" :disabled="submitting || !!recoBlock" @click="submit">
+            {{ submitting ? "Saving…" : `Accept: reconcile + move` }}
+          </button>
+        </div>
+        <button v-else type="button" class="min-h-action w-full rounded-xl bg-brand-deep text-[17px] font-bold text-white disabled:opacity-40" :disabled="submitting" @click="submit">
           {{ submitting ? (isBulk ? "Checking everything…" : "Moving stock…") : isBulk ? `Move in background (${bulkParts} transfers)` : `Move stock now (${draft.lines.length})` }}
         </button>
       </div>
@@ -159,9 +190,10 @@ import { useRouter } from "vue-router"
 import AppHeader from "@/components/AppHeader.vue"
 import BulkSheet from "@/components/BulkSheet.vue"
 import ItemSearchSheet from "@/components/ItemSearchSheet.vue"
+import RecoCard from "@/components/RecoCard.vue"
 import ScannerSheet from "@/components/ScannerSheet.vue"
 import TransferLine from "@/components/TransferLine.vue"
-import { boot, createBulkTransfer, createTransfer, getItem, lookupItem, stockLevels } from "@/data/api.js"
+import { boot, createBulkTransfer, createTransfer, getItem, lookupItem, recoPreview, stockLevels } from "@/data/api.js"
 import { clearDraft, draft, loadDraft, rememberPair } from "@/data/draft.js"
 import { errorBeep, okBeep, unlockAudio } from "@/data/feedback.js"
 import { fmt } from "@/data/format.js"
@@ -228,6 +260,7 @@ const problems = computed(() => {
     if (l.qty === "" || !(q > 0)) return "Enter a quantity."
     if (u.whole && !Number.isInteger(q)) return `${l.uom} must be a whole number.`
     if (l.valuation_ok === 0) return `Has no cost price in ${draft.from} — ask accounts to fix it first.`
+    if (needed[l.item_code] > Number(l.available || 0) + 1e-6 && canReconcile.value) return serverProblems.value[lineKey(l)] || ""
     if (needed[l.item_code] > Number(l.available || 0) + 1e-6)
       return `Only ${fmt(l.available)} ${l.stock_uom} in ${draft.from}${needed[l.item_code] !== q * u.factor ? " (all lines of this item together)" : ""}.`
     return serverProblems.value[lineKey(l)] || ""
@@ -245,6 +278,98 @@ const blockReason = computed(() => {
 })
 
 const isBulk = computed(() => !!info.value && draft.lines.length > info.value.max_lines)
+
+// ── short stock → Stock Reconciliation (Stock Manager, normal transfers only) ──
+const canReconcile = computed(() => !!info.value?.is_manager && !isBulk.value)
+const neededByItem = computed(() => {
+  const m = {}
+  for (const l of draft.lines) m[l.item_code] = (m[l.item_code] || 0) + Number(l.qty || 0) * unitOf(l).factor
+  return m
+})
+const shortItems = computed(() => {
+  const seen = new Set()
+  const out = []
+  for (const l of draft.lines) {
+    if (seen.has(l.item_code)) continue
+    seen.add(l.item_code)
+    const need = neededByItem.value[l.item_code]
+    if (need > Number(l.available || 0) + 1e-6) {
+      const stockUnit = l.uoms.find((u) => u.uom === l.stock_uom) || { whole: 0 }
+      out.push({ item_code: l.item_code, needed: need, available: Number(l.available || 0), stock_uom: l.stock_uom, whole: !!stockUnit.whole })
+    }
+  }
+  return out
+})
+const warnings = computed(() =>
+  draft.lines.map((l) => {
+    if (!canReconcile.value) return ""
+    const s = shortItems.value.find((x) => x.item_code === l.item_code)
+    return s ? `Short by ${fmt(s.needed - s.available)} ${l.stock_uom} in ${draft.from} — you can count it and reconcile at review.` : ""
+  })
+)
+const reconciling = computed(() => canReconcile.value && shortItems.value.length > 0)
+const recoInfo = ref({})
+const recoModels = ref({})
+const recoLoading = ref(false)
+const recoLoadError = ref("")
+const money = (n) => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+function recoRow(s) {
+  const i = recoInfo.value[s.item_code]
+  const m = recoModels.value[s.item_code]
+  if (!i || !m) return null
+  const reconciles = m.counted !== "" && m.counted > i.current_qty
+  const extra = reconciles ? m.counted - i.current_qty : 0
+  const effect = !reconciles ? 0 : i.current_qty > 0 && i.current_value > 0 ? extra * Number(m.rate || 0) : m.counted * Number(m.rate || 0) - i.current_value
+  let error = ""
+  if (m.counted === "" || m.counted < 0) error = "Enter the count."
+  else if (s.whole && !Number.isInteger(m.counted)) error = `${s.stock_uom} must be a whole number.`
+  else if (reconciles && !(Number(m.rate) > 0)) error = "Enter a rate above zero."
+  else if (reconciles && !m.reason) error = "Choose a reason."
+  else if (reconciles && m.reason === "Other" && !String(m.note || "").trim()) error = "Write what happened."
+  return { info: i, model: m, reconciles, effect, error }
+}
+const recoTotal = computed(() => shortItems.value.reduce((t, s) => t + (recoRow(s)?.effect || 0), 0))
+const recoBlock = computed(() => {
+  if (recoLoading.value) return "Loading…"
+  if (recoLoadError.value) return recoLoadError.value
+  const bad = shortItems.value.map(recoRow).filter((r) => !r || r.error).length
+  return bad ? `${bad} item${bad === 1 ? " needs" : "s need"} a count, rate or reason.` : ""
+})
+
+async function loadRecoPreview() {
+  recoLoading.value = true
+  recoLoadError.value = ""
+  try {
+    const res = await recoPreview(draft.from, shortItems.value.map((s) => s.item_code))
+    recoInfo.value = res.items || {}
+    const models = {}
+    for (const s of shortItems.value) {
+      const i = recoInfo.value[s.item_code] || {}
+      const old = recoModels.value[s.item_code]
+      models[s.item_code] = old && old.counted !== "" ? old : { counted: s.needed, rate: i.suggested_rate || "", reason: "", note: "" }
+    }
+    recoModels.value = models
+  } catch (e) {
+    recoLoadError.value = e.display ? e.display() : "Could not load the stock figures."
+  } finally {
+    recoLoading.value = false
+  }
+}
+
+// Count below what the transfer needs: that item's lines become ONE line in the
+// stock unit for what is there (counted, or the system qty if the count is not
+// above it). Owner decision: never block, move what exists.
+function applyCounts() {
+  for (const s of shortItems.value) {
+    const r = recoRow(s)
+    if (!r || r.model.counted >= s.needed) continue
+    const keep = r.reconciles ? r.model.counted : Math.max(0, r.info.current_qty)
+    const first = draft.lines.find((l) => l.item_code === s.item_code)
+    draft.lines = draft.lines.filter((l) => l.item_code !== s.item_code)
+    if (keep > 0) draft.lines.push({ ...first, uom: first.stock_uom, qty: keep })
+  }
+}
 const bulkParts = computed(() => (info.value ? Math.ceil(draft.lines.length / info.value.max_lines) : 0))
 const badCount = computed(() => problems.value.filter(Boolean).length)
 const totalStockQty = computed(() => draft.lines.reduce((t, l) => t + Number(l.qty || 0) * unitOf(l).factor, 0))
@@ -428,10 +553,25 @@ function openReview() {
   submitError.value = ""
   signedOut.value = false
   reviewing.value = true
+  if (reconciling.value) loadRecoPreview()
 }
 
 function submit() {
+  let recos
+  if (reconciling.value) {
+    const rows = shortItems.value.map((s) => ({ s, r: recoRow(s) }))
+    recos = rows
+      .filter(({ r }) => r && r.reconciles)
+      .map(({ s, r }) => ({ item_code: s.item_code, counted: r.model.counted, rate: Number(r.model.rate), reason: r.model.reason, note: r.model.note || "" }))
+    applyCounts()
+    if (!draft.lines.length) {
+      reviewing.value = false
+      showFlash(false, "Nothing left to move after the counts.")
+      return
+    }
+  }
   ;(isBulk.value ? sendBulk : send)({
+    ...(recos && recos.length ? { recos } : {}),
     from_warehouse: draft.from,
     to_warehouse: draft.to,
     items: draft.lines.map((l) => ({ item_code: l.item_code, qty: Number(l.qty), uom: l.uom })),
@@ -452,7 +592,8 @@ async function send(request) {
       rememberPair(request.from_warehouse, request.to_warehouse)
       clearDraft({ keepWarehouses: true })
       reviewing.value = false
-      router.replace({ path: `/t/${encodeURIComponent(res.name)}`, query: { done: "1", ...(res.already ? { already: "1" } : {}) } })
+      const recoQ = (res.recos || []).map((r) => `${r.name}:${r.value}`).join(",")
+      router.replace({ path: `/t/${encodeURIComponent(res.name)}`, query: { done: "1", ...(res.already ? { already: "1" } : {}), ...(recoQ ? { recos: recoQ } : {}) } })
       return
     }
     // Nothing was created: mark the lines the server rejected.
@@ -462,6 +603,7 @@ async function send(request) {
     for (const p of (res && res.problems) || []) {
       const l = sentLines[p.idx - 1]
       if (l) map[`${l.item_code}|${l.uom}`] = p.message
+      else if (p.item_code) for (const x of draft.lines.filter((x) => x.item_code === p.item_code)) map[lineKey(x)] = p.message
     }
     serverProblems.value = map
     await refreshLevels()

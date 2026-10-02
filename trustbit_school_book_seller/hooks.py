@@ -147,6 +147,10 @@ scheduler_events = {
 		"trustbit_school_book_seller.followup_api.send_followup_reminders",
 		"trustbit_school_book_seller.followup_api.check_pos_without_followups",
 	],
+	"weekly": [
+		# Staff app: e-mail of app-made Stock Reconciliations (off unless site_config kgs_staff_reco_digest_to)
+		"trustbit_school_book_seller.staff_app.api.send_reco_digest",
+	],
 	"cron": {
 		# Staff app long sessions: keep stamped session rows above the global
 		# 1-hour threshold (staff_app/session_extend.py; inert without

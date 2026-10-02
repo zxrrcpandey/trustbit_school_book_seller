@@ -6,6 +6,14 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.9.0] - 2026-10-03 (short stock → Stock Reconciliation — built and tested locally, NOT deployed)
+
+### New Features
+- **Stock Managers can transfer more than the system holds:** at review they count each short item, confirm the rate for the extra (last purchase rate by default, editable, never 0, warning beyond ±50%) and a mandatory reason, then Accept or Reject. Accept creates the Stock Reconciliation(s) (≤ 100 rows each, posted now, Stock Adjustment) and the transfer together; a count below the need reduces that item's transfer instead of blocking
+- Audit comment on each reconciliation, "Stock reconciled first" on the transfer and slip, optional weekly e-mail (`kgs_staff_reco_digest_to`)
+
+---
+
 ## [1.8.0] - 2026-10-02 (bulk transfers — live on splashbox.in 20:11 IST, `8f9f04c`; set-search ranking `41f7438`)
 
 ### New Features

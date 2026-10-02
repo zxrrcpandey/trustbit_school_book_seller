@@ -30,3 +30,6 @@ export const warehouseContents = (from, to) => call("warehouse_contents", { from
 export const parseSheet = (filename, content, from, to) => call("parse_sheet", { filename, content, from_warehouse: from, to_warehouse: to }, { timeoutMs: 120000 })
 export const createBulkTransfer = (args) => call("create_bulk_transfer", args, { timeoutMs: 180000 })
 export const bulkStatus = (ref) => call("bulk_status", { ref })
+
+// Shortfall → Stock Reconciliation (Stock Manager): numbers for the count screen.
+export const recoPreview = (from, itemCodes) => call("reco_preview", { from_warehouse: from, item_codes: itemCodes })

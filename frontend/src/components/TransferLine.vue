@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-xl border bg-surface p-3" :class="problem ? 'border-danger-text' : 'border-surface-line'">
+  <div class="rounded-xl border bg-surface p-3" :class="problem ? 'border-danger-text' : warning ? 'border-warn-text' : 'border-surface-line'">
     <div class="flex items-start justify-between gap-2">
       <div class="min-w-0">
         <div class="font-semibold leading-snug">{{ line.item_name }}</div>
@@ -38,6 +38,7 @@
       <span v-if="line.at_target !== null && line.at_target !== undefined" class="text-ink-faint">At destination: {{ fmt(line.at_target) }}</span>
     </div>
     <div v-if="problem" class="mt-2 rounded-lg bg-danger-bg px-3 py-2 text-[14px] font-semibold text-danger-text">{{ problem }}</div>
+    <div v-else-if="warning" class="mt-2 rounded-lg bg-warn-bg px-3 py-2 text-[14px] font-semibold text-warn-text">{{ warning }}</div>
   </div>
 </template>
 
@@ -48,7 +49,8 @@ import { fmt } from "@/data/format.js"
 
 // problem = the line's own error text (computed by the page: over-available,
 // whole numbers, or the server's message for this line).
-const props = defineProps({ line: { type: Object, required: true }, problem: { type: String, default: "" } })
+// warning = amber note that does not block (e.g. short stock a Stock Manager can count at review)
+const props = defineProps({ line: { type: Object, required: true }, problem: { type: String, default: "" }, warning: { type: String, default: "" } })
 const emit = defineEmits(["update", "remove"])
 
 const unit = computed(() => props.line.uoms.find((u) => u.uom === props.line.uom) || { factor: 1, whole: 0 })
