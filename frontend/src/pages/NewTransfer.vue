@@ -124,11 +124,12 @@
           <div class="text-[18px] font-bold">{{ draft.to }}</div>
         </div>
         <template v-if="reconciling">
-          <div class="rounded-xl border-2 border-danger-text bg-danger-bg p-3 text-[14px] text-danger-text">
-            <div class="text-[16px] font-bold">⚠ {{ shortItems.length }} item{{ shortItems.length === 1 ? " is" : "s are" }} short in {{ draft.from }}</div>
-            Accepting creates a <b>Stock Reconciliation</b> that sets each item to the count you enter, then makes the transfer.
-            The extra stock is valued at the rate below and booked to <b>Stock Adjustment</b>
-            (total <b>₹{{ money(recoTotal) }}</b>). Only accept if the stock is really there.
+          <div class="space-y-1 rounded-xl border-2 border-danger-text bg-danger-bg p-3 text-[15px] text-danger-text">
+            <div class="text-[17px] font-bold">⚠ Not enough stock in {{ draft.from }}</div>
+            <div>{{ shortItems.length }} item{{ shortItems.length === 1 ? " has" : "s have" }} less stock than you are moving.</div>
+            <div>If you press <b>Accept</b>, the stock will be set to <b>your count</b>, and then the items will move.</div>
+            <div>Stock value will change by <b>₹{{ money(recoTotal) }}</b>.</div>
+            <div class="font-bold">Accept only if the items are really there.</div>
           </div>
           <div v-if="recoLoading" class="skeleton h-40" />
           <p v-else-if="recoLoadError" class="rounded-lg bg-danger-bg p-3 font-semibold text-danger-text">{{ recoLoadError }}</p>
@@ -168,7 +169,7 @@
         <div v-if="reconciling" class="grid grid-cols-3 gap-2">
           <button type="button" class="min-h-action rounded-xl border-2 border-danger-text font-bold text-danger-text" :disabled="submitting" @click="reviewing = false">Reject</button>
           <button type="button" class="col-span-2 min-h-action rounded-xl bg-brand-deep text-[16px] font-bold text-white disabled:opacity-40" :disabled="submitting || !!recoBlock" @click="submit">
-            {{ submitting ? "Saving…" : `Accept: reconcile + move` }}
+            {{ submitting ? "Saving…" : "Accept and move" }}
           </button>
         </div>
         <button v-else type="button" class="min-h-action w-full rounded-xl bg-brand-deep text-[17px] font-bold text-white disabled:opacity-40" :disabled="submitting" @click="submit">
@@ -304,7 +305,7 @@ const warnings = computed(() =>
   draft.lines.map((l) => {
     if (!canReconcile.value) return ""
     const s = shortItems.value.find((x) => x.item_code === l.item_code)
-    return s ? `Short by ${fmt(s.needed - s.available)} ${l.stock_uom} in ${draft.from} — you can count it and reconcile at review.` : ""
+    return s ? `Stock is less by ${fmt(s.needed - s.available)} ${l.stock_uom}. You can count it on the next screen.` : ""
   })
 )
 const reconciling = computed(() => canReconcile.value && shortItems.value.length > 0)

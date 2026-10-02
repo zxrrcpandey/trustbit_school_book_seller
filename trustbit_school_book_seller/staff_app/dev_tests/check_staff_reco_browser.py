@@ -21,7 +21,12 @@ NS, NS_NAME = f"KGS-T-NS-{RUN}", f"Test Never Bought {RUN}"
 subprocess.run(
 	["../env/bin/python", "-c", "import frappe;frappe.init(site='site1.local',sites_path='.');frappe.connect();"
 	f"frappe.get_doc({{'doctype':'Item','item_code':'{NS}','item_name':'{NS_NAME}','item_group':'All Item Groups',"
-	"'stock_uom':'PCS','is_stock_item':1}).insert(ignore_permissions=True);frappe.db.commit()"],
+	"'stock_uom':'PCS','is_stock_item':1}).insert(ignore_permissions=True);"
+	# earlier runs move every pen out of Stores — top it up so the Stock User part has stock to scan
+	"q=frappe.db.get_value('Bin',{'item_code':'KGS-T-PEN','warehouse':'Stores - DCV'},'actual_qty') or 0;"
+	"se=frappe.get_doc({'doctype':'Stock Entry','stock_entry_type':'Material Receipt','company':'Development Company V1.0',"
+	"'items':[{'item_code':'KGS-T-PEN','qty':50,'t_warehouse':'Stores - DCV','basic_rate':5}]}) if q < 20 else None;"
+	"se and (se.insert(ignore_permissions=True), se.submit());frappe.db.commit()"],
 	check=True,
 )
 
@@ -99,10 +104,10 @@ with sync_playwright() as p:
 	pen_card = page.locator("div.rounded-xl", has_text="Test Blue Pen").first
 	avail = int(re.search(r"Available: (\d+)", pen_card.inner_text()).group(1))
 	qty(page, "Test Blue Pen", avail + 5)
-	ok("Manager: short lines amber, review allowed", lambda: (expect(page.get_by_text(re.compile("you can count it and reconcile at review")).first).to_be_visible(), expect(page.get_by_role("button", name=re.compile("Review"))).to_be_enabled()))
+	ok("Manager: short lines amber, review allowed", lambda: (expect(page.get_by_text(re.compile("You can count it on the next screen")).first).to_be_visible(), expect(page.get_by_role("button", name=re.compile("Review"))).to_be_enabled()))
 
 	page.get_by_role("button", name=re.compile("Review")).click()
-	ok("warning banner", lambda: expect(page.get_by_text(re.compile(r"2 items are short in Stores - DCV"))).to_be_visible(timeout=10000))
+	ok("warning banner", lambda: expect(page.get_by_text(re.compile(r"Not enough stock in Stores - DCV"))).to_be_visible(timeout=10000))
 	ok("rate empty when no purchase rate / valuation → Accept blocked", lambda: expect(page.get_by_role("button", name=re.compile("Accept"))).to_be_disabled())
 	page.get_by_role("button", name="Reject").click()
 	ok("Reject returns to the list, nothing moved", lambda: expect(page.get_by_role("button", name=re.compile("Review"))).to_be_visible())
@@ -113,10 +118,10 @@ with sync_playwright() as p:
 	never.locator("select").select_option("Found extra stock")
 	pen = page.locator("div[data-reco]", has_text="Test Blue Pen").first
 	pen.locator("input[type=number]").first.fill(str(avail + 2))  # counted less than the 5 extra asked
-	ok("count below the transfer: reduce note", lambda: expect(pen.get_by_text(re.compile("will be reduced to"))).to_be_visible())
-	ok("pen rate prefilled from current valuation", lambda: expect(pen.get_by_text("Prefilled from the current valuation.")).to_be_visible())
+	ok("count below the transfer: reduce note", lambda: expect(pen.get_by_text(re.compile(r"Only \d+ Nos will move"))).to_be_visible())
+	ok("pen rate prefilled from current valuation", lambda: expect(pen.get_by_text("Filled from the current stock value.")).to_be_visible())
 	pen.locator("input[type=number]").nth(1).fill("50")
-	ok("rate far from last purchase rate → warning (none for pen: no LPR)", lambda: expect(pen.get_by_text(re.compile("50% away"))).to_have_count(0))
+	ok("rate far from last purchase rate → warning (none for pen: no LPR)", lambda: expect(pen.get_by_text(re.compile("very different from the last purchase price"))).to_have_count(0))
 	pen.locator("select").select_option("Other")
 	ok("Other needs a note", lambda: expect(page.get_by_role("button", name=re.compile("Accept"))).to_be_disabled())
 	pen.locator("input[placeholder='What happened? (required)']").fill("found behind shelf")

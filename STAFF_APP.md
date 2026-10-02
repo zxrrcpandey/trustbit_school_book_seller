@@ -48,6 +48,10 @@ books its whole negative value as a gain (ITM-2025-28343 Project Paper: −24,33
 to 10 PCS posts ≈ +₹8,72,863 to Stock Adjustment) and that some last purchase rates are junk (ITM-2025-13580: ₹0.01).
 The review warning shows the total value change before Accept; that is the only guard. Do not add a cap without
 asking the owner.
+Owner asked (01:30 IST) for the warnings **in easy language** — review now says e.g. "⚠ Not enough stock in SBGD - KGS …
+If you press Accept, the stock will be set to your count … Stock value will change by ₹… Accept only if the items are
+really there", and an item in minus gets its own line: "⚠ System stock is in minus (−24,333). If you accept, stock
+value will go up by about ₹…". Keep any new text at that level (short sentences, no ERP terms).
 When a transfer asks for more than the system holds in From, a **Stock Manager** (only) can fix it at review instead
 of being blocked (Stock Users still get the red "Only X in …" and must ask a manager):
 - Managers can scan/add items with **no stock at all** in From (school sets and sheets keep them as short lines);

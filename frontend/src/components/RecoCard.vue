@@ -9,29 +9,33 @@
       <span class="text-ink-muted">Transfer needs</span><b>{{ fmt(needed) }} {{ info.stock_uom }}</b>
     </div>
 
+    <p v-if="info.current_qty < 0" class="rounded-lg bg-danger-bg px-3 py-2 text-[15px] font-bold text-danger-text">
+      ⚠ System stock is in minus ({{ fmt(info.current_qty) }}). If you accept, stock value will go up by about ₹{{ money(effect) }}.
+    </p>
     <label class="block text-[14px] font-semibold text-ink-muted">
-      Physically in {{ from }} now ({{ info.stock_uom }})
+      How many are really in {{ from }} now? ({{ info.stock_uom }})
       <input :value="model.counted" type="number" inputmode="decimal" min="0" class="tnum mt-1 h-12 w-full rounded-lg border border-surface-line text-center text-[18px] font-bold text-ink" @input="set('counted', num($event.target.value))" />
     </label>
     <p v-if="model.counted !== '' && model.counted <= info.current_qty" class="text-[14px] font-semibold text-warn-text">
-      Not more than the system already has — no reconciliation; this item's transfer will be reduced to {{ fmt(Math.max(0, info.current_qty)) }} {{ info.stock_uom }}.
+      Your count is not more than the system stock. No change to stock — only {{ fmt(Math.max(0, info.current_qty)) }} {{ info.stock_uom }} will move.
     </p>
     <p v-else-if="model.counted !== '' && model.counted < needed" class="text-[14px] font-semibold text-warn-text">
-      Less than the transfer needs — this item's transfer will be reduced to {{ fmt(model.counted) }} {{ info.stock_uom }}.
+      You counted less than you are moving. Only {{ fmt(model.counted) }} {{ info.stock_uom }} will move.
     </p>
 
     <template v-if="reconciles">
       <label class="block text-[14px] font-semibold text-ink-muted">
-        Rate per {{ info.stock_uom }} for the extra {{ fmt(extra) }} (₹)
+        Price of 1 {{ info.stock_uom }} for the extra {{ fmt(extra) }} (₹)
         <input :value="model.rate" type="number" inputmode="decimal" min="0" step="0.01" class="tnum mt-1 h-12 w-full rounded-lg border border-surface-line text-center text-[18px] font-bold text-ink" @input="set('rate', num($event.target.value))" />
       </label>
       <p class="text-[13px] text-ink-faint">
-        <template v-if="info.rate_source">Prefilled from the {{ info.rate_source }}.</template>
-        <template v-else>No purchase rate or valuation on record — type the cost price.</template>
-        <template v-if="info.last_purchase_rate"> Last purchase rate ₹{{ money(info.last_purchase_rate) }}.</template>
+        <template v-if="info.rate_source === 'last purchase rate'">Filled from the last purchase price.</template>
+        <template v-else-if="info.rate_source">Filled from the current stock value.</template>
+        <template v-else>No old price found — please type the buying price.</template>
+        <template v-if="info.last_purchase_rate"> Last purchase price: ₹{{ money(info.last_purchase_rate) }}.</template>
       </p>
       <p v-if="farFromLpr" class="rounded-lg bg-warn-bg px-3 py-2 text-[14px] font-semibold text-warn-text">
-        This rate is more than 50% away from the last purchase rate (₹{{ money(info.last_purchase_rate) }}). Check it.
+        ⚠ This price is very different from the last purchase price (₹{{ money(info.last_purchase_rate) }}). Please check.
       </p>
       <label class="block text-[14px] font-semibold text-ink-muted">
         Reason
@@ -41,12 +45,11 @@
         </select>
       </label>
       <p v-if="model.reason === 'Purchase receipt not entered'" class="rounded-lg bg-warn-bg px-3 py-2 text-[14px] font-semibold text-warn-text">
-        When that Purchase Receipt is entered later, this stock will be counted twice — tell the office to adjust it then.
+        ⚠ When this bill's Purchase Receipt is entered later, this stock will count twice. Tell the office.
       </p>
       <input v-if="model.reason" :value="model.note" maxlength="200" :placeholder="model.reason === 'Other' ? 'What happened? (required)' : 'Note (optional)'" class="w-full rounded-lg border border-surface-line bg-surface p-3" @input="set('note', $event.target.value)" />
       <div class="tnum rounded-lg bg-surface-page px-3 py-2 text-[14px]">
         Stock value change: <b :class="effect >= 0 ? 'text-ink' : 'text-danger-text'">₹{{ money(effect) }}</b>
-        <span class="text-ink-faint"> (to Stock Adjustment)</span>
       </div>
     </template>
     <p v-if="error" class="text-[14px] font-semibold text-danger-text">{{ error }}</p>
