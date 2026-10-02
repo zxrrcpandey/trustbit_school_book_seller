@@ -37,7 +37,17 @@ the 1-vCPU server, i.e. all of SBGD (~12,000 items ≈ 80 parts) ≈ 15–30 min
 ⚠ Don't use frappe.cache.get_value/set_value(expires) for state read back in the same request/job — a miss is cached
 in frappe.local and set_value with an expiry writes Redis only (bit us in the bulk tests).
 
-## Short stock → Stock Reconciliation (built 2026-10-03 — owner decisions; NOT deployed yet)
+## Short stock → Stock Reconciliation (LIVE 2026-10-03 01:21 IST, `bf21aee`)
+Deployed after hours (no bills since 20:34, 0 reposts queued): ff, `sync_jobs` (weekly digest job added, nothing
+deleted, 123 → 124), HUP, app_hooks + website cache. Anchor `/root/predeploy_20261003_staff_reco/` (HEAD before
+`0b7eb66`). Verified read-only on live data: Stock User scan of a no-stock item refused, Stock Manager allowed;
+preview figures correct; 0 errors. Weekly digest OFF (no recipients given yet).
+
+**Owner decision 2026-10-03: NO value cap on app reconciliations** — accepted after being shown that a negative item
+books its whole negative value as a gain (ITM-2025-28343 Project Paper: −24,333 PCS, −₹8,72,858.75 → reconciling it
+to 10 PCS posts ≈ +₹8,72,863 to Stock Adjustment) and that some last purchase rates are junk (ITM-2025-13580: ₹0.01).
+The review warning shows the total value change before Accept; that is the only guard. Do not add a cap without
+asking the owner.
 When a transfer asks for more than the system holds in From, a **Stock Manager** (only) can fix it at review instead
 of being blocked (Stock Users still get the red "Only X in …" and must ask a manager):
 - Managers can scan/add items with **no stock at all** in From (school sets and sheets keep them as short lines);
