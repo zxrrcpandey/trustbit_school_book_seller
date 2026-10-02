@@ -709,7 +709,7 @@ def search_bundles(txt=""):
 	"""School sets (Product Bundles) by name/code/description — every word must match."""
 	_guard()
 	words = [w for w in re.split(r"\s+", (txt or "").strip()) if w][:5]
-	conds, values = ["pb.disabled = 0"], {}
+	conds, values = ["pb.disabled = 0"], {"phrase": " ".join(words)}
 	for i, w in enumerate(words):
 		values[f"w{i}"] = f"%{w}%"
 		conds.append(f"(pb.name like %(w{i})s or i.item_name like %(w{i})s or pb.description like %(w{i})s)")
@@ -720,7 +720,9 @@ def search_bundles(txt=""):
 		from `tabProduct Bundle` pb
 		left join `tabItem` i on i.name = pb.new_item_code
 		where {" and ".join(conds)}
-		order by bundle_name asc
+		order by (locate(%(phrase)s, ifnull(i.item_name, pb.description)) = 1) desc,
+			(locate(%(phrase)s, ifnull(i.item_name, pb.description)) > 0) desc,
+			length(ifnull(i.item_name, pb.description)) asc, bundle_name asc
 		limit 20
 		""",
 		values,
