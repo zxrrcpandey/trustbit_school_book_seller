@@ -56,7 +56,7 @@ const working = ref(false)
 
 // Success is a FULL reload on purpose: the Guest-loaded shell holds the Guest
 // CSRF token; the reload brings the signed-in token and staffEnv.
-const finish = () => window.location.replace("/staff/")
+const finish = () => window.location.replace("/staff/home")
 
 async function submit() {
   error.value = ""

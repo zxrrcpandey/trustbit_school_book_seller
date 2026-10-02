@@ -9,7 +9,7 @@
 const SW_VERSION = "__SW_VERSION__"
 const CACHE = `staff-shell-${SW_VERSION}`
 const ASSET_PREFIX = "/assets/trustbit_school_book_seller/staff/"
-const SHELL_KEY = "/staff/"
+const SHELL_KEY = "/staff/home"
 
 self.addEventListener("install", () => {
   self.skipWaiting()

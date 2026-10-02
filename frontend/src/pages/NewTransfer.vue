@@ -1,6 +1,6 @@
 <template>
   <div class="pb-32">
-    <AppHeader title="New transfer" back="/">
+    <AppHeader title="New transfer" back="/home">
       <template #right>
         <button v-if="draft.lines.length && !locked" type="button" class="px-3 py-2 text-[14px] font-semibold text-danger-text" @click="discard">Clear</button>
       </template>

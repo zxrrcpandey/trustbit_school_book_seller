@@ -1,6 +1,6 @@
 <template>
   <div>
-    <AppHeader title="Transfers" back="/" />
+    <AppHeader title="Transfers" back="/home" />
     <main class="p-4">
       <div v-if="isManager" class="mb-3 grid grid-cols-2 gap-1 rounded-xl bg-surface-line p-1">
         <button v-for="s in ['mine', 'all']" :key="s" type="button" class="min-h-secondary rounded-lg font-semibold" :class="scope === s ? 'bg-surface' : 'text-ink-muted'" @click="scope = s">

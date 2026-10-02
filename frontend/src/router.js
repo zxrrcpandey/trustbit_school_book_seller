@@ -15,7 +15,10 @@ export const router = createRouter({
   history: createWebHistory("/staff/"),
   routes: [
     { path: "/login", name: "login", component: Login },
-    { path: "/", name: "home", component: Home, meta: { auth: true } },
+    // Home is /staff/home, not /staff/: nginx 301s "/staff/" to "/staff", which is
+    // OUTSIDE the PWA scope "/staff/" (Android then shows a browser bar / won't install).
+    { path: "/", redirect: "/home" },
+    { path: "/home", name: "home", component: Home, meta: { auth: true } },
     { path: "/transfer", name: "transfer", component: NewTransfer, meta: { auth: true } },
     { path: "/transfers", name: "transfers", component: Transfers, meta: { auth: true } },
     { path: "/t/:name", name: "detail", component: TransferDetail, props: true, meta: { auth: true } },

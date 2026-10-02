@@ -17,7 +17,7 @@ with sync_playwright() as p:
     pg=ctx.new_page(); logs=[]
     pg.on("console",lambda m: logs.append(m.text))
     pg.goto(f"{BASE}/staff/login"); pg.fill("input[type=email]","staff1@example.com"); pg.fill("input[type=password]","Kgs-Test-2026!x"); pg.click("button[type=submit]")
-    pg.wait_for_url(re.compile(r"/staff/$")); pg.goto(f"{BASE}/staff/transfer")
+    pg.wait_for_url(re.compile(r"/staff/home$")); pg.goto(f"{BASE}/staff/transfer")
     pg.select_option("#from-wh","Stores - DCV"); pg.select_option("#to-wh","Godown - DCV")
     pg.get_by_role("button",name="📷 Scan").click()
     expect(pg.get_by_text(re.compile(r"\+1 Test Viva Maths 3")).first).to_be_visible(timeout=30000)

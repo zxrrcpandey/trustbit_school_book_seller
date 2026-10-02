@@ -2,7 +2,7 @@
   "name": "KGS Staff",
   "short_name": "KGS Staff",
   "id": "/staff/",
-  "start_url": "/staff/",
+  "start_url": "/staff/home",
   "scope": "/staff/",
   "display": "standalone",
   "orientation": "portrait",

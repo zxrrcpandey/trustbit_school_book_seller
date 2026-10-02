@@ -36,7 +36,10 @@ Rebuild after any frontend change: `cd frontend && yarn install && set -o pipefa
 `public/staff/`, `www/staff.html`, `www/staff/*` together.
 
 ## Routes
-`/staff/` home · `/staff/login` · `/staff/transfer` · `/staff/transfers` · `/staff/t/<Stock Entry>`.
+`/staff/home` (home + manifest start_url) · `/staff/login` · `/staff/transfer` · `/staff/transfers` · `/staff/t/<Stock Entry>`.
+**Never make `/staff/` a page the app depends on:** production nginx 301s every trailing-slash URL (`/staff/` → `/staff`),
+and `/staff` is outside the PWA scope `/staff/` — Android then won't offer install / shows a browser bar (found on
+the first deploy, 2026-10-02; fixed by moving home to `/staff/home`). Bare `/staff` still opens the app.
 Each top-level path has its own `website_route_rules` entry in `hooks.py`. **There is deliberately no
 `/staff/<path>` catch-all** — it would swallow `sw.min.js` and the manifest (Betul lesson 386). A new
 screen needs a new rule, or a hard refresh on it 404s.
@@ -108,7 +111,7 @@ No migrate, no `bench build`, no Redis FLUSHALL (a flush cold-starts the POS cat
    `bench --site splashbox.in execute frappe.cache.delete_value --args '["app_hooks"]'` and
    `bench --site splashbox.in execute frappe.website.utils.clear_website_cache`.
    If `/staff/transfer` still 404s, restart the web program (`supervisorctl restart frappe-bench-web:`).
-8. Verify over HTTPS: `/staff/`, `/staff/transfer` 200 with `window.staffEnv`; `/staff/sw.min.js` is JS with a
+8. Verify over HTTPS: `/staff`, `/staff/home`, `/staff/transfer` 200 with `window.staffEnv`; `/staff/sw.min.js` is JS with a
    `staff-shell-` name; manifest; one hashed asset; the `.wasm`; 0 new tracebacks / 5xx in the logs.
 9. Phone check with the owner: install, sign in (password + OTP), confirm the cookie lives 7 days, scan one
    real book, and — only with the owner's OK — move 1 piece SBGD → Stores - KGS and back; print the slip.

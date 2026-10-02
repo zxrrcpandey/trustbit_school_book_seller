@@ -1,6 +1,6 @@
 <template>
   <div>
-    <AppHeader :title="name" back="/" />
+    <AppHeader :title="name" back="/home" />
     <main class="space-y-3 p-4">
       <div v-if="done" class="rounded-xl bg-ok-bg p-4 text-ok-text">
         <div class="text-[18px] font-bold">{{ already ? "Already saved" : "Stock moved" }}</div>
@@ -45,7 +45,7 @@
         <router-link v-if="done" to="/transfer" class="flex min-h-action items-center justify-center rounded-xl bg-brand-deep font-bold text-white">
           New transfer (same warehouses)
         </router-link>
-        <router-link to="/" class="flex min-h-secondary items-center justify-center font-semibold text-brand-deep">Home</router-link>
+        <router-link to="/home" class="flex min-h-secondary items-center justify-center font-semibold text-brand-deep">Home</router-link>
       </template>
     </main>
   </div>

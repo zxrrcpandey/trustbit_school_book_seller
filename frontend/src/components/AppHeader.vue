@@ -17,6 +17,6 @@ const router = useRouter()
 function goBack() {
   if (typeof props.back === "string") router.push(props.back)
   else if (window.history.length > 1) router.back()
-  else router.push("/")
+  else router.push("/home")
 }
 </script>

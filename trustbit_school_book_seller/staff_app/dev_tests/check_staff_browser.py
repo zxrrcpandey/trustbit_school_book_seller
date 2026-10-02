@@ -117,7 +117,7 @@ with sync_playwright() as p:
 	page.fill("input[type=email]", "staff1@example.com")
 	page.fill("input[type=password]", "Kgs-Test-2026!x")
 	page.click("button[type=submit]")
-	page.wait_for_url(re.compile(r"/staff/$"), timeout=15000)
+	page.wait_for_url(re.compile(r"/staff/home$"), timeout=15000)
 	page.goto(f"{BASE}/staff/transfer")
 	page.select_option("#from-wh", "Stores - DCV")
 	page.select_option("#to-wh", "Godown - DCV")

@@ -163,6 +163,7 @@ scheduler_events = {
 # (www/staff/sw.min.js) and manifest (www/staff/manifest.webmanifest).
 # Every new top-level app route needs its own rule here.
 website_route_rules = [
+	{"from_route": "/staff/home", "to_route": "staff"},
 	{"from_route": "/staff/login", "to_route": "staff"},
 	{"from_route": "/staff/transfer", "to_route": "staff"},
 	{"from_route": "/staff/transfers", "to_route": "staff"},

@@ -91,7 +91,7 @@ try:
 	check("/staff 200 for Guest", g.status_code == 200)
 	check("shell has staffEnv rendered", "window.staffEnv = { enabled: 1, sw: 1, allowed: 1, user: \"Guest\" }" in g.text, g.text[:400])
 	check("shell has no raw Jinja left", "{{" not in g.text)
-	for path in ("/staff/login", "/staff/transfer", "/staff/transfers", "/staff/t/MAT-STE-2026-00007"):
+	for path in ("/staff/home", "/staff/login", "/staff/transfer", "/staff/transfers", "/staff/t/MAT-STE-2026-00007"):
 		r = requests.get(BASE + path)
 		check(f"{path} serves the shell", r.status_code == 200 and "window.staffEnv" in r.text, r.status_code)
 	sw = requests.get(f"{BASE}/staff/sw.min.js")
