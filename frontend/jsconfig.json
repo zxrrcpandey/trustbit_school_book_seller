@@ -1,0 +1,4 @@
+{
+  "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"] } },
+  "exclude": ["node_modules", "../trustbit_school_book_seller/public/staff"]
+}

@@ -147,7 +147,35 @@ scheduler_events = {
 		"trustbit_school_book_seller.followup_api.send_followup_reminders",
 		"trustbit_school_book_seller.followup_api.check_pos_without_followups",
 	],
+	"cron": {
+		# Staff app long sessions: keep stamped session rows above the global
+		# 1-hour threshold (staff_app/session_extend.py; inert without
+		# site_config kgs_staff_session_days)
+		"*/10 * * * *": [
+			"trustbit_school_book_seller.staff_app.session_extend.touch_staff_sessions",
+		],
+	},
 }
+
+# KGS Staff app (/staff PWA) — staff_app/, www/staff.py, frontend/
+# ONLY the SPA's own routes rewrite to the www/staff shell. Deliberately NOT a
+# /staff/<path> catch-all: it would swallow the raw-served service worker
+# (www/staff/sw.min.js) and manifest (www/staff/manifest.webmanifest).
+# Every new top-level app route needs its own rule here.
+website_route_rules = [
+	{"from_route": "/staff/login", "to_route": "staff"},
+	{"from_route": "/staff/transfer", "to_route": "staff"},
+	{"from_route": "/staff/transfers", "to_route": "staff"},
+	{"from_route": "/staff/t/<path:app_path>", "to_route": "staff"},
+]
+
+# Staff app long sessions (owner decision 2026-10-02) — see session_extend.py
+on_session_creation = [
+	"trustbit_school_book_seller.staff_app.session_extend.stamp_staff_session_expiry",
+]
+after_request = [
+	"trustbit_school_book_seller.staff_app.session_extend.extend_staff_session_cookie",
+]
 
 # Testing
 # -------

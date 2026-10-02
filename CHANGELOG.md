@@ -6,6 +6,17 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.7.0] - 2026-10-02 (built and tested locally — NOT deployed)
+
+### New Features
+- **KGS Staff app (`/staff`, installable PWA) — warehouse transfers.** Stock Users scan (phone camera on Android and iPhone, Bluetooth scanner, or typed code) or search items, pick From/To warehouses and submit a Material Transfer from the phone. Full design, deploy runbook and tests: `STAFF_APP.md`
+  - Barcode lookup: Item Barcode (keeps the barcode's own UOM, e.g. a packet barcode adds 1 PKT) → `custom_isbn_barcode` → item code
+  - Server-side checks: qty ≤ stock in the source warehouse under a row lock (production allows negative stock), posting date always now (never back-dated), no zero-valuation items, whole-number UOMs, same company, no group/transit warehouses, ≤ 150 lines, per-user rate limit, idempotent retry (`client_ref`)
+  - **KGS Transfer Slip** print format (standard, module folder) — PDF from the app for the van driver, with "Received by" signature line
+  - **Longer sessions for the staff app only:** logins made through `/staff` get `kgs_staff_session_days` (site_config, off unless set); desk logins keep the 1-hour `session_expiry` (`staff_app/session_extend.py`, ported from the Betul exec PWA)
+
+---
+
 ## [1.6.2] - 2026-09-26
 
 ### Fixed

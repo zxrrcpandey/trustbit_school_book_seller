@@ -1,0 +1,134 @@
+# KGS Staff app (`/staff`) — warehouse transfers
+
+An installable phone app (PWA) for Stock Users: pick From/To warehouses, scan or search items, and
+submit a **Material Transfer** (Stock Entry). Built 2026-10-02 on the pattern of the Betul exec PWA
+(`zxrrcpandey/betul_biofuel`, app `trustbit_ethanol`, route `/exec`). Later phases planned in the same
+app: Purchase Order approvals, then stock count → Stock Reconciliation.
+
+**Status: built and tested on the local dev bench only. Not deployed.**
+
+## Owner decisions (2026-10-02)
+| Question | Answer |
+|---|---|
+| Routes | All: SBGD ↔ Stores/KGS Warehouse, godown ↔ vans, godown → shop counter, new locations |
+| Flow | Direct one-step transfer (no Goods In Transit leg) |
+| Who submits | Any Stock User / Stock Manager |
+| Phones | Android + iPhone camera scanning (+ Bluetooth scanners) |
+| Login | Longer session for the app |
+| Slip | Yes — printable transfer slip |
+
+## Layout
+| Path | What |
+|---|---|
+| `frontend/` | Vue 3 + Vite + Tailwind source. `package.json` lives ONLY here — one at the app root makes `bench build` run yarn and abort production builds (postbuild fails the build if it appears) |
+| `frontend/scripts/postbuild.mjs` | moves the shell to `www/staff.html`, stamps the service worker, copies icons + the barcode WASM, safety asserts (no `v-html`, no `.__`, no API keys / `/api/resource`, SW `/api` guard) |
+| `trustbit_school_book_seller/public/staff/` | **built, committed** assets (hashed JS/CSS, icons, `zxing-1.3.4/zxing_reader.wasm`) — served from `/assets/…`, so no `bench build` on deploy |
+| `trustbit_school_book_seller/www/staff.html` | GENERATED shell — never hand-edit |
+| `trustbit_school_book_seller/www/staff.py` | shell context: CSRF token, `window.staffEnv` = `{enabled, sw, allowed, user}`, `no_cache = 1` |
+| `trustbit_school_book_seller/www/staff/sw.min.js`, `manifest.webmanifest` | service worker (scope `/staff/`, `.min.js` = served raw, not Jinja) and manifest (not under `/assets`, which is cached ~1 year) |
+| `staff_app/api.py` | all endpoints (POST-only, Stock User/Manager, per-user rate limit 120/min) |
+| `staff_app/session_extend.py` | longer sessions for logins made through the app |
+| `trustbit_school_book/print_format/kgs_transfer_slip/` | standard Print Format "KGS Transfer Slip" (Stock Entry) |
+| `staff_app/dev_tests/` | local-bench check scripts (see its README) — `check_*` names on purpose, so `bench run-tests` never imports them |
+
+Rebuild after any frontend change: `cd frontend && yarn install && set -o pipefail && yarn build` (Node 18 OK;
+`barcode-detector` is pinned to 2.3.1 because 3.x needs Node 20). Commit the source AND the regenerated
+`public/staff/`, `www/staff.html`, `www/staff/*` together.
+
+## Routes
+`/staff/` home · `/staff/login` · `/staff/transfer` · `/staff/transfers` · `/staff/t/<Stock Entry>`.
+Each top-level path has its own `website_route_rules` entry in `hooks.py`. **There is deliberately no
+`/staff/<path>` catch-all** — it would swallow `sw.min.js` and the manifest (Betul lesson 386). A new
+screen needs a new rule, or a hard refresh on it 404s.
+
+## Endpoints (`trustbit_school_book_seller.staff_app.api.*`)
+| Method | Purpose |
+|---|---|
+| `boot` | user, manager flag, warehouses (leaf, enabled, not Transit; via `get_list`, so User Permissions apply) with items-in-stock counts, default From (Stock Settings) |
+| `lookup_item(code, from, to)` | Item Barcode (→ that barcode's UOM, e.g. PKT) → `custom_isbn_barcode` → item code |
+| `get_item`, `search_items(txt, from)` | search: every word must match name/code/ISBN, 15 rows, in-stock first |
+| `stock_levels(item_codes, from, to)` | one call to refresh all lines after a warehouse change |
+| `create_transfer(from, to, items, client_ref, remarks)` | builds AND submits the Material Transfer |
+| `my_transfers(scope, days)`, `get_transfer(name)` | lists (Stock Manager may see everyone) / detail + slip PDF URL |
+
+### Rules `create_transfer` enforces (the phone's checks are only convenience)
+- **Availability under a row lock** (`SELECT … FOR UPDATE` on `tabBin`), summed across all lines of an item.
+  Production has `allow_negative_stock = 1`, so ERPNext alone would transfer stock that is not there.
+- **Never back-dated:** `set_posting_time = 0` → now (CLAUDE.md Rule 15 — back-dated stock documents queue reposts).
+- No item with **valuation rate 0** in the source (193 such bins on production, 2026-10-02) — avoids ₹0 moves
+  and "Valuation Rate missing".
+- UOM must be on the item; whole-number UOMs (Nos, Set, Box) refuse fractions; qty > 0.
+- Same company, From ≠ To, no group / Transit / disabled warehouse. ≤ 150 lines per transfer.
+- **Idempotent:** `client_ref` (UUID per draft) is stored in `remarks` as `[Staff app · ref:…]` and checked
+  first, plus a Redis lock while saving — a retried tap returns the existing transfer, never a second one.
+  If the network drops mid-save the phone LOCKS the draft and only offers "Check and finish" (the same
+  request again), so edited lines can never be sent under an already-used reference.
+- Line-level failures come back as `{"ok": 0, "problems": [{idx, item_code, message}]}`; nothing is created.
+- Normal ERPNext permissions apply (`insert()` / `submit()` as the user; Stock User has create + submit).
+- India Compliance's Stock Entry GST/e-waybill checks are inert on production (`enable_e_waybill_for_sc = 0`).
+
+## Longer sessions (`session_extend.py`)
+Production `session_expiry` is 01:00 and every user has 2FA, so without this staff would type password + OTP
+every idle hour. **Only sessions created by a login from the app** (`staff_app: 1` is sent with both the
+password and the OTP call) of a **Stock User/Manager** get `kgs_staff_session_days` days. Desk logins keep the
+hour. Three mechanisms (ported from Betul `ts_session_extend.py`):
+1. `on_session_creation` stamps `session_expiry = "<days*24>:00:00"` + `staff_app = 1` into the session.
+2. `after_request` re-issues the `sid` cookie with the long Max-Age for stamped sessions.
+3. cron every 10 min (`touch_staff_sessions`) slides `tabSessions.lastupdate` so the DB path (used after a
+   Redis FLUSHALL on deploy) and the daily reaper don't expire them — bounded by the session's own activity.
+
+**Off unless** site_config `kgs_staff_session_days` ≥ 1 (max 30). Turning it off stops new long sessions;
+existing ones live until they expire — to end them now, clear those users' sessions.
+
+## Kill switches (site_config, no deploy)
+- `kgs_staff_app_disabled: 1` — every endpoint refuses, the shell shows "switched off".
+- `kgs_staff_app_sw_off: 1` — every phone unregisters its service worker on next launch.
+- `kgs_staff_session_days: 0` — no new long sessions.
+
+## Scanning
+Android Chrome uses the native `BarcodeDetector`. iPhone Safari has none, so the `barcode-detector` polyfill
+(ZXing → WASM, 0.9 MB) is lazy-loaded — self-hosted under `/assets/…/staff/zxing-1.3.4/`, never from a CDN
+(`src/data/scanner.js` `ZXING_DIR` must match the folder; postbuild checks). Production nginx 1.18 has no
+`application/wasm` MIME type: the decoder still works (falls back from streaming compile; tested), it just
+downloads the file twice on first use. Optional fix: add `application/wasm wasm;` to nginx mime types.
+Bluetooth/USB scanners work without focusing a field (fast keystrokes + Enter are caught page-wide).
+
+## Deploy runbook (production) — evening only, after 19:30 IST and a quiet till check
+No migrate, no `bench build`, no Redis FLUSHALL (a flush cold-starts the POS catalogue — CLAUDE.md timing notes).
+1. Count bills in the last 10 min (`creation >= NOW() + INTERVAL 320 MINUTE`); wait if tills are billing.
+2. Anchor: `mkdir /root/predeploy_<date>_staff_app`; save book_seller HEAD (`git rev-parse HEAD`), `sites/apps.txt`;
+   niced DB backup.
+3. As frappe_user in `apps/trustbit_school_book_seller`: `git pull upstream main` (fast-forward only).
+4. Print format (no migrate): `bench --site splashbox.in execute frappe.modules.import_file.import_file_by_path --args '["<abs path>/trustbit_school_book/print_format/kgs_transfer_slip/kgs_transfer_slip.json"]'`
+5. Scheduler job row for the new cron (normally made by migrate):
+   `bench --site splashbox.in execute frappe.core.doctype.scheduled_job_type.scheduled_job_type.sync_jobs`
+6. `bench --site splashbox.in set-config kgs_staff_session_days 7`
+7. Hooks changed (route rules, after_request, on_session_creation): graceful web reload
+   `supervisorctl signal HUP frappe-bench-web:frappe-bench-frappe-web`, then drop the cached hooks/routes:
+   `bench --site splashbox.in execute frappe.cache.delete_value --args '["app_hooks"]'` and
+   `bench --site splashbox.in execute frappe.website.utils.clear_website_cache`.
+   If `/staff/transfer` still 404s, restart the web program (`supervisorctl restart frappe-bench-web:`).
+8. Verify over HTTPS: `/staff/`, `/staff/transfer` 200 with `window.staffEnv`; `/staff/sw.min.js` is JS with a
+   `staff-shell-` name; manifest; one hashed asset; the `.wasm`; 0 new tracebacks / 5xx in the logs.
+9. Phone check with the owner: install, sign in (password + OTP), confirm the cookie lives 7 days, scan one
+   real book, and — only with the owner's OK — move 1 piece SBGD → Stores - KGS and back; print the slip.
+Rollback: `git reset --hard <anchor HEAD>` (as frappe_user) → HUP + step 7 cache drops →
+`set-config kgs_staff_session_days 0` → `frappe.delete_doc("Print Format", "KGS Transfer Slip")` →
+`sync_jobs` again. Transfers already made are normal Stock Entries (cancel in desk if wrong).
+
+## Before staff use it for real
+- **Shop counter route:** every till sells from SBGD - KGS. Moving stock to a counter warehouse only works if
+  the 11 POS Profiles are switched to it AND the shop floor gets an opening transfer — otherwise each counter
+  sale drives SBGD negative. Needs its own planned evening and the owner's warehouse name.
+- **New locations:** create the Warehouse in desk (leaf, under the right company) — it appears in the app.
+- Users need the **Stock User** role (17 enabled users hold Stock User/Manager on 2026-10-02).
+- Movement of goods worth > ₹50,000 by road may need an e-way bill even between own premises — owner/CA to
+  confirm for van loads; the app does not create e-way bills.
+
+## Tests (local bench, 2026-10-02)
+`check_staff_api.py` 63/63 · `check_staff_http.py` 36/36 (incl. 2FA login, 7-day vs 1-hour cookies,
+keep-alive, session surviving Redis loss vs an idle desk session expiring) · `check_staff_browser.py` 22/22
+(phone viewport, native + WASM camera scanning with a fake camera, keyboard-wedge scanner, over-stock block,
+draft survives reload, submit, slip link, lists) · `check_wasm_mime.py` (nginx 1.18 MIME) pass.
+Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
+and real phones — do step 9 of the runbook.

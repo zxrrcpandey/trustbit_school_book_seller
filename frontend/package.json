@@ -1,0 +1,23 @@
+{
+  "name": "kgs-staff-app-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "KGS Staff app PWA (/staff) — Vite build workspace. NEVER built on the server: the built files are committed under trustbit_school_book_seller/public/staff/ and www/staff*. This file must stay in frontend/ — a package.json at the APP ROOT would make bench build run yarn there and abort production builds.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/postbuild.mjs"
+  },
+  "dependencies": {
+    "barcode-detector": "2.3.1",
+    "vue": "^3.5.13",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "vite": "^5.4.21"
+  }
+}

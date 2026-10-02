@@ -1,0 +1,22 @@
+/* KGS Staff — design tokens. The ONLY file with colour hex values.
+   Text pairings meet WCAG AA on their backgrounds. Light only. */
+:root {
+  --kgs-brand: #0f7a5f;
+  --kgs-brand-deep: #0b5d48;
+  --kgs-brand-soft: #e3f2ec;
+
+  --kgs-page: #f4f6f5;
+  --kgs-surface: #ffffff;
+  --kgs-line: #dde3e0;
+
+  --kgs-ink: #17201c;
+  --kgs-ink-muted: #46524d;
+  --kgs-ink-faint: #5d6a64;
+
+  --kgs-ok-text: #047857;
+  --kgs-ok-bg: #e0efe5;
+  --kgs-warn-text: #9a4a08;
+  --kgs-warn-bg: #f7eedb;
+  --kgs-danger-text: #b91c1c;
+  --kgs-danger-bg: #f8e6e4;
+}

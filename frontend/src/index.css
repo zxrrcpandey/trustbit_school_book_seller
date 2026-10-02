@@ -1,0 +1,64 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  /* 16px+ on inputs or iOS Safari zooms the page on focus */
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  @apply bg-surface-page text-ink;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  margin: 0;
+  min-height: 100dvh;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bottom action bar clears the iPhone home indicator in the installed app */
+.safe-bottom {
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+:focus-visible {
+  outline: 2px solid var(--kgs-brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.skeleton {
+  @apply rounded-xl bg-surface-line;
+  animation: kgs-pulse 1.2s ease-in-out infinite;
+}
+@keyframes kgs-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
