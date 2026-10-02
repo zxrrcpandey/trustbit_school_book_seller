@@ -5,7 +5,12 @@ submit a **Material Transfer** (Stock Entry). Built 2026-10-02 on the pattern of
 (`zxrrcpandey/betul_biofuel`, app `trustbit_ethanol`, route `/exec`). Later phases planned in the same
 app: Purchase Order approvals, then stock count → Stock Reconciliation.
 
-**Status: built and tested on the local dev bench only. Not deployed.**
+**Status: LIVE on splashbox.in since 2026-10-02 19:28 IST** (`9cbcaa3`, scope fix `e7f7850` 19:31 IST).
+Deployed in shop hours at the owner's request ("deploy now") — no migrate/build/flush; targeted dumps instead of a full
+backup. Anchor `/root/predeploy_20261002_staff_app/` (HEAD before `f2bc2c3`, apps.txt, Scheduled Job Type + Stock Entry
+Print Format dumps), log `/root/predeploy_20261002_staff_app.log`. Verified: all routes 200 over HTTPS, hooks
+registered, job `touch_staff_sessions` (*/10) created, `kgs_staff_session_days` = 7, 0 new Error Log / 5xx.
+**Not yet done:** a real phone sign-in + one real transfer with the owner (runbook step 9).
 
 ## Owner decisions (2026-10-02)
 | Question | Answer |

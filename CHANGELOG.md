@@ -6,7 +6,7 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
-## [1.7.0] - 2026-10-02 (built and tested locally — NOT deployed)
+## [1.7.0] - 2026-10-02 (live on splashbox.in 19:28 IST; home moved to /staff/home 19:31 IST)
 
 ### New Features
 - **KGS Staff app (`/staff`, installable PWA) — warehouse transfers.** Stock Users scan (phone camera on Android and iPhone, Bluetooth scanner, or typed code) or search items, pick From/To warehouses and submit a Material Transfer from the phone. Full design, deploy runbook and tests: `STAFF_APP.md`
