@@ -6,7 +6,7 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
-## [1.8.0] - 2026-10-02 (bulk transfers — built and tested locally, NOT deployed)
+## [1.8.0] - 2026-10-02 (bulk transfers — live on splashbox.in 20:11 IST, `8f9f04c`; set-search ranking `41f7438`)
 
 ### New Features
 - **Staff app bulk transfers** ("➕ Add in bulk"): add a school set × N (Product Bundle, "Not Available" rows left out), everything in the From warehouse, or an Excel/CSV list (barcode/ISBN/code, qty, unit). Unmovable items are listed with the reason; shortfalls show in red

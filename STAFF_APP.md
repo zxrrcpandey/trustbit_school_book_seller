@@ -12,7 +12,10 @@ Print Format dumps), log `/root/predeploy_20261002_staff_app.log`. Verified: all
 registered, job `touch_staff_sessions` (*/10) created, `kgs_staff_session_days` = 7, 0 new Error Log / 5xx.
 **Not yet done:** a real phone sign-in + one real transfer with the owner (runbook step 9).
 
-## Bulk transfers (built 2026-10-02 evening — owner asked for all four kinds)
+## Bulk transfers (LIVE 2026-10-02 20:11 IST, `8f9f04c` + `41f7438` — owner asked for all four kinds)
+Deployed after hours (last bill 19:54): ff + app_hooks drop + HUP + website cache; workers need no restart (RQ forks a
+fresh child per job). Anchor `/root/predeploy_20261002_staff_bulk/` (HEAD before `26904ad`). Read-only check on live
+data as saransh42: RDPS 10 × 30 expanded in 0.12 s (8 lines, 8 left out with reasons), Stores - KGS all stock 36 lines.
 "➕ Add in bulk" on the transfer screen loads many lines into the same draft (same item + unit adds onto the line):
 | Kind | Endpoint | Notes |
 |---|---|---|
