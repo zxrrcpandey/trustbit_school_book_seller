@@ -36,6 +36,9 @@
       <section v-if="!locked" class="grid grid-cols-2 gap-2">
         <button type="button" class="min-h-action rounded-xl bg-brand-deep font-bold text-white disabled:opacity-40" :disabled="!draft.from" @click="openScanner">📷 Scan</button>
         <button type="button" class="min-h-action rounded-xl border-2 border-brand-deep font-bold text-brand-deep disabled:opacity-40" :disabled="!draft.from" @click="searching = true">🔍 Search</button>
+        <button type="button" class="col-span-2 min-h-secondary rounded-xl border border-surface-line bg-surface font-semibold text-brand-deep disabled:opacity-40" :disabled="!draft.from" @click="bulkOpen = true">
+          ➕ Add in bulk — school set, all stock, Excel
+        </button>
         <form class="col-span-2 flex gap-2" @submit.prevent="typedCode">
           <input
             v-model="codeInput"
@@ -62,19 +65,22 @@
           stock will never be moved twice. The list is locked until then.
         </p>
         <p v-if="submitError" class="mt-2 text-[14px] font-semibold text-danger-text">{{ submitError }}</p>
-        <button type="button" class="mt-3 min-h-action w-full rounded-xl bg-brand-deep font-bold text-white disabled:opacity-40" :disabled="submitting" @click="send(draft.sent)">
+        <button type="button" class="mt-3 min-h-action w-full rounded-xl bg-brand-deep font-bold text-white disabled:opacity-40" :disabled="submitting" @click="(draft.sent && draft.sent.bulk ? sendBulk : send)(draft.sent)">
           {{ submitting ? "Checking…" : "Check and finish" }}
         </button>
       </section>
 
       <!-- Lines -->
       <section v-if="draft.lines.length" class="space-y-2">
-        <div class="flex items-center justify-between text-[14px] text-ink-muted">
-          <span>{{ draft.lines.length }} line{{ draft.lines.length === 1 ? "" : "s" }} · newest first</span>
+        <div class="flex items-center justify-between gap-2 text-[14px] text-ink-muted">
+          <span>{{ fmt(draft.lines.length) }} line{{ draft.lines.length === 1 ? "" : "s" }} · {{ fmt(totalStockQty) }} in stock units</span>
           <span v-if="refreshing">Updating stock…</span>
+          <button v-else-if="badCount" type="button" class="font-semibold text-danger-text" @click="onlyProblems = !onlyProblems">
+            {{ onlyProblems ? "Show all" : `Show ${badCount} with problems` }}
+          </button>
         </div>
         <TransferLine
-          v-for="(line, i) in draft.lines"
+          v-for="{ line, i } in visibleLines"
           :key="line.item_code + '|' + line.uom"
           :line="line"
           :problem="problems[i]"
@@ -82,6 +88,9 @@
           @update="(patch) => updateLine(i, patch)"
           @remove="removeLine(i)"
         />
+        <button v-if="hiddenCount" type="button" class="min-h-secondary w-full rounded-xl border border-surface-line bg-surface font-semibold text-brand-deep" @click="shown += 100">
+          Show {{ Math.min(100, hiddenCount) }} more ({{ fmt(hiddenCount) }} hidden)
+        </button>
       </section>
       <div v-else-if="draft.from" class="rounded-xl border border-dashed border-surface-line p-6 text-center text-ink-muted">
         Scan or search items to add them. Each scan adds 1; change the number or unit on the line.
@@ -93,7 +102,7 @@
       <div class="mx-auto max-w-lg">
         <p v-if="blockReason" class="mb-2 text-center text-[14px] font-semibold text-danger-text">{{ blockReason }}</p>
         <button type="button" class="min-h-action w-full rounded-xl bg-brand-deep text-[17px] font-bold text-white disabled:opacity-40" :disabled="!!blockReason" @click="openReview">
-          Review {{ draft.lines.length }} line{{ draft.lines.length === 1 ? "" : "s" }}
+          Review {{ fmt(draft.lines.length) }} line{{ draft.lines.length === 1 ? "" : "s" }}
         </button>
       </div>
     </div>
@@ -114,10 +123,14 @@
           <div class="text-[18px] font-bold">{{ draft.to }}</div>
         </div>
         <div class="rounded-xl border border-surface-line bg-surface">
-          <div v-for="line in draft.lines" :key="line.item_code + '|' + line.uom" class="flex items-start justify-between gap-3 border-b border-surface-line px-4 py-3 last:border-0">
+          <div v-for="line in draft.lines.slice(0, 100)" :key="line.item_code + '|' + line.uom" class="flex items-start justify-between gap-3 border-b border-surface-line px-4 py-3 last:border-0">
             <span class="min-w-0 font-semibold">{{ line.item_name }}</span>
             <span class="tnum flex-none text-right font-bold">{{ fmt(line.qty) }} {{ line.uom }}</span>
           </div>
+          <div v-if="draft.lines.length > 100" class="px-4 py-3 text-[14px] font-semibold text-ink-muted">… and {{ fmt(draft.lines.length - 100) }} more lines</div>
+        </div>
+        <div v-if="isBulk" class="rounded-xl border-2 border-warn-text bg-warn-bg p-3 text-[14px] text-warn-text">
+          <b>{{ fmt(draft.lines.length) }} lines</b> will be moved in the background as <b>{{ bulkParts }} transfers</b> of up to {{ info.max_lines }} lines each. Everything is checked first; you can watch the progress. Only outside shop hours (before 10:30, after 19:30).
         </div>
         <label class="block">
           <span class="text-[14px] font-semibold text-ink-muted">Note (optional) — e.g. van driver, school name</span>
@@ -128,13 +141,14 @@
       </div>
       <div class="safe-bottom border-t border-surface-line bg-surface px-4 pt-3">
         <button type="button" class="min-h-action w-full rounded-xl bg-brand-deep text-[17px] font-bold text-white disabled:opacity-40" :disabled="submitting" @click="submit">
-          {{ submitting ? "Moving stock…" : `Move stock now (${draft.lines.length})` }}
+          {{ submitting ? (isBulk ? "Checking everything…" : "Moving stock…") : isBulk ? `Move in background (${bulkParts} transfers)` : `Move stock now (${draft.lines.length})` }}
         </button>
       </div>
     </div>
 
     <ScannerSheet v-if="scanning" :last="lastScan" @code="handleCode" @close="scanning = false" />
     <ItemSearchSheet v-if="searching" :from="draft.from" @pick="pick" @close="searching = false" />
+    <BulkSheet v-if="bulkOpen" :from="draft.from" :to="draft.to" :from-count="byName[draft.from]?.items_in_stock || 0" @add="addBulk" @close="bulkOpen = false" />
   </div>
 </template>
 
@@ -143,10 +157,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 
 import AppHeader from "@/components/AppHeader.vue"
+import BulkSheet from "@/components/BulkSheet.vue"
 import ItemSearchSheet from "@/components/ItemSearchSheet.vue"
 import ScannerSheet from "@/components/ScannerSheet.vue"
 import TransferLine from "@/components/TransferLine.vue"
-import { boot, createTransfer, getItem, lookupItem, stockLevels } from "@/data/api.js"
+import { boot, createBulkTransfer, createTransfer, getItem, lookupItem, stockLevels } from "@/data/api.js"
 import { clearDraft, draft, loadDraft, rememberPair } from "@/data/draft.js"
 import { errorBeep, okBeep, unlockAudio } from "@/data/feedback.js"
 import { fmt } from "@/data/format.js"
@@ -166,6 +181,9 @@ const lastScan = ref(null)
 const flash = ref(null)
 const serverProblems = ref({}) // "item|uom" → message from the server
 const locked = computed(() => !!draft.sent)
+const bulkOpen = ref(false)
+const shown = ref(100)
+const onlyProblems = ref(false)
 
 // ── warehouses ──────────────────────────────────────────────────────────────
 const byName = computed(() => Object.fromEntries((info.value?.warehouses || []).map((w) => [w.name, w])))
@@ -221,10 +239,47 @@ const blockReason = computed(() => {
   if (warehouseProblem.value) return warehouseProblem.value
   const bad = problems.value.filter(Boolean).length
   if (bad) return `${bad} line${bad === 1 ? " needs" : "s need"} attention.`
-  if (info.value && draft.lines.length > info.value.max_lines)
-    return `Too many lines — at most ${info.value.max_lines} per transfer.`
+  if (info.value && draft.lines.length > info.value.max_lines && !info.value.is_manager)
+    return `${draft.lines.length} lines — at most ${info.value.max_lines} per transfer. A Stock Manager can move more in the background.`
   return ""
 })
+
+const isBulk = computed(() => !!info.value && draft.lines.length > info.value.max_lines)
+const bulkParts = computed(() => (info.value ? Math.ceil(draft.lines.length / info.value.max_lines) : 0))
+const badCount = computed(() => problems.value.filter(Boolean).length)
+const totalStockQty = computed(() => draft.lines.reduce((t, l) => t + Number(l.qty || 0) * unitOf(l).factor, 0))
+const indexed = computed(() => draft.lines.map((line, i) => ({ line, i })))
+const visibleLines = computed(() =>
+  onlyProblems.value && badCount.value ? indexed.value.filter(({ i }) => problems.value[i]) : indexed.value.slice(0, shown.value)
+)
+const hiddenCount = computed(() => (onlyProblems.value && badCount.value ? 0 : Math.max(0, draft.lines.length - shown.value)))
+
+// Lines from a bulk load (school set / all stock / sheet): same item + unit adds
+// onto the existing line, new ones go to the end. done({added, merged}).
+function addBulk(lines, done) {
+  const index = new Map(draft.lines.map((l) => [lineKey(l), l]))
+  let added = 0
+  let merged = 0
+  for (const p of lines) {
+    const existing = index.get(`${p.item_code}|${p.uom}`)
+    if (existing) {
+      existing.qty = Number(existing.qty || 0) + Number(p.qty)
+      existing.available = p.available
+      existing.at_target = p.at_target
+      merged++
+    } else {
+      const line = {
+        item_code: p.item_code, item_name: p.item_name, stock_uom: p.stock_uom, uoms: p.uoms, uom: p.uom,
+        qty: Number(p.qty), available: p.available, at_target: p.at_target, valuation_ok: 1,
+      }
+      draft.lines.push(line)
+      index.set(lineKey(line), line)
+      added++
+    }
+  }
+  serverProblems.value = {}
+  if (done) done({ added, merged })
+}
 
 function updateLine(i, patch) {
   const line = draft.lines[i]
@@ -376,7 +431,7 @@ function openReview() {
 }
 
 function submit() {
-  send({
+  ;(isBulk.value ? sendBulk : send)({
     from_warehouse: draft.from,
     to_warehouse: draft.to,
     items: draft.lines.map((l) => ({ item_code: l.item_code, qty: Number(l.qty), uom: l.uom })),
@@ -424,6 +479,49 @@ async function send(request) {
       if (e.sessionExpired) signedOut.value = true
       submitError.value = e.sessionExpired ? "You were signed out. Sign in again — your items are kept." : e.display()
       if (e.needsReload) submitError.value += " Reload the app and try again."
+    }
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function sendBulk(request) {
+  if (!request || submitting.value) return
+  submitting.value = true
+  submitError.value = ""
+  signedOut.value = false
+  draft.sent = { ...request, bulk: 1 } // locked until we know what happened
+  try {
+    const { bulk, ...args } = draft.sent
+    const res = await createBulkTransfer(args)
+    if (res && res.ok) {
+      rememberPair(request.from_warehouse, request.to_warehouse)
+      clearDraft({ keepWarehouses: true })
+      reviewing.value = false
+      router.replace(`/bulk/${encodeURIComponent(res.ref)}`)
+      return
+    }
+    draft.sent = null
+    const map = {}
+    for (const p of (res && res.problems) || []) {
+      const l = request.items[p.idx - 1]
+      if (l) map[`${l.item_code}|${l.uom}`] = p.message
+    }
+    serverProblems.value = map
+    onlyProblems.value = true
+    await refreshLevels()
+    reviewing.value = false
+    errorBeep()
+    showFlash(false, `${Object.keys(map).length} line(s) cannot be moved — fix or remove them.`)
+  } catch (e) {
+    const unknown = e.excType === "NetworkError" || e.excType === "Timeout" || e.status >= 502
+    if (unknown) {
+      reviewing.value = false
+      submitError.value = e.display()
+    } else {
+      draft.sent = null
+      if (e.sessionExpired) signedOut.value = true
+      submitError.value = e.sessionExpired ? "You were signed out. Sign in again — your items are kept." : e.display()
     }
   } finally {
     submitting.value = false

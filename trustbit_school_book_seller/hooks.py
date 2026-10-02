@@ -168,6 +168,7 @@ website_route_rules = [
 	{"from_route": "/staff/transfer", "to_route": "staff"},
 	{"from_route": "/staff/transfers", "to_route": "staff"},
 	{"from_route": "/staff/t/<path:app_path>", "to_route": "staff"},
+	{"from_route": "/staff/bulk/<path:app_path>", "to_route": "staff"},
 ]
 
 # Staff app long sessions (owner decision 2026-10-02) — see session_extend.py

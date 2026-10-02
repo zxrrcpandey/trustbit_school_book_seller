@@ -8,6 +8,8 @@ Run on the dev bench (`/Users/warroom/frappe-bench`, site `site1.local`), with R
 |---|---|---|
 | `check_staff_api.py` | `frappe-bench/sites`: `../env/bin/python <path>` | 63 checks: lookup chain, UOM, availability lock, refusals, idempotency, slip render |
 | `check_staff_http.py` | same | 36 checks: shell/SW/manifest/assets, 2FA login, 7-day vs 1-hour cookies, keep-alive job, session after Redis loss |
+| `check_staff_bulk.py` | same (after check_staff_api.py) | 43 checks: school set, all stock, CSV/XLSX, 320-line background split, re-run, stop mid-way, gates |
+| `check_staff_bulk_browser.py` | playwright venv + `bench worker --queue long` running | 18 checks: bulk UI end to end, moves all of Stores - DCV to Godown and back |
 | `make_barcode_video.py` | bench python | writes `barcode.y4m` (fake camera) |
 | `check_staff_browser.py` | a venv with `playwright` | 22 checks: full transfer on a phone viewport, native + WASM (iPhone path) camera scanning |
 | `check_wasm_mime.py` | same | WASM decoder still works when nginx sends `application/octet-stream` (production nginx 1.18) |

@@ -22,3 +22,11 @@ export const stockLevels = (codes, from, to) => call("stock_levels", { item_code
 export const createTransfer = (args) => call("create_transfer", args, { timeoutMs: 90000 })
 export const myTransfers = (scope = "mine", days = 30) => call("my_transfers", { scope, days })
 export const getTransfer = (name) => call("get_transfer", { name })
+
+// Bulk: load many lines into the draft, and move more than max_lines in the background.
+export const searchBundles = (txt) => call("search_bundles", { txt })
+export const expandBundle = (bundle, sets, from, to) => call("expand_bundle", { bundle, sets, from_warehouse: from, to_warehouse: to }, { timeoutMs: 60000 })
+export const warehouseContents = (from, to) => call("warehouse_contents", { from_warehouse: from, to_warehouse: to }, { timeoutMs: 120000 })
+export const parseSheet = (filename, content, from, to) => call("parse_sheet", { filename, content, from_warehouse: from, to_warehouse: to }, { timeoutMs: 120000 })
+export const createBulkTransfer = (args) => call("create_bulk_transfer", args, { timeoutMs: 180000 })
+export const bulkStatus = (ref) => call("bulk_status", { ref })

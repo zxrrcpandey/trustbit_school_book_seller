@@ -26,6 +26,7 @@ STAFF_ROLES = ("Stock User", "Stock Manager")
 MANAGER_ROLES = ("Stock Manager",)
 TRANSFER_SLIP_FORMAT = "KGS Transfer Slip"
 MAX_LINES = 150  # one submit must finish inside a web-worker request on 1 vCPU
+BULK_MAX_LINES = 15000  # bulk: split into MAX_LINES transfers, run in the background
 SEARCH_LIMIT = 15
 RATE_LIMIT_PER_MINUTE = 120  # per USER — every shop phone shares one NAT IP
 _CLIENT_REF_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
@@ -258,22 +259,15 @@ def stock_levels(item_codes, from_warehouse=None, to_warehouse=None):
 	_guard()
 	if isinstance(item_codes, str):
 		item_codes = json.loads(item_codes or "[]")
-	item_codes = [str(c) for c in (item_codes or [])][:MAX_LINES]
+	item_codes = list(dict.fromkeys(str(c) for c in (item_codes or [])))[:BULK_MAX_LINES]
 	if not item_codes:
 		return {}
 	out = {c: {"available": 0.0, "at_target": 0.0 if to_warehouse else None, "valuation_ok": 0} for c in item_codes}
 	for wh, key in ((from_warehouse, "available"), (to_warehouse, "at_target")):
-		if not wh:
-			continue
-		for r in frappe.db.sql(
-			"""select item_code, actual_qty, valuation_rate from `tabBin`
-			where warehouse = %s and item_code in %s""",
-			(wh, tuple(item_codes)),
-			as_dict=True,
-		):
-			out[r.item_code][key] = flt(r.actual_qty)
+		for code, r in _batch_bins(item_codes, wh).items():
+			out[code][key] = flt(r.actual_qty)
 			if key == "available":
-				out[r.item_code]["valuation_ok"] = 1 if flt(r.valuation_rate) > 0 else 0
+				out[code]["valuation_ok"] = 1 if flt(r.valuation_rate) > 0 else 0
 	return out
 
 
@@ -386,7 +380,7 @@ def _validate_warehouses(from_warehouse, to_warehouse):
 	return src.company
 
 
-def _parse_lines(items):
+def _parse_lines(items, max_lines=MAX_LINES):
 	if isinstance(items, str):
 		try:
 			items = json.loads(items)
@@ -394,8 +388,8 @@ def _parse_lines(items):
 			frappe.throw(_("Could not read the item list."))
 	if not isinstance(items, list) or not items:
 		frappe.throw(_("Add at least one item."))
-	if len(items) > MAX_LINES:
-		frappe.throw(_("Too many lines ({0}). Split it into transfers of at most {1} lines.").format(len(items), MAX_LINES))
+	if len(items) > max_lines:
+		frappe.throw(_("Too many lines ({0}). At most {1} lines here.").format(len(items), max_lines))
 	lines = []
 	for idx, row in enumerate(items, start=1):
 		if not isinstance(row, dict):
@@ -411,24 +405,73 @@ def _parse_lines(items):
 	return lines
 
 
-def _create_transfer(user, from_warehouse, to_warehouse, items, tag, remarks):
+def _chunks(seq, size=1000):
+	seq = list(seq)
+	for i in range(0, len(seq), size):
+		yield seq[i : i + size]
+
+
+def _batch_items(item_codes):
+	out = {}
+	for part in _chunks(set(item_codes)):
+		for r in frappe.get_all(
+			"Item",
+			filters={"name": ["in", part]},
+			fields=["name", "item_name", "stock_uom", "disabled", "is_stock_item", "has_variants", "item_group"],
+		):
+			out[r.name] = r
+	return out
+
+
+def _batch_uoms(item_rows):
+	"""{item_code: {uom: {uom, factor, whole}}} — stock UOM + conversions, in
+	a few queries whatever the number of items (bulk transfers: thousands)."""
+	out = {code: {r.stock_uom: {"uom": r.stock_uom, "factor": 1.0}} for code, r in item_rows.items()}
+	for part in _chunks(item_rows):
+		for c in frappe.db.sql(
+			"""select parent, uom, conversion_factor from `tabUOM Conversion Detail`
+			where parenttype = 'Item' and parent in %s order by parent, idx""",
+			(tuple(part),),
+			as_dict=True,
+		):
+			if c.uom and flt(c.conversion_factor) > 0 and c.uom not in out[c.parent]:
+				out[c.parent][c.uom] = {"uom": c.uom, "factor": flt(c.conversion_factor)}
+	whole = _whole_number_uoms({u for m in out.values() for u in m})
+	for m in out.values():
+		for u in m.values():
+			u["whole"] = 1 if u["uom"] in whole else 0
+	return out
+
+
+def _batch_bins(item_codes, warehouse, for_update=False):
+	out = {}
+	if not warehouse:
+		return out
+	lock = " for update" if for_update else ""
+	for part in _chunks(set(item_codes)):
+		for r in frappe.db.sql(
+			f"""select item_code, actual_qty, valuation_rate from `tabBin`
+			where warehouse = %s and item_code in %s{lock}""",
+			(warehouse, tuple(part)),
+			as_dict=True,
+		):
+			out[r.item_code] = r
+	return out
+
+
+def _validate_transfer(from_warehouse, to_warehouse, items, max_lines=MAX_LINES):
+	"""Every rule of a transfer, for any number of lines. Returns
+	(company, lines, problems); lines carry uom/factor/stock_qty when valid.
+	Takes a row lock on the source bins (held until this request commits)."""
 	company = _validate_warehouses(from_warehouse, to_warehouse)
-	lines = _parse_lines(items)
+	lines = _parse_lines(items, max_lines)
 	problems = []
 
 	def problem(line, msg):
 		problems.append({"idx": line.idx, "item_code": line.item_code, "message": msg})
 
-	item_codes = list({l.item_code for l in lines if l.item_code})
-	item_rows = {
-		r.name: r
-		for r in frappe.get_all(
-			"Item",
-			filters={"name": ["in", item_codes or [""]]},
-			fields=["name", "item_name", "stock_uom", "disabled", "is_stock_item", "has_variants"],
-		)
-	}
-	uom_cache = {}
+	item_rows = _batch_items(l.item_code for l in lines if l.item_code)
+	uoms = _batch_uoms(item_rows)
 	needed = {}  # item_code -> stock qty asked for
 	for line in lines:
 		item = item_rows.get(line.item_code)
@@ -441,9 +484,7 @@ def _create_transfer(user, from_warehouse, to_warehouse, items, tag, remarks):
 		if line.qty <= 0:
 			problem(line, _("Quantity must be more than zero."))
 			continue
-		if item.name not in uom_cache:
-			uom_cache[item.name] = {u["uom"]: u for u in _item_uoms(item.name, item.stock_uom)}
-		uom = uom_cache[item.name].get(line.uom or item.stock_uom)
+		uom = uoms[item.name].get(line.uom or item.stock_uom)
 		if not uom:
 			problem(line, _("{0} is not a unit of this item.").format(line.uom))
 			continue
@@ -458,15 +499,7 @@ def _create_transfer(user, from_warehouse, to_warehouse, items, tag, remarks):
 	# Availability under a row lock, so two phones cannot both move the last
 	# units of the same item out of the same warehouse.
 	if needed:
-		bins = {
-			r.item_code: r
-			for r in frappe.db.sql(
-				"""select item_code, actual_qty, valuation_rate from `tabBin`
-				where warehouse = %s and item_code in %s for update""",
-				(from_warehouse, tuple(needed)),
-				as_dict=True,
-			)
-		}
+		bins = _batch_bins(needed, from_warehouse, for_update=True)
 		reported = set()
 		for line in lines:
 			if line.item_code not in needed or line.item_code in reported:
@@ -484,10 +517,10 @@ def _create_transfer(user, from_warehouse, to_warehouse, items, tag, remarks):
 			elif flt(b.valuation_rate) <= 0:
 				reported.add(line.item_code)
 				problem(line, _("Has no cost price in {0} — ask accounts to fix it first.").format(from_warehouse))
+	return company, lines, sorted(problems, key=lambda p: p["idx"])
 
-	if problems:
-		return {"ok": 0, "problems": sorted(problems, key=lambda p: p["idx"])}
 
+def _make_entry(company, from_warehouse, to_warehouse, lines, tag, remarks):
 	note = (remarks or "").strip()[:500]
 	se = frappe.new_doc("Stock Entry")
 	se.stock_entry_type = "Material Transfer"
@@ -511,7 +544,14 @@ def _create_transfer(user, from_warehouse, to_warehouse, items, tag, remarks):
 		)
 	se.insert()  # normal permission checks: Stock User may create + submit
 	se.submit()
-	return _created_response(se.name)
+	return se.name
+
+
+def _create_transfer(user, from_warehouse, to_warehouse, items, tag, remarks):
+	company, lines, problems = _validate_transfer(from_warehouse, to_warehouse, items)
+	if problems:
+		return {"ok": 0, "problems": problems}
+	return _created_response(_make_entry(company, from_warehouse, to_warehouse, lines, tag, remarks))
 
 
 def _fmt(n):
@@ -574,4 +614,396 @@ def get_transfer(name):
 			for d in se.items
 		],
 		"pdf_url": _pdf_url(se.name),
+	}
+
+
+# ── bulk ─────────────────────────────────────────────────────────────────────
+# Three ways to load many lines into the draft (school set, everything in a
+# warehouse, an Excel/CSV sheet) and one way to move more than MAX_LINES:
+# create_bulk_transfer validates the WHOLE list, then a background job on the
+# long queue submits it as consecutive transfers of <= MAX_LINES lines, each
+# tagged "[Staff app · ref:<ref>#<part>/<parts>]" so a re-run skips the parts
+# already made. Stock Managers only, and never in shop hours (1 vCPU; tills).
+
+SHOP_HOURS = ((10, 30), (19, 30))  # IST — site timezone is Asia/Kolkata
+MAX_UPLOAD_BYTES = 3 * 1024 * 1024
+_BULK_TAG = "[Staff app · ref:{0}#{1}/{2}]"
+
+
+def _in_shop_hours():
+	if cint(frappe.conf.get("kgs_staff_bulk_in_shop_hours")):
+		return False
+	now = now_datetime()
+	t = (now.hour, now.minute)
+	return SHOP_HOURS[0] <= t < SHOP_HOURS[1]
+
+
+def _merge_wanted(wanted):
+	"""[(item_code, qty, uom|None)] → same item+unit summed, first-seen order."""
+	merged = {}
+	for code, qty, uom in wanted:
+		key = (code, uom or "")
+		if key in merged:
+			merged[key][1] += flt(qty)
+		else:
+			merged[key] = [code, flt(qty), uom or None]
+	return [tuple(v) for v in merged.values()]
+
+
+def _bulk_payloads(wanted, from_warehouse, to_warehouse):
+	"""Line payloads (same shape as a scan) for many items in a few queries.
+	Items that can never be moved from From are returned in `skipped` with the
+	reason; a shortfall is NOT skipped — the line shows "Only X in …" in red."""
+	wanted = _merge_wanted(wanted)
+	codes = [w[0] for w in wanted]
+	items = _batch_items(codes)
+	uoms = _batch_uoms(items)
+	src = _batch_bins(codes, from_warehouse)
+	dst = _batch_bins(codes, to_warehouse) if to_warehouse else {}
+	lines, skipped = [], []
+	for code, qty, uom in wanted:
+		it = items.get(code)
+		b = src.get(code)
+		reason = None
+		if not it:
+			reason = _("Item not found.")
+		elif it.disabled:
+			reason = _("This item is disabled.")
+		elif not it.is_stock_item or it.has_variants:
+			reason = _("Not a stock item / template item.")
+		elif not b or flt(b.actual_qty) <= _EPS:
+			reason = _("No stock in {0}.").format(from_warehouse)
+		elif flt(b.valuation_rate) <= 0:
+			reason = _("Has no cost price in {0} — ask accounts to fix it first.").format(from_warehouse)
+		elif uom and uom not in uoms[code]:
+			reason = _("{0} is not a unit of this item.").format(uom)
+		elif qty <= 0:
+			reason = _("No quantity.")
+		if reason:
+			skipped.append({"item_code": code, "item_name": it.item_name if it else "", "qty": qty, "uom": uom, "reason": reason})
+			continue
+		unit = uom or it.stock_uom
+		if uoms[code][unit]["whole"]:
+			qty = round(qty, 6)
+		lines.append(
+			{
+				"found": 1,
+				"item_code": code,
+				"item_name": it.item_name,
+				"item_group": it.item_group,
+				"stock_uom": it.stock_uom,
+				"uoms": list(uoms[code].values()),
+				"uom": unit,
+				"qty": qty,
+				"available": flt(b.actual_qty),
+				"at_target": flt(dst[code].actual_qty) if code in dst else (0.0 if to_warehouse else None),
+				"valuation_ok": 1,
+				"problems": [],
+			}
+		)
+	return lines, skipped
+
+
+@frappe.whitelist(methods=["POST"])
+def search_bundles(txt=""):
+	"""School sets (Product Bundles) by name/code/description — every word must match."""
+	_guard()
+	words = [w for w in re.split(r"\s+", (txt or "").strip()) if w][:5]
+	conds, values = ["pb.disabled = 0"], {}
+	for i, w in enumerate(words):
+		values[f"w{i}"] = f"%{w}%"
+		conds.append(f"(pb.name like %(w{i})s or i.item_name like %(w{i})s or pb.description like %(w{i})s)")
+	return frappe.db.sql(
+		f"""
+		select pb.name as bundle, ifnull(i.item_name, pb.description) as bundle_name,
+			(select count(*) from `tabProduct Bundle Item` pbi where pbi.parent = pb.name) as items_count
+		from `tabProduct Bundle` pb
+		left join `tabItem` i on i.name = pb.new_item_code
+		where {" and ".join(conds)}
+		order by bundle_name asc
+		limit 20
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def expand_bundle(bundle, sets, from_warehouse, to_warehouse=None):
+	"""A school set × number of sets → lines. Rows marked "Not Available" in
+	the set (custom_product_bundle_stock) are skipped, as at the POS."""
+	_guard()
+	sets = cint(sets)
+	if sets < 1 or sets > 5000:
+		frappe.throw(_("Number of sets must be between 1 and 5000."))
+	if not frappe.db.exists("Product Bundle", bundle):
+		frappe.throw(_("School set {0} not found.").format(bundle))
+	has_na = frappe.db.has_column("Product Bundle Item", "custom_product_bundle_stock")
+	rows = frappe.db.sql(
+		f"""select item_code, qty, uom{", custom_product_bundle_stock as na" if has_na else ", '' as na"}
+		from `tabProduct Bundle Item` where parent = %s order by idx""",
+		bundle,
+		as_dict=True,
+	)
+	wanted, skipped = [], []
+	for r in rows:
+		if (r.na or "") == "Not Available":
+			skipped.append({"item_code": r.item_code, "item_name": frappe.db.get_value("Item", r.item_code, "item_name") or "",
+				"qty": flt(r.qty) * sets, "uom": r.uom, "reason": _("Marked Not Available in this set.")})
+			continue
+		wanted.append((r.item_code, flt(r.qty) * sets, r.uom or None))
+	lines, more_skipped = _bulk_payloads(wanted, from_warehouse, to_warehouse)
+	name = frappe.db.get_value("Item", bundle, "item_name") or bundle
+	return {"bundle": bundle, "bundle_name": name, "sets": sets, "lines": lines, "skipped": skipped + more_skipped}
+
+
+@frappe.whitelist(methods=["POST"])
+def warehouse_contents(from_warehouse, to_warehouse=None):
+	"""Everything with stock in From, at its full quantity (e.g. a van coming back)."""
+	_guard()
+	_validate_warehouses(from_warehouse, to_warehouse) if to_warehouse else None
+	rows = frappe.db.sql(
+		"""select b.item_code, b.actual_qty from `tabBin` b
+		join `tabItem` i on i.name = b.item_code
+		where b.warehouse = %s and b.actual_qty > 0
+		order by i.item_name limit %s""",
+		(from_warehouse, BULK_MAX_LINES + 1),
+		as_dict=True,
+	)
+	if len(rows) > BULK_MAX_LINES:
+		frappe.throw(_("{0} holds more than {1} items — too many for one bulk transfer.").format(from_warehouse, BULK_MAX_LINES))
+	lines, skipped = _bulk_payloads([(r.item_code, flt(r.actual_qty), None) for r in rows], from_warehouse, to_warehouse)
+	return {"lines": lines, "skipped": skipped}
+
+
+def _sheet_rows(filename, content):
+	name = (filename or "").lower()
+	if name.endswith(".xlsx"):
+		from frappe.utils.xlsxutils import read_xlsx_file_from_attached_file
+
+		return read_xlsx_file_from_attached_file(fcontent=content) or []
+	if name.endswith(".csv"):
+		from frappe.utils.csvutils import read_csv_content
+
+		return read_csv_content(content) or []
+	frappe.throw(_("Upload an .xlsx or .csv file."))
+
+
+def _resolve_codes(codes):
+	"""{code: (item_code, barcode_uom|None)} via Item Barcode → ISBN → item code, batched."""
+	found = {}
+	codes = [c for c in dict.fromkeys(codes) if c]
+	for part in _chunks(codes):
+		for r in frappe.db.sql(
+			"select barcode, parent, uom from `tabItem Barcode` where barcode in %s", (tuple(part),), as_dict=True
+		):
+			found.setdefault(r.barcode, (r.parent, r.uom or None))
+	rest = [c for c in codes if c not in found]
+	if rest and frappe.db.has_column("Item", "custom_isbn_barcode"):
+		for part in _chunks(rest):
+			for r in frappe.db.sql(
+				"select custom_isbn_barcode, name from `tabItem` where custom_isbn_barcode in %s", (tuple(part),), as_dict=True
+			):
+				found.setdefault(r.custom_isbn_barcode, (r.name, None))
+	rest = [c for c in codes if c not in found]
+	for part in _chunks(rest):
+		for r in frappe.db.sql("select name from `tabItem` where name in %s", (tuple(part),), as_dict=True):
+			found.setdefault(r.name, (r.name, None))
+	return found
+
+
+def _cell(v):
+	if v is None:
+		return ""
+	if isinstance(v, float) and v.is_integer():
+		v = int(v)  # Excel turns 9781234567897 into 9.781234567897e12
+	return str(v).strip()
+
+
+@frappe.whitelist(methods=["POST"])
+def parse_sheet(filename, content, from_warehouse, to_warehouse=None):
+	"""Excel/CSV upload. Column A = barcode / ISBN / item code, B = qty,
+	C = unit (optional). A first row that is not a number in B is a header;
+	headers named code/barcode/isbn/item, qty/quantity, uom/unit are honoured."""
+	_guard()
+	import base64
+
+	try:
+		raw = base64.b64decode(content or "", validate=False)
+	except Exception:
+		frappe.throw(_("Could not read the file."))
+	if not raw:
+		frappe.throw(_("The file is empty."))
+	if len(raw) > MAX_UPLOAD_BYTES:
+		frappe.throw(_("The file is larger than 3 MB."))
+	rows = [[_cell(c) for c in (r or [])] for r in _sheet_rows(filename, raw)]
+	rows = [r for r in rows if any(r)]
+	if not rows:
+		frappe.throw(_("No rows found in the file."))
+
+	col = {"code": 0, "qty": 1, "uom": 2}
+	start = 0
+	first = [c.lower() for c in rows[0]]
+	if len(rows[0]) < 2 or not re.match(r"^-?\d+(\.\d+)?$", rows[0][1] if len(rows[0]) > 1 else ""):
+		start = 1
+		for i, h in enumerate(first):
+			if h in ("code", "barcode", "isbn", "item", "item code", "item_code", "isbn/barcode"):
+				col["code"] = i
+			elif h in ("qty", "quantity", "qnty"):
+				col["qty"] = i
+			elif h in ("uom", "unit"):
+				col["uom"] = i
+	data = rows[start:]
+	if len(data) > BULK_MAX_LINES:
+		frappe.throw(_("The file has {0} rows; at most {1}.").format(len(data), BULK_MAX_LINES))
+
+	get = lambda r, k: r[col[k]] if col[k] < len(r) else ""  # noqa: E731
+	found = _resolve_codes([get(r, "code") for r in data])
+	wanted, skipped = [], []
+	for n, r in enumerate(data, start=start + 1):
+		code, qty, uom = get(r, "code"), flt(get(r, "qty")), get(r, "uom") or None
+		if not code:
+			skipped.append({"row": n, "item_code": "", "item_name": "", "qty": qty, "reason": _("No code in column A.")})
+			continue
+		if code not in found:
+			skipped.append({"row": n, "item_code": code, "item_name": "", "qty": qty, "reason": _("Not found (barcode / ISBN / item code).")})
+			continue
+		if qty <= 0:
+			skipped.append({"row": n, "item_code": code, "item_name": "", "qty": qty, "reason": _("No quantity.")})
+			continue
+		item_code, barcode_uom = found[code]
+		wanted.append((item_code, qty, uom or barcode_uom))
+	lines, more = _bulk_payloads(wanted, from_warehouse, to_warehouse) if wanted else ([], [])
+	return {"rows": len(data), "lines": lines, "skipped": skipped + more}
+
+
+def _bulk_key(ref):
+	return frappe.cache.make_key(f"kgs_staff_bulk:{ref}")
+
+
+# Plain Redis get/set (JSON), NOT frappe.cache.get_value/set_value: get_value
+# remembers a miss in frappe.local.cache and set_value with an expiry writes
+# Redis only, so a read after a write in the same request/job saw the old miss.
+def _bulk_meta(ref):
+	raw = frappe.cache.get(_bulk_key(ref))
+	try:
+		return json.loads(raw) if raw else {}
+	except ValueError:
+		return {}
+
+
+def _save_bulk_meta(ref, meta):
+	frappe.cache.set(_bulk_key(ref), json.dumps(meta, default=str), ex=14 * 86400)
+
+
+def _bulk_transfers(ref):
+	return frappe.db.sql(
+		"""select se.name, se.docstatus, se.owner, se.remarks, count(d.name) as line_count
+		from `tabStock Entry` se left join `tabStock Entry Detail` d on d.parent = se.name
+		where se.purpose = 'Material Transfer' and se.remarks like %s
+		group by se.name order by se.creation""",
+		(f"%[Staff app · ref:{ref}#%",),
+		as_dict=True,
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def create_bulk_transfer(from_warehouse, to_warehouse, items, client_ref, remarks=None):
+	"""More than MAX_LINES lines: validate everything now, then submit in the
+	background as transfers of <= MAX_LINES lines. Stock Managers, outside shop hours."""
+	_guard()
+	if not _is_manager():
+		raise frappe.PermissionError(_("Only a Stock Manager can move more than {0} lines at once.").format(MAX_LINES))
+	if not _CLIENT_REF_RE.match(client_ref or ""):
+		frappe.throw(_("Invalid request reference. Please reload the app."))
+	if _bulk_meta(client_ref) or _bulk_transfers(client_ref):
+		return {"ok": 1, "bulk": 1, "ref": client_ref, "already": 1}
+	if _in_shop_hours():
+		frappe.throw(_("Big transfers run only outside shop hours (before 10:30 or after 19:30), so the tills stay fast."))
+
+	company, lines, problems = _validate_transfer(from_warehouse, to_warehouse, items, BULK_MAX_LINES)
+	if problems:
+		return {"ok": 0, "problems": problems}
+	chunks = [
+		[{"item_code": l.item_code, "qty": l.qty, "uom": l.uom} for l in lines[i : i + MAX_LINES]]
+		for i in range(0, len(lines), MAX_LINES)
+	]
+	meta = {
+		"ref": client_ref, "user": frappe.session.user, "from_warehouse": from_warehouse,
+		"to_warehouse": to_warehouse, "parts": len(chunks), "lines": len(lines), "done": 0,
+		"state": "queued", "error": "", "queued_at": str(now_datetime()),
+	}
+	_save_bulk_meta(client_ref, meta)
+	frappe.enqueue(
+		"trustbit_school_book_seller.staff_app.api.run_bulk_transfer",
+		queue="long",
+		timeout=300 + 240 * len(chunks),
+		job_id=f"kgs_staff_bulk::{client_ref}",
+		deduplicate=True,
+		enqueue_after_commit=True,
+		ref=client_ref,
+		from_warehouse=from_warehouse,
+		to_warehouse=to_warehouse,
+		chunks=chunks,
+		remarks=remarks,
+	)
+	return {"ok": 1, "bulk": 1, "ref": client_ref, "parts": len(chunks), "lines": len(lines)}
+
+
+def run_bulk_transfer(ref, from_warehouse, to_warehouse, chunks, remarks=None):
+	"""Background (long queue, runs as the Stock Manager who started it). One
+	transfer per chunk, committed one by one; stops at the first part that can
+	no longer be moved (stock changed since the check) and says why."""
+	meta = _bulk_meta(ref) or {"ref": ref, "parts": len(chunks)}
+	n = len(chunks)
+
+	def save(**kw):
+		meta.update(kw)
+		_save_bulk_meta(ref, meta)
+
+	save(state="running", started_at=str(now_datetime()))
+	for i, chunk in enumerate(chunks, start=1):
+		tag = _BULK_TAG.format(ref, i, n)
+		if _existing_transfer(frappe.session.user, tag):
+			save(done=i)
+			continue
+		try:
+			company, lines, problems = _validate_transfer(from_warehouse, to_warehouse, chunk)
+			if problems:
+				frappe.db.rollback()
+				p = problems[0]
+				save(state="stopped", error=_("Part {0}/{1}, {2}: {3} ({4} line(s) affected)").format(
+					i, n, p["item_code"], p["message"], len(problems)))
+				return
+			_make_entry(company, from_warehouse, to_warehouse, lines, tag, remarks)
+			frappe.db.commit()
+			save(done=i)
+		except Exception as e:
+			frappe.db.rollback()
+			frappe.log_error(title="Staff app bulk transfer stopped", message=f"ref={ref} part={i}/{n}\n{frappe.get_traceback()}")
+			save(state="stopped", error=_("Part {0}/{1}: {2}").format(i, n, str(e)[:300]))
+			return
+	save(state="done", finished_at=str(now_datetime()))
+
+
+@frappe.whitelist(methods=["POST"])
+def bulk_status(ref):
+	_guard()
+	if not _CLIENT_REF_RE.match(ref or ""):
+		frappe.throw(_("Invalid reference."))
+	meta = _bulk_meta(ref)
+	rows = _bulk_transfers(ref)
+	if meta.get("user") and meta["user"] != frappe.session.user and not _is_manager():
+		raise frappe.PermissionError(_("Not your transfer."))
+	transfers = []
+	for r in rows:
+		m = re.search(r"ref:[^#\]]+#(\d+)/(\d+)\]", r.remarks or "")
+		transfers.append({"name": r.name, "docstatus": r.docstatus, "line_count": r.line_count,
+			"part": cint(m.group(1)) if m else 0, "parts": cint(m.group(2)) if m else 0})
+	parts = meta.get("parts") or (transfers[0]["parts"] if transfers else 0)
+	state = meta.get("state") or ("done" if parts and len(transfers) >= parts else "unknown")
+	return {
+		"ref": ref, "state": state, "error": meta.get("error") or "", "parts": parts, "done": len(transfers),
+		"lines": meta.get("lines"), "from_warehouse": meta.get("from_warehouse"), "to_warehouse": meta.get("to_warehouse"),
+		"transfers": transfers,
 	}

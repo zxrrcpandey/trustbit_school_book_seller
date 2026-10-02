@@ -12,6 +12,28 @@ Print Format dumps), log `/root/predeploy_20261002_staff_app.log`. Verified: all
 registered, job `touch_staff_sessions` (*/10) created, `kgs_staff_session_days` = 7, 0 new Error Log / 5xx.
 **Not yet done:** a real phone sign-in + one real transfer with the owner (runbook step 9).
 
+## Bulk transfers (built 2026-10-02 evening — owner asked for all four kinds)
+"➕ Add in bulk" on the transfer screen loads many lines into the same draft (same item + unit adds onto the line):
+| Kind | Endpoint | Notes |
+|---|---|---|
+| School set × N | `search_bundles`, `expand_bundle(bundle, sets, from, to)` | Product Bundle rows × qty × sets, in the row's unit; rows marked "Not Available" (`custom_product_bundle_stock`) are left out, as at the POS |
+| Everything in From | `warehouse_contents(from, to)` | every bin with stock, at its full qty (van coming back; shop-floor cut-over) |
+| Excel / CSV | `parse_sheet(filename, content(base64), from, to)` | A = barcode / ISBN / item code, B = qty, C = unit (optional); header row optional; ≤ 3 MB, ≤ 15,000 rows; numeric ISBN cells handled; unmatched rows come back with their row number |
+Items that can never move (not found, disabled, no stock in From, ₹0 cost, unit not on item) are listed as "not added"
+with the reason; a shortfall is NOT dropped — the line shows "Only X in …" in red so nothing silently goes missing.
+
+**More than 150 lines** → `create_bulk_transfer`: **Stock Manager only, never in shop hours** (10:30–19:30 IST;
+site_config `kgs_staff_bulk_in_shop_hours: 1` overrides). It validates the WHOLE list first (same rules, batched
+queries), then queues `run_bulk_transfer` on the **long** queue (`job_id kgs_staff_bulk::<ref>`, deduplicated) which
+submits consecutive transfers of ≤ 150 lines, each tagged `[Staff app · ref:<ref>#<part>/<parts>]` and committed one
+by one. A re-run skips parts already made; it stops at the first part that can no longer move (stock changed since the
+check) and says which part/item — parts already made stay. Progress page `/staff/bulk/<ref>` polls `bulk_status`
+(status JSON in plain Redis `kgs_staff_bulk:<ref>`, 14 days; the transfer list itself comes from the DB, so a Redis
+flush loses only the "running/stopped" text). Local timing: ~3–4 s per 150-line part on the Mac; expect ~10–20 s on
+the 1-vCPU server, i.e. all of SBGD (~12,000 items ≈ 80 parts) ≈ 15–30 min, after hours.
+⚠ Don't use frappe.cache.get_value/set_value(expires) for state read back in the same request/job — a miss is cached
+in frappe.local and set_value with an expiry writes Redis only (bit us in the bulk tests).
+
 ## Owner decisions (2026-10-02)
 | Question | Answer |
 |---|---|
@@ -41,7 +63,7 @@ Rebuild after any frontend change: `cd frontend && yarn install && set -o pipefa
 `public/staff/`, `www/staff.html`, `www/staff/*` together.
 
 ## Routes
-`/staff/home` (home + manifest start_url) · `/staff/login` · `/staff/transfer` · `/staff/transfers` · `/staff/t/<Stock Entry>`.
+`/staff/home` (home + manifest start_url) · `/staff/login` · `/staff/transfer` · `/staff/transfers` · `/staff/t/<Stock Entry>` · `/staff/bulk/<ref>`.
 **Never make `/staff/` a page the app depends on:** production nginx 301s every trailing-slash URL (`/staff/` → `/staff`),
 and `/staff` is outside the PWA scope `/staff/` — Android then won't offer install / shows a browser bar (found on
 the first deploy, 2026-10-02; fixed by moving home to `/staff/home`). Bare `/staff` still opens the app.
@@ -92,6 +114,7 @@ existing ones live until they expire — to end them now, clear those users' ses
 - `kgs_staff_app_disabled: 1` — every endpoint refuses, the shell shows "switched off".
 - `kgs_staff_app_sw_off: 1` — every phone unregisters its service worker on next launch.
 - `kgs_staff_session_days: 0` — no new long sessions.
+- `kgs_staff_bulk_in_shop_hours: 1` — allow >150-line background transfers during shop hours (default: refused).
 
 ## Scanning
 Android Chrome uses the native `BarcodeDetector`. iPhone Safari has none, so the `barcode-detector` polyfill
@@ -138,5 +161,8 @@ Rollback: `git reset --hard <anchor HEAD>` (as frappe_user) → HUP + step 7 cac
 keep-alive, session surviving Redis loss vs an idle desk session expiring) · `check_staff_browser.py` 22/22
 (phone viewport, native + WASM camera scanning with a fake camera, keyboard-wedge scanner, over-stock block,
 draft survives reload, submit, slip link, lists) · `check_wasm_mime.py` (nginx 1.18 MIME) pass.
+Bulk (2026-10-02 evening): `check_staff_bulk.py` 43/43 (set expansion, all stock, CSV + XLSX, 320 lines → 3 parts,
+re-run safety, stop mid-way, shop-hours + manager gates) · `check_staff_bulk_browser.py` 18/18 with a real local
+`bench worker --queue long` (set + CSV merge, Stock User blocked >150, all stock there and back in the background).
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.

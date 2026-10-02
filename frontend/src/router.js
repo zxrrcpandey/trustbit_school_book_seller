@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router"
 
 import { bootSession, session } from "./data/session.js"
 
+import BulkProgress from "./pages/BulkProgress.vue"
 import Home from "./pages/Home.vue"
 import Login from "./pages/Login.vue"
 import NewTransfer from "./pages/NewTransfer.vue"
@@ -22,6 +23,7 @@ export const router = createRouter({
     { path: "/transfer", name: "transfer", component: NewTransfer, meta: { auth: true } },
     { path: "/transfers", name: "transfers", component: Transfers, meta: { auth: true } },
     { path: "/t/:name", name: "detail", component: TransferDetail, props: true, meta: { auth: true } },
+    { path: "/bulk/:ref_", name: "bulk", component: BulkProgress, props: true, meta: { auth: true } },
     { path: "/:pathMatch(.*)*", name: "notfound", component: NotFound },
   ],
 })
