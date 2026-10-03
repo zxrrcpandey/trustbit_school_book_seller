@@ -323,7 +323,10 @@ def create_transfer(from_warehouse, to_warehouse, items, client_ref, remarks=Non
 	# that was already made instead of moving the stock twice.
 	existing = _existing_transfer(user, tag)
 	if existing:
-		return _created_response(existing, already=1)
+		return _created_response(existing, already=1, recos=_existing_recos(client_ref))
+	done = _existing_recos(client_ref)  # a request that only added stock (nothing to transfer)
+	if done:
+		return {"ok": 1, "already": 1, "name": None, "recos": done, "to_warehouse": to_warehouse}
 
 	lock_key = frappe.cache.make_key(f"kgs_staff_xfer_lock:{user}:{client_ref}")
 	if not frappe.cache.set(lock_key, 1, ex=180, nx=True):
@@ -1022,19 +1025,25 @@ def bulk_status(ref):
 
 
 
-# ── shortfall → Stock Reconciliation (Stock Manager) ─────────────────────────
-# Owner decisions 2026-10-02: when a transfer asks for more than the system
-# holds in From, a Stock Manager may count the item and accept a Stock
-# Reconciliation for the EXTRA before the transfer, in the same request (both
-# or neither). Rate defaults to the last purchase rate, can be changed, never
-# 0; a reason is mandatory ("Purchase receipt not entered" is allowed — the
-# app warns it will double-count once that receipt is entered). Posted now, so
-# no repost backlog. Normal transfers only (not the background bulk path).
+# ── shortfall → transfer what the system has + reconcile the EXTRA at the destination ──
+# Owner decisions 2026-10-02/03 ("option B"): when a transfer asks for more than the
+# system holds in From, a Stock Manager counts the item at review. Then, in ONE request
+# (all or nothing):
+#   1. the Stock Entry moves only what the system has in From (never below 0), and
+#   2. a Stock Reconciliation in the TO warehouse adds only the extra
+#      (extra = min(count, qty being moved) − system qty in From, floored at 0).
+# So the documents read "transfer 5" and "reconciliation difference 3" for "system 5,
+# counted 8". From is never reconciled: a minus in From stays for the office to fix
+# (and its negative value is never booked as a gain). If the destination would still be
+# 0 or less after adding the extra (a big minus there), it is refused.
+# Rate for the extra: last purchase rate → From valuation → To valuation → typed; never
+# 0; reason mandatory ("Purchase receipt not entered" allowed). Posted now. No value cap
+# (owner decision 2026-10-03). Normal transfers only, not the bulk background path.
 #
-# ERPNext values the WHOLE reconciled quantity at the row's valuation_rate, so
-# the row rate is blended: existing units keep their current value and only
-# the extra units get the chosen rate. Effect on stock value = extra × rate
-# (or counted × rate − current value when current stock is ≤ 0).
+# ERPNext values the WHOLE reconciled quantity at the row's valuation_rate, so the row
+# rate is blended: units already in the destination keep their value and only the extra
+# gets the chosen rate. The reported change is read back from the Stock Ledger (ERPNext
+# rounds the rate to paise).
 
 RECO_REASONS = [
 	"Found extra stock",
@@ -1049,52 +1058,82 @@ _RECO_TAG = "[Staff app · reco · ref:{0}]"
 
 def _require_manager():
 	if not _is_manager():
-		raise frappe.PermissionError(_("Only a Stock Manager can reconcile stock from the app."))
+		raise frappe.PermissionError(_("Only a Stock Manager can add extra stock from the app."))
 
 
-def _rate_info(item_codes, warehouse):
-	"""{item_code: {current_qty, current_value, valuation_rate, last_purchase_rate, suggested_rate, rate_source}}"""
-	items = _batch_items(item_codes)
-	lpr = {}
-	for part in _chunks(items):
-		for r in frappe.db.sql("select name, last_purchase_rate from `tabItem` where name in %s", (tuple(part),), as_dict=True):
-			lpr[r.name] = flt(r.last_purchase_rate)
-	bins = {}
-	for part in _chunks(items):
+def _bins_full(item_codes, warehouse):
+	out = {}
+	if not warehouse:
+		return out
+	for part in _chunks(set(item_codes)):
 		for r in frappe.db.sql(
 			"""select item_code, actual_qty, stock_value, valuation_rate from `tabBin`
 			where warehouse = %s and item_code in %s""",
 			(warehouse, tuple(part)),
 			as_dict=True,
 		):
-			bins[r.item_code] = r
+			out[r.item_code] = r
+	return out
+
+
+def _rate_info(item_codes, warehouse, to_warehouse=None):
+	"""{item_code: {current_qty, current_value, valuation_rate, dest_qty, dest_value,
+	last_purchase_rate, suggested_rate, rate_source}}"""
+	items = _batch_items(item_codes)
+	lpr = {}
+	for part in _chunks(items):
+		for r in frappe.db.sql("select name, last_purchase_rate from `tabItem` where name in %s", (tuple(part),), as_dict=True):
+			lpr[r.name] = flt(r.last_purchase_rate)
+	src = _bins_full(items, warehouse)
+	dst = _bins_full(items, to_warehouse)
+	zero = frappe._dict(actual_qty=0, stock_value=0, valuation_rate=0)
 	out = {}
 	for code, it in items.items():
-		b = bins.get(code) or frappe._dict(actual_qty=0, stock_value=0, valuation_rate=0)
+		b, d = src.get(code) or zero, dst.get(code) or zero
 		if lpr.get(code, 0) > 0:
-			rate, src = lpr[code], "last purchase rate"
+			rate, how = lpr[code], "last purchase rate"
 		elif flt(b.valuation_rate) > 0:
-			rate, src = flt(b.valuation_rate), "current valuation"
+			rate, how = flt(b.valuation_rate), "current valuation"
+		elif flt(d.valuation_rate) > 0:
+			rate, how = flt(d.valuation_rate), "current valuation"
 		else:
-			rate, src = 0, ""
+			rate, how = 0, ""
 		out[code] = {
 			"item_code": code, "item_name": it.item_name, "stock_uom": it.stock_uom,
 			"current_qty": flt(b.actual_qty), "current_value": flt(b.stock_value, 2),
-			"valuation_rate": flt(b.valuation_rate), "last_purchase_rate": lpr.get(code, 0),
-			"suggested_rate": rate, "rate_source": src,
+			"valuation_rate": flt(b.valuation_rate),
+			"dest_qty": flt(d.actual_qty), "dest_value": flt(d.stock_value, 2),
+			"last_purchase_rate": lpr.get(code, 0), "suggested_rate": rate, "rate_source": how,
 		}
 	return out
 
 
 @frappe.whitelist(methods=["POST"])
-def reco_preview(from_warehouse, item_codes):
-	"""Numbers for the count screen: system qty and value, last purchase rate, suggested rate."""
+def reco_preview(from_warehouse, item_codes, to_warehouse=None):
+	"""Numbers for the count screen: system qty in From and To, last purchase rate, suggested rate."""
 	_guard()
 	_require_manager()
 	if isinstance(item_codes, str):
 		item_codes = json.loads(item_codes or "[]")
 	item_codes = list(dict.fromkeys(str(c) for c in item_codes or []))[:MAX_LINES]
-	return {"reasons": RECO_REASONS, "items": _rate_info(item_codes, from_warehouse)}
+	return {"reasons": RECO_REASONS, "items": _rate_info(item_codes, from_warehouse, to_warehouse)}
+
+
+def _existing_recos(ref):
+	"""Reconciliations already made for this request (a retry must not add the extra twice)."""
+	names = frappe.db.sql_list(
+		"""select distinct reference_name from `tabComment`
+		where reference_doctype = 'Stock Reconciliation' and comment_type = 'Comment' and content like %s""",
+		(f"%{_RECO_TAG.format(ref)}%",),
+	)
+	out = []
+	for n in names:
+		if frappe.db.get_value("Stock Reconciliation", n, "docstatus") == 1:
+			value = frappe.db.sql(
+				"""select ifnull(sum(stock_value_difference), 0) from `tabStock Ledger Entry`
+				where voucher_type = 'Stock Reconciliation' and voucher_no = %s and is_cancelled = 0""", n)[0][0]
+			out.append({"name": n, "lines": frappe.db.count("Stock Reconciliation Item", {"parent": n}), "value": flt(value, 2)})
+	return out
 
 
 def _create_transfer_with_recos(from_warehouse, to_warehouse, items, tag, remarks, recos):
@@ -1104,9 +1143,10 @@ def _create_transfer_with_recos(from_warehouse, to_warehouse, items, tag, remark
 	company = _validate_warehouses(from_warehouse, to_warehouse)
 	lines = _parse_lines(items)  # ≤ MAX_LINES: never on the bulk path
 	if not isinstance(recos, list) or len(recos) > MAX_LINES:
-		frappe.throw(_("Could not read the reconciliation list."))
+		frappe.throw(_("Could not read the list of extra stock."))
+	ref = tag[tag.find("ref:") + 4 : -1]
 
-	# stock qty this transfer needs per item (units checked again in _validate_transfer)
+	# stock qty this transfer asks for, per item
 	item_rows = _batch_items(l.item_code for l in lines if l.item_code)
 	uoms = _batch_uoms(item_rows)
 	needed = {}
@@ -1115,12 +1155,10 @@ def _create_transfer_with_recos(from_warehouse, to_warehouse, items, tag, remark
 		if u:
 			needed[l.item_code] = needed.get(l.item_code, 0) + flt(l.qty) * u["factor"]
 
-	info = _rate_info([str(r.get("item_code") or "") for r in recos], from_warehouse)
-	# lock the source bins before reading the current quantity used for the extra
-	_batch_bins(info, from_warehouse, for_update=True)
-	info = _rate_info(list(info), from_warehouse)
+	codes = [str(r.get("item_code") or "") for r in recos]
+	_batch_bins(codes, from_warehouse, for_update=True)  # lock From before reading it
+	info = _rate_info(codes, from_warehouse, to_warehouse)
 	problems, rows, seen = [], [], set()
-	whole = {}
 	for r in recos:
 		code = str(r.get("item_code") or "")
 		counted, rate = flt(r.get("counted")), flt(r.get("rate"))
@@ -1134,33 +1172,62 @@ def _create_transfer_with_recos(from_warehouse, to_warehouse, items, tag, remark
 			bad(_("Not an item of this transfer."))
 			continue
 		seen.add(code)
-		if code not in whole:
-			whole[code] = i["stock_uom"] in _whole_number_uoms({i["stock_uom"]})
-		if counted <= i["current_qty"] + _EPS:
-			bad(_("Counted {0} is not more than the system's {1} — nothing to reconcile.").format(_fmt(counted), _fmt(i["current_qty"])))
-		elif counted + _EPS < needed[code]:
-			bad(_("Counted {0} but the transfer needs {1}. Reduce the transfer first.").format(_fmt(counted), _fmt(needed[code])))
-		elif whole[code] and abs(counted - round(counted)) > _EPS:
+		movable = max(i["current_qty"], 0.0)
+		extra = min(counted, needed[code]) - movable
+		whole = i["stock_uom"] in _whole_number_uoms({i["stock_uom"]})
+		if whole and abs(counted - round(counted)) > _EPS:
 			bad(_("{0} must be a whole number.").format(i["stock_uom"]))
+		elif extra <= _EPS:
+			bad(_("Nothing extra to add: the count is not more than the {0} the system has.").format(_fmt(movable)))
 		elif rate <= 0:
-			bad(_("Enter a rate above zero."))
+			bad(_("Enter a price above zero."))
 		elif reason not in RECO_REASONS:
 			bad(_("Choose a reason."))
 		elif reason == "Other" and not note:
 			bad(_("Write what happened (reason: Other)."))
 		else:
-			q0, v0 = i["current_qty"], i["current_value"]
-			extra = counted - q0
-			row_rate = (v0 + extra * rate) / counted if (q0 > 0 and v0 > 0) else rate
-			rows.append(frappe._dict(item_code=code, item_name=i["item_name"], stock_uom=i["stock_uom"], current=q0,
-				counted=counted, extra=extra, rate=rate, row_rate=flt(row_rate, 6),
-				effect=flt(counted * flt(row_rate, 6) - v0, 2), reason=reason, note=note,
-				lpr=i["last_purchase_rate"]))
+			rows.append(frappe._dict(item_code=code, item_name=i["item_name"], stock_uom=i["stock_uom"],
+				source=i["current_qty"], counted=counted, movable=movable, extra=flt(extra, 6), rate=rate,
+				reason=reason, note=note, lpr=i["last_purchase_rate"]))
 	if problems:
 		return {"ok": 0, "problems": problems}
 
+	# 1. The transfer moves only what the system has in From: every line of a counted
+	#    item becomes one line in the stock unit for `movable` (dropped when 0).
+	counted_items = {row.item_code: row for row in rows}
+	moved = [l for l in lines if l.item_code not in counted_items]
+	for row in rows:
+		if row.movable > _EPS:
+			moved.append(frappe._dict(item_code=row.item_code, uom=row.stock_uom, qty=row.movable))
+	se_name = None
+	if moved:
+		items_moved = [{"item_code": l.item_code, "qty": l.qty, "uom": l.uom} for l in moved]
+		company, valid, problems = _validate_transfer(from_warehouse, to_warehouse, items_moved)
+		if problems:
+			frappe.db.rollback()
+			return {"ok": 0, "problems": problems}
+		se_name = _make_entry(company, from_warehouse, to_warehouse, valid, tag, remarks)
+
+	# 2. Reconcile the destination: its stock after the transfer + the extra.
+	dest = _bins_full(counted_items, to_warehouse)
+	zero = frappe._dict(actual_qty=0, stock_value=0)
+	for row in rows:
+		d = dest.get(row.item_code) or zero
+		row.dest_before = flt(d.actual_qty)
+		row.dest_after = flt(d.actual_qty) + row.extra
+		v0 = flt(d.stock_value)
+		if row.dest_after <= _EPS:
+			problems.append({"idx": 0, "item_code": row.item_code, "message": _(
+				"{0} stock is in minus ({1}). Adding {2} is not enough — ask the office.").format(
+				to_warehouse, _fmt(d.actual_qty), _fmt(row.extra))})
+			continue
+		row.row_rate = flt((v0 + row.extra * row.rate) / row.dest_after if (row.dest_before > 0 and v0 > 0) else row.rate, 6)
+	if problems:
+		frappe.db.rollback()  # the transfer above is undone too
+		return {"ok": 0, "problems": problems}
+
 	comp = frappe.get_cached_doc("Company", company)
-	reco_tag = _RECO_TAG.format(tag[tag.find("ref:") + 4 : -1])
+	reco_tag = _RECO_TAG.format(ref)
 	made = []
 	for part in [rows[i : i + RECO_MAX_ROWS] for i in range(0, len(rows), RECO_MAX_ROWS)]:
 		reco = frappe.new_doc("Stock Reconciliation")
@@ -1170,36 +1237,35 @@ def _create_transfer_with_recos(from_warehouse, to_warehouse, items, tag, remark
 		reco.expense_account = comp.stock_adjustment_account
 		reco.cost_center = comp.cost_center
 		for row in part:
-			reco.append("items", {"item_code": row.item_code, "warehouse": from_warehouse, "qty": row.counted,
+			reco.append("items", {"item_code": row.item_code, "warehouse": to_warehouse, "qty": row.dest_after,
 				"valuation_rate": row.row_rate})
 		reco.insert()  # Stock Manager: create + submit
 		reco.submit()  # ≤ 100 rows, so ERPNext submits now instead of queueing
-		# ERPNext rounds the row valuation rate to paise, so the booked change can
-		# differ from extra × rate by a few rupees on big counts — report the real one.
 		actual = dict(frappe.db.sql(
 			"""select item_code, sum(stock_value_difference) from `tabStock Ledger Entry`
 			where voucher_type = 'Stock Reconciliation' and voucher_no = %s and is_cancelled = 0
 			group by item_code""", reco.name))
 		for row in part:
-			row.effect = flt(actual.get(row.item_code, row.effect), 2)
+			row.effect = flt(actual.get(row.item_code, 0), 2)
 		lines_txt = "\n".join(
-			f"- {row.item_name} ({row.item_code}): system {_fmt(row.current)} → counted {_fmt(row.counted)} {row.stock_uom}, "
-			f"extra {_fmt(row.extra)} @ ₹{row.rate:,.2f} (last purchase ₹{row.lpr:,.2f}), value change ₹{row.effect:,.2f} — "
-			f"{row.reason}{': ' + row.note if row.note else ''}"
+			f"- {row.item_name} ({row.item_code}): {from_warehouse} system {_fmt(row.source)}, counted {_fmt(row.counted)} "
+			f"{row.stock_uom}; transferred {_fmt(row.movable)}; extra {_fmt(row.extra)} added in {to_warehouse} "
+			f"({_fmt(row.dest_before)} → {_fmt(row.dest_after)}) @ ₹{row.rate:,.2f} (last purchase ₹{row.lpr:,.2f}), "
+			f"value change ₹{row.effect:,.2f} — {row.reason}{': ' + row.note if row.note else ''}"
+			+ (f" [{from_warehouse} still shows {_fmt(row.source)} — not corrected by the app]" if row.source < 0 else "")
 			for row in part
 		)
-		reco.add_comment("Comment", f"{reco_tag}\nMade from the KGS Staff app before a transfer out of {from_warehouse}.\n{lines_txt}")
+		reco.add_comment("Comment", f"{reco_tag}\nMade from the KGS Staff app: extra stock found in {from_warehouse}, "
+			f"added in {to_warehouse}{' with transfer ' + se_name if se_name else ' (nothing to transfer)'}.\n{lines_txt}")
 		made.append({"name": reco.name, "lines": len(part), "value": flt(sum(r.effect for r in part), 2)})
 
-	note = (remarks or "").strip()
-	note = (note + "\n" if note else "") + _("Stock reconciled first: {0}").format(", ".join(m["name"] for m in made))
-	company, lines, problems = _validate_transfer(from_warehouse, to_warehouse, items)
-	if problems:
-		# still short (e.g. a second line of the same item): undo everything
-		frappe.db.rollback()
-		return {"ok": 0, "problems": problems}
-	name = _make_entry(company, from_warehouse, to_warehouse, lines, tag, note)
-	return _created_response(name, recos=made)
+	if se_name:
+		# the slip prints the remarks: say where the extra went
+		note = _("Extra added in {0}: {1}").format(to_warehouse, ", ".join(m["name"] for m in made))
+		old = frappe.db.get_value("Stock Entry", se_name, "remarks") or ""
+		frappe.db.set_value("Stock Entry", se_name, "remarks", note + "\n" + old, update_modified=False)
+		return _created_response(se_name, recos=made)
+	return {"ok": 1, "already": 0, "name": None, "recos": made, "to_warehouse": to_warehouse}
 
 
 def send_reco_digest():

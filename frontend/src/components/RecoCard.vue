@@ -5,27 +5,20 @@
       <div class="text-[13px] text-ink-faint">{{ info.item_code }}</div>
     </div>
     <div class="tnum grid grid-cols-2 gap-x-3 text-[14px]">
-      <span class="text-ink-muted">System has</span><b :class="info.current_qty < 0 ? 'text-danger-text' : ''">{{ fmt(info.current_qty) }} {{ info.stock_uom }}</b>
-      <span class="text-ink-muted">Transfer needs</span><b>{{ fmt(needed) }} {{ info.stock_uom }}</b>
+      <span class="text-ink-muted">System has in {{ from }}</span><b :class="info.current_qty < 0 ? 'text-danger-text' : ''">{{ fmt(info.current_qty) }} {{ info.stock_uom }}</b>
+      <span class="text-ink-muted">You are moving</span><b>{{ fmt(needed) }} {{ info.stock_uom }}</b>
     </div>
+    <p v-for="w in calc.warnings" :key="w" class="rounded-lg bg-danger-bg px-3 py-2 text-[15px] font-bold text-danger-text">{{ w }}</p>
 
-    <p v-if="info.current_qty < 0" class="rounded-lg bg-danger-bg px-3 py-2 text-[15px] font-bold text-danger-text">
-      ⚠ System stock is in minus ({{ fmt(info.current_qty) }}). If you accept, stock value will go up by about ₹{{ money(effect) }}.
-    </p>
     <label class="block text-[14px] font-semibold text-ink-muted">
       How many are really in {{ from }} now? ({{ info.stock_uom }})
       <input :value="model.counted" type="number" inputmode="decimal" min="0" class="tnum mt-1 h-12 w-full rounded-lg border border-surface-line text-center text-[18px] font-bold text-ink" @input="set('counted', num($event.target.value))" />
     </label>
-    <p v-if="model.counted !== '' && model.counted <= info.current_qty" class="text-[14px] font-semibold text-warn-text">
-      Your count is not more than the system stock. No change to stock — only {{ fmt(Math.max(0, info.current_qty)) }} {{ info.stock_uom }} will move.
-    </p>
-    <p v-else-if="model.counted !== '' && model.counted < needed" class="text-[14px] font-semibold text-warn-text">
-      You counted less than you are moving. Only {{ fmt(model.counted) }} {{ info.stock_uom }} will move.
-    </p>
+    <p v-for="n in calc.notes" :key="n" class="text-[14px] font-semibold text-warn-text">{{ n }}</p>
 
-    <template v-if="reconciles">
+    <template v-if="calc.reconciles">
       <label class="block text-[14px] font-semibold text-ink-muted">
-        Price of 1 {{ info.stock_uom }} for the extra {{ fmt(extra) }} (₹)
+        Price of 1 {{ info.stock_uom }} for the extra {{ fmt(calc.extra) }} (₹)
         <input :value="model.rate" type="number" inputmode="decimal" min="0" step="0.01" class="tnum mt-1 h-12 w-full rounded-lg border border-surface-line text-center text-[18px] font-bold text-ink" @input="set('rate', num($event.target.value))" />
       </label>
       <p class="text-[13px] text-ink-faint">
@@ -49,10 +42,10 @@
       </p>
       <input v-if="model.reason" :value="model.note" maxlength="200" :placeholder="model.reason === 'Other' ? 'What happened? (required)' : 'Note (optional)'" class="w-full rounded-lg border border-surface-line bg-surface p-3" @input="set('note', $event.target.value)" />
       <div class="tnum rounded-lg bg-surface-page px-3 py-2 text-[14px]">
-        Stock value change: <b :class="effect >= 0 ? 'text-ink' : 'text-danger-text'">₹{{ money(effect) }}</b>
+        Added in {{ to }}: <b>{{ fmt(calc.extra) }} {{ info.stock_uom }}</b> · Stock value change: <b :class="calc.effect >= 0 ? 'text-ink' : 'text-danger-text'">₹{{ money(calc.effect) }}</b>
       </div>
     </template>
-    <p v-if="error" class="text-[14px] font-semibold text-danger-text">{{ error }}</p>
+    <p v-if="calc.error" class="text-[14px] font-semibold text-danger-text">{{ calc.error }}</p>
   </div>
 </template>
 
@@ -60,6 +53,7 @@
 import { computed } from "vue"
 
 import { fmt } from "@/data/format.js"
+import { money, recoCalc } from "@/data/reco.js"
 
 // model: {counted, rate, reason, note} — owned by the page, edited here.
 const props = defineProps({
@@ -68,37 +62,17 @@ const props = defineProps({
   model: { type: Object, required: true },
   reasons: { type: Array, default: () => [] },
   from: { type: String, default: "" },
+  to: { type: String, default: "" },
   whole: { type: Boolean, default: false },
 })
 const emit = defineEmits(["update"])
 
 const num = (v) => (v === "" ? "" : Number(v))
 const set = (k, v) => emit("update", { ...props.model, [k]: v })
-const money = (n) => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-const reconciles = computed(() => props.model.counted !== "" && props.model.counted > props.info.current_qty)
-const extra = computed(() => (reconciles.value ? props.model.counted - props.info.current_qty : 0))
-// mirrors the server: existing units keep their value, the extra gets the rate
-const effect = computed(() => {
-  const r = Number(props.model.rate || 0)
-  const q0 = props.info.current_qty
-  const v0 = props.info.current_value
-  return q0 > 0 && v0 > 0 ? extra.value * r : props.model.counted * r - v0
-})
+const calc = computed(() => recoCalc(props.info, props.needed, props.model, props.whole, props.from, props.to))
 const farFromLpr = computed(() => {
   const l = props.info.last_purchase_rate
   const r = Number(props.model.rate || 0)
   return l > 0 && r > 0 && Math.abs(r - l) / l > 0.5
 })
-const error = computed(() => {
-  const m = props.model
-  if (m.counted === "" || m.counted < 0) return "Enter the count."
-  if (props.whole && !Number.isInteger(m.counted)) return `${props.info.stock_uom} must be a whole number.`
-  if (!reconciles.value) return ""
-  if (!(Number(m.rate) > 0)) return "Enter a rate above zero."
-  if (!m.reason) return "Choose a reason."
-  if (m.reason === "Other" && !String(m.note || "").trim()) return "Write what happened."
-  return ""
-})
-defineExpose({ error, reconciles, effect })
 </script>

@@ -51,16 +51,28 @@ frappe.set_user("Administrator")
 orig_neg = frappe.db.get_single_value("Stock Settings", "allow_negative_stock")
 frappe.db.set_single_value("Stock Settings", "allow_negative_stock", 1)
 
-if not frappe.db.exists("Item", "KGS-T-SET1"):
-	frappe.get_doc({"doctype": "Item", "item_code": "KGS-T-SET1", "item_name": "Test RDPS 3 Book Set",
-		"item_group": "All Item Groups", "stock_uom": "Nos", "is_stock_item": 0}).insert()
-if not frappe.db.exists("Product Bundle", "KGS-T-SET1"):
-	frappe.get_doc({"doctype": "Product Bundle", "new_item_code": "KGS-T-SET1", "items": [
-		{"item_code": "KGS-T-BOOK1", "qty": 1, "uom": "PCS"},
-		{"item_code": "KGS-T-PEN", "qty": 2, "uom": "Nos"},
-		{"item_code": "KGS-T-ZERO", "qty": 1, "uom": "PCS"},
-		{"item_code": "KGS-T-NOSTOCK", "qty": 1, "uom": "PCS"},
-	]}).insert()
+# fresh every run: other suites give fixed test items stock or a price
+RUN = uuid.uuid4().hex[:6].upper()
+SET, ZERO, NOSTOCK = f"KGS-T-SET-{RUN}", f"KGS-T-ZERO-{RUN}", f"KGS-T-NOSTOCK-{RUN}"
+for code, name, stock in ((SET, f"Test RDPS 3 Book Set {RUN}", 0), (ZERO, f"Test Zero Cost {RUN}", 1), (NOSTOCK, f"Test Never Bought {RUN}", 1)):
+	frappe.get_doc({"doctype": "Item", "item_code": code, "item_name": name, "item_group": "All Item Groups",
+		"stock_uom": "PCS" if stock else "Nos", "is_stock_item": stock}).insert()
+z = frappe.get_doc({"doctype": "Stock Entry", "stock_entry_type": "Material Receipt", "company": COMPANY,
+	"items": [{"item_code": ZERO, "qty": 10, "t_warehouse": SRC, "basic_rate": 0, "allow_zero_valuation_rate": 1}]})
+z.insert()
+z.submit()
+frappe.get_doc({"doctype": "Product Bundle", "new_item_code": SET, "items": [
+	{"item_code": "KGS-T-BOOK1", "qty": 1, "uom": "PCS"},
+	{"item_code": "KGS-T-PEN", "qty": 2, "uom": "Nos"},
+	{"item_code": ZERO, "qty": 1, "uom": "PCS"},
+	{"item_code": NOSTOCK, "qty": 1, "uom": "PCS"},
+]}).insert()
+# the pen must have stock for the set checks
+if bin_qty("KGS-T-PEN", SRC) < 20:
+	pe = frappe.get_doc({"doctype": "Stock Entry", "stock_entry_type": "Material Receipt", "company": COMPANY,
+		"items": [{"item_code": "KGS-T-PEN", "qty": 50, "t_warehouse": SRC, "basic_rate": 5}]})
+	pe.insert()
+	pe.submit()
 
 codes = [f"KGS-T-BULK-{i:03d}" for i in range(1, N_BULK + 1)]
 missing = [c for c in codes if not frappe.db.exists("Item", c)]
@@ -77,17 +89,17 @@ frappe.db.commit()
 
 # ── school set ───────────────────────────────────────────────────────────────
 frappe.set_user("staff1@example.com")
-found = api.search_bundles("rdps 3")
-check("search_bundles finds the set by name words", any(b.bundle == "KGS-T-SET1" for b in found), found)
-r = api.expand_bundle("KGS-T-SET1", 3, SRC, DST)
+found = api.search_bundles(f"rdps 3 {RUN}")
+check("search_bundles finds the set by name words", any(b.bundle == SET for b in found), found)
+r = api.expand_bundle(SET, 3, SRC, DST)
 by = {l["item_code"]: l for l in r["lines"]}
 check("set × 3: book 3 PCS", by.get("KGS-T-BOOK1", {}).get("qty") == 3, r["lines"])
 check("set × 3: pen 2 × 3 = 6 Nos", by.get("KGS-T-PEN", {}).get("qty") == 6)
 sk = {s["item_code"]: s["reason"] for s in r["skipped"]}
-check("zero-cost member skipped with reason", "cost price" in sk.get("KGS-T-ZERO", ""), sk)
-check("no-stock member skipped with reason", "No stock" in sk.get("KGS-T-NOSTOCK", ""), sk)
+check("zero-cost member skipped with reason", "cost price" in sk.get(ZERO, ""), sk)
+check("no-stock member skipped with reason", "No stock" in sk.get(NOSTOCK, ""), sk)
 check("set lines carry availability + units", by["KGS-T-BOOK1"]["available"] > 0 and by["KGS-T-BOOK1"]["uoms"])
-check("sets out of range refused", raises(lambda: api.expand_bundle("KGS-T-SET1", 0, SRC), frappe.ValidationError))
+check("sets out of range refused", raises(lambda: api.expand_bundle(SET, 0, SRC), frappe.ValidationError))
 check("unknown set refused", raises(lambda: api.expand_bundle("NOPE-SET", 1, SRC), frappe.ValidationError))
 check("NA column handled when absent (local)", True)
 
@@ -96,7 +108,7 @@ r = api.warehouse_contents(SRC, DST)
 lc = {l["item_code"]: l for l in r["lines"]}
 check("all stock: includes every bulk item", all(c in lc for c in codes), len(lc))
 check("all stock: qty = full available", lc["KGS-T-BULK-001"]["qty"] == bin_qty("KGS-T-BULK-001", SRC))
-check("all stock: zero-cost item skipped", any(s["item_code"] == "KGS-T-ZERO" for s in r["skipped"]))
+check("all stock: zero-cost item skipped", any(s["item_code"] == ZERO for s in r["skipped"]))
 
 # ── sheet upload ─────────────────────────────────────────────────────────────
 buf = io.StringIO()

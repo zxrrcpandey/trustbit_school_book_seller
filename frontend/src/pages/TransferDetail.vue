@@ -10,7 +10,7 @@
       </div>
 
       <div v-if="recos.length" class="rounded-xl border-2 border-warn-text bg-warn-bg p-4 text-warn-text">
-        <div class="font-bold">Stock reconciled first</div>
+        <div class="font-bold">Extra stock added in {{ doc ? doc.to_warehouse : "the destination" }}</div>
         <div v-for="r in recos" :key="r.name" class="tnum text-[14px]">{{ r.name }} — stock value change ₹{{ Number(r.value).toLocaleString("en-IN", { minimumFractionDigits: 2 }) }}</div>
       </div>
       <div v-if="error" class="rounded-lg bg-danger-bg p-3 text-danger-text">{{ error }}</div>

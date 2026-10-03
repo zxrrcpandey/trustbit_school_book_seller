@@ -126,13 +126,33 @@ with sync_playwright() as p:
 	ok("Other needs a note", lambda: expect(page.get_by_role("button", name=re.compile("Accept"))).to_be_disabled())
 	pen.locator("input[placeholder='What happened? (required)']").fill("found behind shelf")
 	ok("value change shown (9 × 5 = 45 for the new item)", lambda: expect(never.get_by_text("₹45.00")).to_be_visible())
+	ok("B wording: 0 move by transfer, 5 added in the destination", lambda: expect(never.get_by_text(re.compile(r"0 PCS will move by transfer, and 5 PCS will be added in Godown - DCV"))).to_be_visible())
+	ok("B wording on the pen: system qty moves, extra 2 added", lambda: expect(pen.get_by_text(re.compile(rf"{avail} Nos will move by transfer, and 2 Nos will be added in Godown - DCV"))).to_be_visible())
 	page.screenshot(path=S + "shot_reco_review.png", full_page=True)
 	ok("Accept enabled when all filled", lambda: expect(page.get_by_role("button", name=re.compile("Accept"))).to_be_enabled())
 	page.get_by_role("button", name=re.compile("Accept")).click()
-	ok("success page lists the reconciliation", lambda: (expect(page.get_by_text("Stock moved")).to_be_visible(timeout=60000), expect(page.get_by_text("Stock reconciled first").first).to_be_visible()))
-	ok("detail: pen reduced to the count", lambda: expect(page.get_by_text(f"{avail + 2} Nos")).to_be_visible())
-	ok("detail remarks name the reconciliation", lambda: expect(page.get_by_text(re.compile(r"Stock reconciled first: MAT-RECO-"))).to_be_visible())
+	ok("success page lists the reconciliation", lambda: (expect(page.get_by_text("Stock moved")).to_be_visible(timeout=60000), expect(page.get_by_text(re.compile("Extra stock added in")).first).to_be_visible()))
+	ok("detail: transfer moved only what the system had", lambda: expect(page.get_by_text(f"{avail} Nos", exact=True)).to_be_visible())
+	ok("detail remarks name the reconciliation", lambda: expect(page.get_by_text(re.compile(r"Extra added in Godown - DCV: MAT-RECO-"))).to_be_visible())
 	page.screenshot(path=S + "shot_reco_done.png", full_page=True)
+	# nothing in the system at all → only the extra is added; lands on Home with a green note
+	subprocess.run(
+		["../env/bin/python", "-c", "import frappe;frappe.init(site='site1.local',sites_path='.');frappe.connect();"
+		f"frappe.get_doc({{'doctype':'Item','item_code':'{NS}-2','item_name':'{NS_NAME} two','item_group':'All Item Groups',"
+		"'stock_uom':'PCS','is_stock_item':1}).insert(ignore_permissions=True);frappe.db.commit()"],
+		check=True,
+	)
+	page.get_by_text("New transfer (same warehouses)").click()
+	add(page, f"{NS}-2")
+	page.wait_for_timeout(800)
+	qty(page, f"{NS_NAME} two", 3)
+	page.get_by_role("button", name=re.compile("Review")).click()
+	card = page.locator("div[data-reco]", has_text=f"{NS_NAME} two").first
+	card.locator("input[type=number]").nth(1).fill("12")
+	card.locator("select").select_option("Found extra stock")
+	page.get_by_role("button", name=re.compile("Accept")).click()
+	ok("reconciliation-only → Home says 'Extra stock added'", lambda: expect(page.get_by_text(re.compile(r"Extra stock added in Godown - DCV"))).to_be_visible(timeout=60000))
+	page.screenshot(path=S + "shot_reco_only.png")
 	check("no JS errors", not errors, errors[:3])
 	ctx.close()
 	browser.close()

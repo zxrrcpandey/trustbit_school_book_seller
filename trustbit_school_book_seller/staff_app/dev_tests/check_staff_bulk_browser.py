@@ -13,6 +13,35 @@ EXE = "/Users/warroom/Library/Caches/ms-playwright/chromium_headless_shell-1234/
 PW = "Kgs-Test-2026!x"
 RESULTS = []
 
+# A fresh school set for this run (book + pen in stock, one zero-cost and one never-stocked
+# member), so other suites moving test stock around cannot change what "2 not added" means.
+import subprocess
+import uuid
+
+RUN = uuid.uuid4().hex[:6].upper()
+SET_NAME = f"Test RDPS 3 Book Set {RUN}"
+subprocess.run(["../env/bin/python", "-c", f"""
+import frappe
+frappe.init(site='site1.local', sites_path='.'); frappe.connect()
+C, SRC = 'Development Company V1.0', 'Stores - DCV'
+def item(code, name, stock):
+    frappe.get_doc({{'doctype':'Item','item_code':code,'item_name':name,'item_group':'All Item Groups','stock_uom':'PCS','is_stock_item':stock}}).insert(ignore_permissions=True)
+def receipt(code, qty, rate, zero=0):
+    se = frappe.get_doc({{'doctype':'Stock Entry','stock_entry_type':'Material Receipt','company':C,
+        'items':[{{'item_code':code,'qty':qty,'t_warehouse':SRC,'basic_rate':rate,'allow_zero_valuation_rate':zero}}]}})
+    se.insert(ignore_permissions=True); se.submit()
+item('KGS-T-SETB-{RUN}', '{SET_NAME}', 0)
+item('KGS-T-ZB-{RUN}', 'Test Zero {RUN}', 1); receipt('KGS-T-ZB-{RUN}', 5, 0, 1)
+item('KGS-T-NB-{RUN}', 'Test Never {RUN}', 1)
+for code, qty in (('KGS-T-BOOK1', 20), ('KGS-T-PEN', 20)):
+    if (frappe.db.get_value('Bin', {{'item_code': code, 'warehouse': SRC}}, 'actual_qty') or 0) < qty:
+        receipt(code, 50, 5)
+frappe.get_doc({{'doctype':'Product Bundle','new_item_code':'KGS-T-SETB-{RUN}','items':[
+    {{'item_code':'KGS-T-BOOK1','qty':1,'uom':'PCS'}},{{'item_code':'KGS-T-PEN','qty':2,'uom':'Nos'}},
+    {{'item_code':'KGS-T-ZB-{RUN}','qty':1,'uom':'PCS'}},{{'item_code':'KGS-T-NB-{RUN}','qty':1,'uom':'PCS'}}]}}).insert(ignore_permissions=True)
+frappe.db.commit()
+"""], check=True)
+
 
 def check(name, cond, detail=""):
 	RESULTS.append((name, bool(cond)))
@@ -72,11 +101,11 @@ with sync_playwright() as p:
 	login(page, "staff1@example.com")
 	new_transfer(page, "Stores - DCV", "Godown - DCV")
 	page.get_by_role("button", name=re.compile("Add in bulk")).click()
-	page.fill("input[aria-label='Search school sets']", "rdps 3")
-	page.get_by_text("Test RDPS 3 Book Set").first.click()
+	page.fill("input[aria-label='Search school sets']", f"rdps 3 {RUN}")
+	page.get_by_text(SET_NAME).first.click()
 	page.fill("#sets", "2")
 	page.get_by_role("button", name="Add 2 sets").click()
-	ok("school set added", lambda: expect(page.get_by_text(re.compile(r"Test RDPS 3 Book Set × 2: 2 lines added"))).to_be_visible(timeout=20000))
+	ok("school set added", lambda: expect(page.get_by_text(re.compile(rf"{SET_NAME} × 2: 2 lines added"))).to_be_visible(timeout=20000))
 	ok("set shows the 2 left-out items with reasons", lambda: expect(page.get_by_text("2 not added")).to_be_visible())
 	page.screenshot(path=S + "shot_bulk_set.png", full_page=True)
 	page.get_by_role("button", name="Back to the transfer").click()

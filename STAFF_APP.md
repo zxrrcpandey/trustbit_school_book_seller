@@ -37,11 +37,26 @@ the 1-vCPU server, i.e. all of SBGD (~12,000 items ≈ 80 parts) ≈ 15–30 min
 ⚠ Don't use frappe.cache.get_value/set_value(expires) for state read back in the same request/job — a miss is cached
 in frappe.local and set_value with an expiry writes Redis only (bit us in the bulk tests).
 
-## Short stock → Stock Reconciliation (LIVE 2026-10-03 01:21 IST, `bf21aee`)
-Deployed after hours (no bills since 20:34, 0 reposts queued): ff, `sync_jobs` (weekly digest job added, nothing
-deleted, 123 → 124), HUP, app_hooks + website cache. Anchor `/root/predeploy_20261003_staff_reco/` (HEAD before
-`0b7eb66`). Verified read-only on live data: Stock User scan of a no-stock item refused, Stock Manager allowed;
-preview figures correct; 0 errors. Weekly digest OFF (no recipients given yet).
+## Short stock → transfer what the system has + add the extra in the destination ("option B", 2026-10-03)
+History: first live 01:21 IST as "option A" (`bf21aee`: reconcile From up to the count, then transfer it all). The
+owner then chose **option B** after seeing the documents: a Stock Reconciliation always records the NEW TOTAL (Qty
+column) — the real change is its "Quantity Difference" — and they wanted the transfer to show only what existed.
+Option B, when a Stock Manager counts a short item at review:
+1. the **transfer** moves only what the system has in From (never below 0);
+2. a **Stock Reconciliation in the TO warehouse** adds only the extra = min(count, qty moved) − system qty in From.
+Examples (system in From → count → move): 5 → 8 → 8: transfer 5, reconciliation in To 5 → 8 (difference 3).
+To already 10: transfer 5, To 15 → 18. From 0: no transfer, To 0 → 8 (Home shows "Extra stock added"). From −20:
+no transfer, To +8, **From stays −20** (the app never fixes a minus in From; value change is only 8 × rate). Count 6
+of 8: transfer 5 + extra 1. To −4: transfer 5 (→ 1), reconcile 1 → 4. To −20: refused ("… is in minus … ask the
+office"), nothing saved. Count 10 for a move of 8 (system 5): extra 3, the app says the other 2 stay in From unseen.
+Count below the system qty: only the count moves, the app says the system still shows more.
+Everything in one request (all or nothing); the transfer remarks/slip say "Extra added in <To>: MAT-RECO-…"; each
+reconciliation gets the audit comment `[Staff app · reco · ref:…]` (system/counted/transferred/extra/rate/reason).
+Retries are idempotent, including reconciliation-only requests (found by that comment tag).
+Same rules otherwise: Stock Managers only (Stock Users stay blocked), managers may add no-stock items, zero-cost items
+refused, price = last purchase rate → From valuation → To valuation → typed, never 0, ±50% warning, mandatory reason,
+≤ 100 rows per reconciliation, not on the bulk path, weekly digest off unless `kgs_staff_reco_digest_to`.
+Shared phone logic: `frontend/src/data/reco.js` (mirrors `_create_transfer_with_recos` — keep in step).
 
 **Owner decision 2026-10-03: NO value cap on app reconciliations** — accepted after being shown that a negative item
 books its whole negative value as a gain (ITM-2025-28343 Project Paper: −24,333 PCS, −₹8,72,858.75 → reconciling it
@@ -206,6 +221,7 @@ draft survives reload, submit, slip link, lists) · `check_wasm_mime.py` (nginx 
 Bulk (2026-10-02 evening): `check_staff_bulk.py` 43/43 (set expansion, all stock, CSV + XLSX, 320 lines → 3 parts,
 re-run safety, stop mid-way, shop-hours + manager gates) · `check_staff_bulk_browser.py` 18/18 with a real local
 `bench worker --queue long` (set + CSV merge, Stock User blocked >150, all stock there and back in the background).
-Reconciliation (2026-10-03): `check_staff_reco.py` 39/39 · `check_staff_reco_browser.py` 17/17 (both make fresh items per run).
+Option B (2026-10-03): `check_staff_reco.py` 43/43 (all six examples) · `check_staff_reco_browser.py` 20/20. All suites now
+make fresh items per run (fixed test items drifted as suites moved stock around).
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.

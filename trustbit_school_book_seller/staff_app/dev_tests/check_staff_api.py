@@ -69,8 +69,11 @@ def make_item(code, name, stock_uom="PCS", uoms=(), barcodes=(), isbn=None):
 
 make_item("KGS-T-BOOK1", "Test Viva Maths 3", uoms=[("PKT", 100)], barcodes=[("9780000000011", "PKT"), ("9780000000028", None)], isbn="9789999999990")
 make_item("KGS-T-PEN", "Test Blue Pen", stock_uom="Nos")
-make_item("KGS-T-ZERO", "Test Zero Cost Item")
-make_item("KGS-T-NOSTOCK", "Test Never Bought")
+# fresh every run: other suites give the old fixed ones stock or a price
+RUN = uuid.uuid4().hex[:6].upper()
+ZERO, NOSTOCK = f"KGS-T-ZERO-{RUN}", f"KGS-T-NOSTOCK-{RUN}"
+make_item(ZERO, f"Test Zero Cost Item {RUN}")
+make_item(NOSTOCK, f"Test Never Bought {RUN}")
 make_item("KGS-T-DISABLED", "Test Disabled Item")
 frappe.db.set_value("Item", "KGS-T-DISABLED", "disabled", 0)
 
@@ -87,8 +90,7 @@ if bin_qty("KGS-T-BOOK1", SRC) < 500:
 	receipt("KGS-T-BOOK1", 1000, 12)
 if bin_qty("KGS-T-PEN", SRC) < 50:
 	receipt("KGS-T-PEN", 100, 5)
-if bin_qty("KGS-T-ZERO", SRC) < 5:
-	receipt("KGS-T-ZERO", 10, 0, zero=True)
+receipt(ZERO, 10, 0, zero=True)
 if bin_qty("KGS-T-DISABLED", SRC) < 5:
 	receipt("KGS-T-DISABLED", 10, 3)
 frappe.db.set_value("Item", "KGS-T-DISABLED", "disabled", 1)
@@ -133,8 +135,8 @@ r = api.lookup_item("KGS-T-PEN", SRC)
 check("item code finds item", r["found"] and r["item_code"] == "KGS-T-PEN")
 check("Nos UOM flagged whole", r["uoms"][0]["whole"] == 1, r["uoms"])
 check("unknown code → found 0", api.lookup_item("0000000000000", SRC)["found"] == 0)
-check("no-stock item has a problem", api.lookup_item("KGS-T-NOSTOCK", SRC)["problems"])
-check("zero-cost item has a problem", "cost price" in " ".join(api.lookup_item("KGS-T-ZERO", SRC)["problems"]))
+check("no-stock item has a problem", api.lookup_item(NOSTOCK, SRC)["problems"])
+check("zero-cost item has a problem", "cost price" in " ".join(api.lookup_item(ZERO, SRC)["problems"]))
 check("disabled item has a problem", "disabled" in " ".join(api.lookup_item("KGS-T-DISABLED", SRC)["problems"]))
 
 # ── search / levels ──────────────────────────────────────────────────────────
@@ -142,8 +144,8 @@ s = api.search_items("viva maths", SRC)
 check("multi-word search finds item", any(x.item_code == "KGS-T-BOOK1" for x in s), s)
 check("search needs 2+ chars", api.search_items("v", SRC) == [])
 check("search hides disabled items", not any(x.item_code == "KGS-T-DISABLED" for x in api.search_items("Test Disabled", SRC)))
-lv = api.stock_levels(json.dumps(["KGS-T-BOOK1", "KGS-T-ZERO"]), SRC, DST)
-check("stock_levels returns both", lv["KGS-T-BOOK1"]["available"] > 0 and lv["KGS-T-ZERO"]["valuation_ok"] == 0, lv)
+lv = api.stock_levels(json.dumps(["KGS-T-BOOK1", ZERO]), SRC, DST)
+check("stock_levels returns both", lv["KGS-T-BOOK1"]["available"] > 0 and lv[ZERO]["valuation_ok"] == 0, lv)
 
 # ── create_transfer ──────────────────────────────────────────────────────────
 src0, dst0 = bin_qty("KGS-T-BOOK1", SRC), bin_qty("KGS-T-BOOK1", DST)
@@ -179,9 +181,9 @@ check("over-available → problem, not created", r.get("ok") == 0 and "Only" in 
 r = api.create_transfer(SRC, DST, json.dumps([{"item_code": "KGS-T-BOOK1", "qty": avail - 10, "uom": "PCS"},
 	{"item_code": "KGS-T-BOOK1", "qty": 1, "uom": "PKT"}]), ref())
 check("over-available across two lines of one item", r.get("ok") == 0, r)
-r = api.create_transfer(SRC, DST, json.dumps([{"item_code": "KGS-T-ZERO", "qty": 1, "uom": "PCS"}]), ref())
+r = api.create_transfer(SRC, DST, json.dumps([{"item_code": ZERO, "qty": 1, "uom": "PCS"}]), ref())
 check("zero-cost item refused", r.get("ok") == 0 and "cost price" in r["problems"][0]["message"], r)
-r = api.create_transfer(SRC, DST, json.dumps([{"item_code": "KGS-T-NOSTOCK", "qty": 1}]), ref())
+r = api.create_transfer(SRC, DST, json.dumps([{"item_code": NOSTOCK, "qty": 1}]), ref())
 check("no-stock item refused", r.get("ok") == 0, r)
 r = api.create_transfer(SRC, DST, json.dumps([{"item_code": "KGS-T-DISABLED", "qty": 1}]), ref())
 check("disabled item refused", r.get("ok") == 0, r)

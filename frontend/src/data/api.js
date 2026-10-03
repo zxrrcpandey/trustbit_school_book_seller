@@ -31,5 +31,5 @@ export const parseSheet = (filename, content, from, to) => call("parse_sheet", {
 export const createBulkTransfer = (args) => call("create_bulk_transfer", args, { timeoutMs: 180000 })
 export const bulkStatus = (ref) => call("bulk_status", { ref })
 
-// Shortfall → Stock Reconciliation (Stock Manager): numbers for the count screen.
-export const recoPreview = (from, itemCodes) => call("reco_preview", { from_warehouse: from, item_codes: itemCodes })
+// Short stock (Stock Manager): numbers for the count screen — From and To.
+export const recoPreview = (from, itemCodes, to) => call("reco_preview", { from_warehouse: from, item_codes: itemCodes, to_warehouse: to })

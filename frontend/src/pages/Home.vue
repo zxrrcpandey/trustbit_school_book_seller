@@ -8,6 +8,12 @@
     <main class="space-y-4 p-4">
       <div class="text-[15px] text-ink-muted">Hello, <b class="text-ink">{{ info ? info.full_name : "…" }}</b></div>
 
+      <div v-if="added.length" class="rounded-xl bg-ok-bg p-4 text-ok-text">
+        <div class="text-[17px] font-bold">{{ $route.query.already ? "Already saved" : "Extra stock added" }} in {{ $route.query.to }}</div>
+        <div class="text-[14px]">Nothing was in the system to transfer, so only the extra you counted was added.</div>
+        <div v-for="r in added" :key="r.name" class="tnum text-[14px]">{{ r.name }} — stock value change ₹{{ Number(r.value).toLocaleString("en-IN", { minimumFractionDigits: 2 }) }}</div>
+      </div>
+
       <InstallPrompt />
 
       <router-link to="/transfer" class="flex min-h-[88px] items-center justify-between rounded-2xl bg-brand-deep px-5 text-white">
@@ -35,7 +41,8 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue"
+import { computed, onMounted, ref } from "vue"
+import { useRoute } from "vue-router"
 
 import AppHeader from "@/components/AppHeader.vue"
 import InstallPrompt from "@/components/InstallPrompt.vue"
@@ -45,6 +52,10 @@ import { draft, loadDraft } from "@/data/draft.js"
 import { shortWarehouse as short } from "@/data/format.js"
 import { logout } from "@/data/session.js"
 
+const route = useRoute()
+const added = computed(() =>
+  String(route.query.added || "").split(",").filter(Boolean).map((x) => ({ name: x.split(":")[0], value: x.split(":")[1] || 0 }))
+)
 const info = ref(null)
 const recent = ref(null)
 const error = ref("")

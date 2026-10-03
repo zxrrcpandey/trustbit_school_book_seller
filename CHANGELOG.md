@@ -6,6 +6,13 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.10.0] - 2026-10-03 (short stock "option B")
+
+### Changed
+- **Short stock now splits into "transfer what the system has" + "add the extra in the destination":** the transfer moves only the system quantity from From, and a Stock Reconciliation in the To warehouse adds the extra (difference = count − system). From is never reconciled, so a minus there stays for the office (and is never booked as a gain); a destination that would stay at 0 or below is refused. Reconciliation-only results (nothing to transfer) land on Home with "Extra stock added". Owner choice after option A went live
+
+---
+
 ## [1.9.0] - 2026-10-03 (short stock → Stock Reconciliation — live on splashbox.in 01:21 IST, `bf21aee`; no value cap by owner decision)
 
 ### New Features

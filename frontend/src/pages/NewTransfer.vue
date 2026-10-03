@@ -127,7 +127,7 @@
           <div class="space-y-1 rounded-xl border-2 border-danger-text bg-danger-bg p-3 text-[15px] text-danger-text">
             <div class="text-[17px] font-bold">⚠ Not enough stock in {{ draft.from }}</div>
             <div>{{ shortItems.length }} item{{ shortItems.length === 1 ? " has" : "s have" }} less stock than you are moving.</div>
-            <div>If you press <b>Accept</b>, the stock will be set to <b>your count</b>, and then the items will move.</div>
+            <div>If you press <b>Accept</b>: what the system has will move, and the <b>extra you counted</b> will be added in <b>{{ draft.to }}</b>.</div>
             <div>Stock value will change by <b>₹{{ money(recoTotal) }}</b>.</div>
             <div class="font-bold">Accept only if the items are really there.</div>
           </div>
@@ -142,6 +142,7 @@
               :model="recoModels[s.item_code]"
               :reasons="info.reco_reasons || []"
               :from="draft.from"
+              :to="draft.to"
               :whole="s.whole"
               @update="(m) => (recoModels[s.item_code] = m)"
             />
@@ -195,6 +196,7 @@ import RecoCard from "@/components/RecoCard.vue"
 import ScannerSheet from "@/components/ScannerSheet.vue"
 import TransferLine from "@/components/TransferLine.vue"
 import { boot, createBulkTransfer, createTransfer, getItem, lookupItem, recoPreview, stockLevels } from "@/data/api.js"
+import { money, recoCalc } from "@/data/reco.js"
 import { clearDraft, draft, loadDraft, rememberPair } from "@/data/draft.js"
 import { errorBeep, okBeep, unlockAudio } from "@/data/feedback.js"
 import { fmt } from "@/data/format.js"
@@ -313,36 +315,25 @@ const recoInfo = ref({})
 const recoModels = ref({})
 const recoLoading = ref(false)
 const recoLoadError = ref("")
-const money = (n) => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
 function recoRow(s) {
-  const i = recoInfo.value[s.item_code]
-  const m = recoModels.value[s.item_code]
-  if (!i || !m) return null
-  const reconciles = m.counted !== "" && m.counted > i.current_qty
-  const extra = reconciles ? m.counted - i.current_qty : 0
-  const effect = !reconciles ? 0 : i.current_qty > 0 && i.current_value > 0 ? extra * Number(m.rate || 0) : m.counted * Number(m.rate || 0) - i.current_value
-  let error = ""
-  if (m.counted === "" || m.counted < 0) error = "Enter the count."
-  else if (s.whole && !Number.isInteger(m.counted)) error = `${s.stock_uom} must be a whole number.`
-  else if (reconciles && !(Number(m.rate) > 0)) error = "Enter a rate above zero."
-  else if (reconciles && !m.reason) error = "Choose a reason."
-  else if (reconciles && m.reason === "Other" && !String(m.note || "").trim()) error = "Write what happened."
-  return { info: i, model: m, reconciles, effect, error }
+  const info = recoInfo.value[s.item_code]
+  const model = recoModels.value[s.item_code]
+  if (!info || !model) return null
+  return { info, model, ...recoCalc(info, s.needed, model, s.whole, draft.from, draft.to) }
 }
-const recoTotal = computed(() => shortItems.value.reduce((t, s) => t + (recoRow(s)?.effect || 0), 0))
+const recoTotal = computed(() => shortItems.value.reduce((t, s) => t + (recoRow(s)?.reconciles ? recoRow(s).effect : 0), 0))
 const recoBlock = computed(() => {
   if (recoLoading.value) return "Loading…"
   if (recoLoadError.value) return recoLoadError.value
   const bad = shortItems.value.map(recoRow).filter((r) => !r || r.error).length
-  return bad ? `${bad} item${bad === 1 ? " needs" : "s need"} a count, rate or reason.` : ""
+  return bad ? `${bad} item${bad === 1 ? " needs" : "s need"} a count, price or reason.` : ""
 })
 
 async function loadRecoPreview() {
   recoLoading.value = true
   recoLoadError.value = ""
   try {
-    const res = await recoPreview(draft.from, shortItems.value.map((s) => s.item_code))
+    const res = await recoPreview(draft.from, shortItems.value.map((s) => s.item_code), draft.to)
     recoInfo.value = res.items || {}
     const models = {}
     for (const s of shortItems.value) {
@@ -358,17 +349,16 @@ async function loadRecoPreview() {
   }
 }
 
-// Count below what the transfer needs: that item's lines become ONE line in the
-// stock unit for what is there (counted, or the system qty if the count is not
-// above it). Owner decision: never block, move what exists.
+// Option B: the server splits each counted item into "transfer what the system has"
+// + "add the extra in To". Here only the total moved for that item can shrink: to the
+// count when it is below what was asked (never blocked — owner decision).
 function applyCounts() {
   for (const s of shortItems.value) {
     const r = recoRow(s)
-    if (!r || r.model.counted >= s.needed) continue
-    const keep = r.reconciles ? r.model.counted : Math.max(0, r.info.current_qty)
+    if (!r || r.moveTotal >= s.needed - 1e-9) continue
     const first = draft.lines.find((l) => l.item_code === s.item_code)
     draft.lines = draft.lines.filter((l) => l.item_code !== s.item_code)
-    if (keep > 0) draft.lines.push({ ...first, uom: first.stock_uom, qty: keep })
+    if (r.moveTotal > 0) draft.lines.push({ ...first, uom: first.stock_uom, qty: r.moveTotal })
   }
 }
 const bulkParts = computed(() => (info.value ? Math.ceil(draft.lines.length / info.value.max_lines) : 0))
@@ -589,6 +579,14 @@ async function send(request) {
   draft.sent = request // locked until we know what happened
   try {
     const res = await createTransfer(request)
+    if (res && res.ok && !res.name) {
+      // nothing in the system to transfer: only the extra was added in To
+      rememberPair(request.from_warehouse, request.to_warehouse)
+      clearDraft({ keepWarehouses: true })
+      reviewing.value = false
+      router.replace({ path: "/home", query: { added: (res.recos || []).map((r) => `${r.name}:${r.value}`).join(","), to: request.to_warehouse, ...(res.already ? { already: "1" } : {}) } })
+      return
+    }
     if (res && res.ok) {
       rememberPair(request.from_warehouse, request.to_warehouse)
       clearDraft({ keepWarehouses: true })
