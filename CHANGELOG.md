@@ -6,7 +6,7 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
-## [1.11.0] - 2026-10-20 (Order from Paper — built and tested locally, NOT deployed)
+## [1.11.0] - 2026-10-20 (Order from Paper — live on splashbox.in 03:40 IST, `0c103da`; switched off until the AI key is set)
 
 ### New Features
 - **Order from Paper in the staff app** (`/staff/paper`): a photo or PDF of a supplier's quotation, price list or order list becomes a draft Purchase Order (optionally sent straight for the owners' approval); a school book list becomes a draft Sales Order (switched off until the owner turns it on). The AI (Claude Haiku 5.5, falling back once to Sonnet 5.5 when a reading looks wrong) reads the paper; nothing is ever submitted by the app

@@ -90,7 +90,17 @@ of being blocked (Stock Users still get the red "Only X in …" and must ask a m
 - Production context (2026-10-02): SBGD has 1,440 negative items (−97,115 units) and 2,749 at zero; 1,408 of them have
   no valuation and only 93 of those a last purchase rate — expect managers to type rates often.
 
-## Order from Paper (BUILT LOCALLY 2026-10-20 — NOT DEPLOYED)
+## Order from Paper (DEPLOYED 2026-10-20 03:40 IST, `0c103da` — SWITCHED OFF until the AI key is set)
+Deployed after hours (0 bills in the last 10 min; last bill 19:26 the evening before) by the runbook below: niced DB
+backup `20261020_033814-splashbox_in-database.sql.gz` (96 s), anchor `/root/predeploy_20261020_order_from_paper/`
+(HEAD before `8867aa7`, apps.txt, reload logs), ff-merge, `reload_doc` × 4, Order Paper Settings saved with
+**enabled = 0, so_enabled = 0** (no `kgs_paper_ai_key` on the server yet — a tile that cannot read would only confuse
+purchase staff), `app_hooks` + website cache dropped, HUP web. Verified: 8 routes 200 over HTTPS with the new bundle,
+Guest 403 on the paper endpoints, 0 Error Log / 0 nginx 5xx / 0 tracebacks after the deploy, all 18 Stock Users keep
+the app + long session, the 3 Shop Owners open Settings, `post_deploy_verify_live.sh` all passed.
+**To switch on:** set the key (runbook step 4), then the owner ticks *Order from paper is on* in `/staff/settings`;
+then one real paper end to end (step 7).
+
 A photo or PDF of a supplier's quotation / price list / order list (or a school book list) becomes a **draft
 Purchase Order** (optionally sent straight into the "Purchase Order Approval" workflow) or a **draft Sales Order**.
 Plan, costs and decisions: `KGS/PLAN_order_from_paper.md`; mockup https://claude.ai/artifact/5oCQ6wG8AHnKJrpm3MpKVB.
