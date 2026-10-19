@@ -62,3 +62,7 @@ textarea {
     opacity: 1;
   }
 }
+
+.scrim {
+  background: var(--kgs-scrim);
+}

@@ -2,11 +2,11 @@
   <div class="mx-auto min-h-dvh w-full max-w-lg">
     <div v-if="disabled" class="flex min-h-dvh flex-col items-center justify-center gap-3 px-8 text-center">
       <div class="text-lg font-semibold">KGS Staff is switched off</div>
-      <p class="text-ink-muted">Transfers can still be made in the ERP. Please try again later.</p>
+      <p class="text-ink-muted">Transfers and orders can still be made in the ERP. Please try again later.</p>
     </div>
     <div v-else-if="notAllowed" class="flex min-h-dvh flex-col items-center justify-center gap-3 px-8 text-center">
-      <div class="text-lg font-semibold">This app is for stock staff</div>
-      <p class="text-ink-muted">Your account does not have the Stock User role. Ask the office to add it.</p>
+      <div class="text-lg font-semibold">This app is for KGS staff</div>
+      <p class="text-ink-muted">Your account has no role for it (Stock User for transfers, Purchase User for orders from paper). Ask the office to add one.</p>
       <a href="/app" class="mt-2 flex min-h-secondary w-48 items-center justify-center rounded-xl bg-brand-deep px-4 font-bold text-white">
         Open the ERP
       </a>

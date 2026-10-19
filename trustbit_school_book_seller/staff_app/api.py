@@ -24,6 +24,11 @@ from frappe.utils import cint, flt, now_datetime
 
 STAFF_ROLES = ("Stock User", "Stock Manager")
 MANAGER_ROLES = ("Stock Manager",)
+# Order from Paper (staff_app/paper.py). These roles open the app, but every
+# transfer endpoint below still requires STAFF_ROLES through _guard().
+PAPER_PO_ROLES = ("Purchase User", "Purchase Manager")
+PAPER_SO_ROLES = ("Sales User", "Sales Manager")
+PAPER_SETTINGS_ROLES = ("System Manager", "Shop Owner")
 TRANSFER_SLIP_FORMAT = "KGS Transfer Slip"
 MAX_LINES = 150  # one submit must finish inside a web-worker request on 1 vCPU
 BULK_MAX_LINES = 15000  # bulk: split into MAX_LINES transfers, run in the background
@@ -53,6 +58,26 @@ def user_allowed(user=None):
 	if not user or user == "Guest":
 		return False
 	return bool(set(frappe.get_roles(user)) & set(STAFF_ROLES))
+
+
+def app_user_allowed(user=None, include_settings=True):
+	"""Who may open /staff at all: stock staff (transfers), purchase / sales
+	staff while Order from Paper is on, and the paper-settings editors.
+	Presentation + boot only — each endpoint checks its own roles.
+	include_settings=False is the long-session rule: opening the settings page
+	alone (System Manager / Shop Owner) never earns a 7-day session."""
+	user = user or frappe.session.user
+	if not user or user == "Guest":
+		return False
+	roles = set(frappe.get_roles(user))
+	if roles & set(STAFF_ROLES + (PAPER_SETTINGS_ROLES if include_settings else ())):
+		return True
+	if roles & set(PAPER_PO_ROLES + PAPER_SO_ROLES):
+		from trustbit_school_book_seller.staff_app.paper_read import get_settings
+
+		s = get_settings()
+		return bool(s.enabled and (roles & set(PAPER_PO_ROLES) or (s.so_enabled and roles & set(PAPER_SO_ROLES))))
+	return False
 
 
 def _is_manager():
@@ -213,18 +238,31 @@ def _pdf_url(name):
 
 @frappe.whitelist(methods=["POST"])
 def boot():
-	_guard()
-	warehouses = _warehouses()
+	"""Home screen data for whoever may open the app; the tiles follow the roles
+	(transfers: stock staff; Order from Paper: purchase / sales staff)."""
+	if frappe.session.user in (None, "", "Guest"):
+		raise frappe.PermissionError(_("Please sign in again."))
+	if not app_enabled():
+		raise frappe.PermissionError(_("The staff app is switched off. Please use the ERP."))
+	if not app_user_allowed():
+		raise frappe.PermissionError(_("Your account has no role for the staff app."))
+	_rate_limit()
+	from trustbit_school_book_seller.staff_app.paper import boot_info
+
+	can_transfer = user_allowed()
+	warehouses = _warehouses() if can_transfer else []
 	names = {w["name"] for w in warehouses}
 	default_from = frappe.db.get_single_value("Stock Settings", "default_warehouse")
 	return {
 		"user": frappe.session.user,
 		"full_name": frappe.utils.get_fullname(frappe.session.user),
+		"can_transfer": 1 if can_transfer else 0,
 		"is_manager": 1 if _is_manager() else 0,
 		"warehouses": warehouses,
 		"default_from": default_from if default_from in names else None,
 		"max_lines": MAX_LINES,
 		"reco_reasons": RECO_REASONS,
+		"paper": boot_info(),
 	}
 
 

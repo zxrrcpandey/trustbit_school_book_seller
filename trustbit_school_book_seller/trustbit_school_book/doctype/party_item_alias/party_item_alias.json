@@ -1,0 +1,204 @@
+{
+ "actions": [],
+ "creation": "2026-10-20 00:00:00.000000",
+ "description": "\"Remembered name\": how one supplier or customer writes one of our items on their paper. Learned only from lines a person confirmed in the KGS Staff app.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "party_type",
+  "party",
+  "key_type",
+  "match_key",
+  "paper_text",
+  "column_break_item",
+  "item_code",
+  "item_name",
+  "paper_unit",
+  "uom",
+  "conversion_factor",
+  "mrp",
+  "section_usage",
+  "times_used",
+  "last_used_on",
+  "column_break_usage",
+  "last_used_by",
+  "last_paper"
+ ],
+ "fields": [
+  {
+   "fieldname": "party_type",
+   "fieldtype": "Link",
+   "label": "Party Type",
+   "options": "DocType",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Supplier / Customer",
+   "options": "party_type",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "key_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Remembered By",
+   "options": "Code\nText",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "description": "The code or wording after normalising (capitals, no punctuation, common short forms expanded).",
+   "fieldname": "match_key",
+   "fieldtype": "Data",
+   "label": "Match Key",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "paper_text",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "As Printed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_item",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Our Item",
+   "options": "Item",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "item_code.item_name",
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "description": "Their unit as printed (normalised), e.g. PKT, BOX.",
+   "fieldname": "paper_unit",
+   "fieldtype": "Data",
+   "label": "Their Unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "Our Unit",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "conversion_factor",
+   "fieldtype": "Float",
+   "label": "Stock Units per Our Unit"
+  },
+  {
+   "description": "MRP printed when it was learned. A different MRP later turns the line amber (new edition?).",
+   "fieldname": "mrp",
+   "fieldtype": "Currency",
+   "label": "MRP on the Paper"
+  },
+  {
+   "fieldname": "section_usage",
+   "fieldtype": "Section Break",
+   "label": "Use"
+  },
+  {
+   "default": "0",
+   "fieldname": "times_used",
+   "fieldtype": "Int",
+   "label": "Times Confirmed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_used_on",
+   "fieldtype": "Datetime",
+   "label": "Last Confirmed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_usage",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_used_by",
+   "fieldtype": "Link",
+   "label": "Last Confirmed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_paper",
+   "fieldtype": "Link",
+   "label": "Last Paper",
+   "options": "Order Paper",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-10-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trustbit School Book",
+ "name": "Party Item Alias",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase Manager",
+   "write": 1
+  },
+  {
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Purchase User"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales User"
+  }
+ ],
+ "search_fields": "paper_text,item_code",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "paper_text",
+ "track_changes": 1
+}

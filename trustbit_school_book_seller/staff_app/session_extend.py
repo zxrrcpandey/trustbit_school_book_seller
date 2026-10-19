@@ -43,7 +43,7 @@ import re
 import frappe
 from frappe.utils import add_to_date, cint, now, time_diff_in_seconds
 
-from trustbit_school_book_seller.staff_app.api import STAFF_ROLES
+from trustbit_school_book_seller.staff_app.api import app_user_allowed
 
 _CONF_KEY = "kgs_staff_session_days"
 _MAX_DAYS = 30
@@ -68,8 +68,10 @@ def _expiry_stamp(days):
 
 
 def _is_staff(user):
+	"""Long sessions only for people the app is open to (stock staff, and purchase /
+	sales staff only while Order from Paper is on for them) — not for the settings page alone."""
 	try:
-		return bool(set(frappe.get_roles(user)) & set(STAFF_ROLES))
+		return app_user_allowed(user, include_settings=False)
 	except Exception:
 		return False
 

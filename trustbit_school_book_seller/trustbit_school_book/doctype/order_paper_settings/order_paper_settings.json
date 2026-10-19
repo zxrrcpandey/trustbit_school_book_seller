@@ -1,0 +1,168 @@
+{
+ "actions": [],
+ "creation": "2026-10-20 00:00:00.000000",
+ "description": "Order from Paper in the KGS Staff app (/staff). A change applies from the next paper read. The AI key is NOT here: it lives in site_config as kgs_paper_ai_key.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "so_enabled",
+  "column_break_switches",
+  "provider",
+  "section_models",
+  "ai_model",
+  "rerank",
+  "column_break_models",
+  "auto_fallback",
+  "fallback_model",
+  "section_limits",
+  "month_page_limit",
+  "peak_month_page_limit",
+  "column_break_limits",
+  "usd_rate",
+  "gst_percent",
+  "section_prices",
+  "model_prices"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "description": "Off: the paper tiles disappear from the staff app and every paper endpoint refuses.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Order from Paper Is On"
+  },
+  {
+   "default": "0",
+   "description": "Sales Orders from a school list / shop order. Off until the Purchase Order pilot ends.",
+   "fieldname": "so_enabled",
+   "fieldtype": "Check",
+   "label": "Sales Orders from Paper Are On"
+  },
+  {
+   "fieldname": "column_break_switches",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Anthropic",
+   "description": "OpenAI (ChatGPT) and Google (Gemini) are coming soon.",
+   "fieldname": "provider",
+   "fieldtype": "Select",
+   "label": "AI Provider",
+   "options": "Anthropic",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_models",
+   "fieldtype": "Section Break",
+   "label": "Models"
+  },
+  {
+   "default": "claude-haiku-5-5",
+   "description": "Must be one of the models in the price table below.",
+   "fieldname": "ai_model",
+   "fieldtype": "Data",
+   "label": "Model for Reading",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "description": "One short text-only call per paper: the AI picks among OUR closest items for the lines that are not sure. The line stays amber.",
+   "fieldname": "rerank",
+   "fieldtype": "Check",
+   "label": "AI Double-Check of Unsure Lines"
+  },
+  {
+   "fieldname": "column_break_models",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Read once more with the better model when the lines do not add up to the paper's total, or 2 or more lines could not be read.",
+   "fieldname": "auto_fallback",
+   "fieldtype": "Check",
+   "label": "Read Again When the Reading Looks Wrong"
+  },
+  {
+   "default": "claude-sonnet-5-5",
+   "depends_on": "auto_fallback",
+   "fieldname": "fallback_model",
+   "fieldtype": "Data",
+   "label": "Better Model"
+  },
+  {
+   "fieldname": "section_limits",
+   "fieldtype": "Section Break",
+   "label": "Spending"
+  },
+  {
+   "default": "300",
+   "description": "Pages sent to the AI per calendar month, re-reads included. 0 = no limit.",
+   "fieldname": "month_page_limit",
+   "fieldtype": "Int",
+   "label": "Monthly Page Limit"
+  },
+  {
+   "default": "400",
+   "description": "Used instead in March and April (book season).",
+   "fieldname": "peak_month_page_limit",
+   "fieldtype": "Int",
+   "label": "Page Limit in March and April"
+  },
+  {
+   "fieldname": "column_break_limits",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "100",
+   "description": "Rupees per US dollar, card forex included. Only for showing the spend in rupees.",
+   "fieldname": "usd_rate",
+   "fieldtype": "Float",
+   "label": "Rupees per Dollar"
+  },
+  {
+   "default": "18",
+   "description": "GST on the AI service (reverse charge). Only for showing the spend.",
+   "fieldname": "gst_percent",
+   "fieldtype": "Float",
+   "label": "GST %"
+  },
+  {
+   "fieldname": "section_prices",
+   "fieldtype": "Section Break",
+   "label": "Model prices"
+  },
+  {
+   "description": "Provider list prices. Edit when the provider changes them; a new model needs a row here before it can be chosen.",
+   "fieldname": "model_prices",
+   "fieldtype": "Table",
+   "label": "Model Prices",
+   "options": "Order Paper Model Price"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trustbit School Book",
+ "name": "Order Paper Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Shop Owner",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -1,0 +1,371 @@
+{
+ "actions": [],
+ "autoname": "format:OP-{YYYY}-{#####}",
+ "creation": "2026-10-20 00:00:00.000000",
+ "description": "A supplier's or customer's paper (photo / PDF) read by the KGS Staff app into a draft Purchase Order or Sales Order. Written only by the app.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "purpose",
+  "status",
+  "company",
+  "column_break_main",
+  "party_type",
+  "party",
+  "client_ref",
+  "section_paper",
+  "paper_party_text",
+  "paper_gstin",
+  "paper_no",
+  "paper_date",
+  "column_break_paper",
+  "paper_kind",
+  "file_kind",
+  "page_count",
+  "default_copies",
+  "section_result",
+  "created_doctype",
+  "created_doc",
+  "column_break_result",
+  "saved_by",
+  "saved_on",
+  "error",
+  "section_ai",
+  "ai_provider",
+  "ai_model",
+  "pages_read",
+  "column_break_ai",
+  "ai_input_tokens",
+  "ai_output_tokens",
+  "ai_cost_usd",
+  "usage_json",
+  "section_data",
+  "state_version",
+  "lines_json",
+  "ai_json"
+ ],
+ "fields": [
+  {
+   "fieldname": "purpose",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Make",
+   "options": "Purchase Order\nSales Order",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Uploaded",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Uploaded\nReading\nReady\nSaved\nFailed\nDiscarded",
+   "read_only": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "party_type",
+   "fieldtype": "Link",
+   "label": "Party Type",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Supplier / Customer",
+   "options": "party_type",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "client_ref",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Client Ref",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "section_paper",
+   "fieldtype": "Section Break",
+   "label": "As printed on the paper"
+  },
+  {
+   "fieldname": "paper_party_text",
+   "fieldtype": "Data",
+   "label": "Name on the paper",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paper_gstin",
+   "fieldtype": "Data",
+   "label": "GSTIN on the paper",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paper_no",
+   "fieldtype": "Data",
+   "label": "Paper No.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paper_date",
+   "fieldtype": "Data",
+   "label": "Paper Date (as printed)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_paper",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "paper_kind",
+   "fieldtype": "Data",
+   "label": "Kind of Paper",
+   "read_only": 1
+  },
+  {
+   "fieldname": "file_kind",
+   "fieldtype": "Select",
+   "label": "Files",
+   "options": "Photos\nPDF",
+   "read_only": 1
+  },
+  {
+   "fieldname": "page_count",
+   "fieldtype": "Int",
+   "label": "Pages",
+   "read_only": 1
+  },
+  {
+   "fieldname": "default_copies",
+   "fieldtype": "Int",
+   "label": "Copies of Each (lists without quantities)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_result",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "created_doctype",
+   "fieldtype": "Link",
+   "label": "Made Document Type",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "created_doc",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Made Document",
+   "options": "created_doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "saved_by",
+   "fieldtype": "Link",
+   "label": "Saved By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "saved_on",
+   "fieldtype": "Datetime",
+   "label": "Saved On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Problem",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_ai",
+   "fieldtype": "Section Break",
+   "label": "AI reading"
+  },
+  {
+   "fieldname": "ai_provider",
+   "fieldtype": "Data",
+   "label": "AI Provider",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_model",
+   "fieldtype": "Data",
+   "label": "Model of the Reading Used",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Pages sent to the AI, re-reads included. Counts towards the monthly page limit.",
+   "fieldname": "pages_read",
+   "fieldtype": "Int",
+   "label": "Pages Read",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ai",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "ai_input_tokens",
+   "fieldtype": "Int",
+   "label": "Input Tokens (all calls)",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "ai_output_tokens",
+   "fieldtype": "Int",
+   "label": "Output Tokens (all calls)",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "At the prices in Order Paper Settings when the call was made. Before GST.",
+   "fieldname": "ai_cost_usd",
+   "fieldtype": "Float",
+   "label": "AI Cost (USD, before GST)",
+   "precision": "4",
+   "read_only": 1
+  },
+  {
+   "fieldname": "usage_json",
+   "fieldtype": "Long Text",
+   "label": "Calls (JSON)",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_data",
+   "fieldtype": "Section Break",
+   "label": "Data"
+  },
+  {
+   "default": "0",
+   "fieldname": "state_version",
+   "fieldtype": "Int",
+   "label": "State Version",
+   "read_only": 1
+  },
+  {
+   "description": "The check screen: every line, its match and what a person decided.",
+   "fieldname": "lines_json",
+   "fieldtype": "Long Text",
+   "label": "Lines (JSON)",
+   "read_only": 1
+  },
+  {
+   "description": "What the AI read, after cleaning. Kept for audit.",
+   "fieldname": "ai_json",
+   "fieldtype": "Long Text",
+   "label": "Reading (JSON)",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-10-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trustbit School Book",
+ "name": "Order Paper",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Shop Owner"
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Purchase User"
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales User"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Gray",
+   "title": "Uploaded"
+  },
+  {
+   "color": "Blue",
+   "title": "Reading"
+  },
+  {
+   "color": "Orange",
+   "title": "Ready"
+  },
+  {
+   "color": "Green",
+   "title": "Saved"
+  },
+  {
+   "color": "Red",
+   "title": "Failed"
+  },
+  {
+   "color": "Gray",
+   "title": "Discarded"
+  }
+ ]
+}

@@ -173,6 +173,12 @@ website_route_rules = [
 	{"from_route": "/staff/transfers", "to_route": "staff"},
 	{"from_route": "/staff/t/<path:app_path>", "to_route": "staff"},
 	{"from_route": "/staff/bulk/<path:app_path>", "to_route": "staff"},
+	# Order from Paper (staff_app/paper.py)
+	{"from_route": "/staff/paper", "to_route": "staff"},
+	{"from_route": "/staff/paper/<path:app_path>", "to_route": "staff"},
+	{"from_route": "/staff/papers", "to_route": "staff"},
+	{"from_route": "/staff/names", "to_route": "staff"},
+	{"from_route": "/staff/settings", "to_route": "staff"},
 ]
 
 # Staff app long sessions (owner decision 2026-10-02) — see session_extend.py

@@ -6,6 +6,20 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.11.0] - 2026-10-20 (Order from Paper — built and tested locally, NOT deployed)
+
+### New Features
+- **Order from Paper in the staff app** (`/staff/paper`): a photo or PDF of a supplier's quotation, price list or order list becomes a draft Purchase Order (optionally sent straight for the owners' approval); a school book list becomes a draft Sales Order (switched off until the owner turns it on). The AI (Claude Haiku 5.5, falling back once to Sonnet 5.5 when a reading looks wrong) reads the paper; nothing is ever submitted by the app
+- **Item matching that learns per supplier/customer** ("remembered names", Party Item Alias): their codes and wordings are remembered only from lines a person confirmed; ISBN/barcode, our item code and ERPNext's supplier part no. also match; the rest are best guesses with the class and printed MRP shown, so two editions of one book are told apart. Unsure lines need one tap; unknown lines are left out and listed in the PO remark
+- **Check screen**: sure / to check / not found per line, change item, units, quantities, "copies of each book" for school lists, total check against the paper, duplicate-paper warning, read again with a better model
+- **Settings for System Manager + Shop Owner**: on/off, model choice with ≈ ₹ per page, fallback, AI double-check, monthly page caps (separate March–April cap), ₹/$ and GST, editable model price table, this month's spend; OpenAI and Google Gemini shown as "Coming soon"
+- New DocTypes: Order Paper, Order Paper Settings (+ Order Paper Model Price), Party Item Alias
+
+### Changed
+- The staff app now opens for Purchase staff (and Sales staff when Sales Orders from paper are on) — transfers stay Stock User/Manager only; the longer app session follows exactly who may use the app (never for the settings page alone)
+
+---
+
 ## [1.10.0] - 2026-10-03 (short stock "option B")
 
 ### Changed

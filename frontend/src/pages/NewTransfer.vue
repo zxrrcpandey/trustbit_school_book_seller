@@ -678,6 +678,11 @@ onMounted(async () => {
   window.addEventListener("keydown", onKey)
   try {
     info.value = await boot()
+    if (info.value.can_transfer === 0) {
+      // purchase / sales staff open the app for Order from Paper only
+      router.replace("/home")
+      return
+    }
     if (!draft.from && info.value.default_from) draft.from = info.value.default_from
     refreshLevels()
   } catch (e) {

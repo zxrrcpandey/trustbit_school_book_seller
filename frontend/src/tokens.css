@@ -19,4 +19,7 @@
   --kgs-warn-bg: #f7eedb;
   --kgs-danger-text: #b91c1c;
   --kgs-danger-bg: #f8e6e4;
+
+  /* dims the page behind a bottom sheet */
+  --kgs-scrim: rgba(23, 32, 28, 0.45);
 }

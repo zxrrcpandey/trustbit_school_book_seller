@@ -7,6 +7,11 @@ import Home from "./pages/Home.vue"
 import Login from "./pages/Login.vue"
 import NewTransfer from "./pages/NewTransfer.vue"
 import NotFound from "./pages/NotFound.vue"
+import PaperNew from "./pages/PaperNew.vue"
+import PaperSettings from "./pages/PaperSettings.vue"
+import PaperView from "./pages/PaperView.vue"
+import Papers from "./pages/Papers.vue"
+import RememberedNames from "./pages/RememberedNames.vue"
 import TransferDetail from "./pages/TransferDetail.vue"
 import Transfers from "./pages/Transfers.vue"
 
@@ -24,6 +29,12 @@ export const router = createRouter({
     { path: "/transfers", name: "transfers", component: Transfers, meta: { auth: true } },
     { path: "/t/:name", name: "detail", component: TransferDetail, props: true, meta: { auth: true } },
     { path: "/bulk/:ref_", name: "bulk", component: BulkProgress, props: true, meta: { auth: true } },
+    // Order from Paper (staff_app/paper.py)
+    { path: "/paper", name: "paper-new", component: PaperNew, meta: { auth: true } },
+    { path: "/paper/:name", name: "paper", component: PaperView, props: true, meta: { auth: true } },
+    { path: "/papers", name: "papers", component: Papers, meta: { auth: true } },
+    { path: "/names", name: "names", component: RememberedNames, meta: { auth: true } },
+    { path: "/settings", name: "settings", component: PaperSettings, meta: { auth: true } },
     { path: "/:pathMatch(.*)*", name: "notfound", component: NotFound },
   ],
 })

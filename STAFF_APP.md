@@ -1,4 +1,4 @@
-# KGS Staff app (`/staff`) — warehouse transfers
+# KGS Staff app (`/staff`) — warehouse transfers + order from paper
 
 An installable phone app (PWA) for Stock Users: pick From/To warehouses, scan or search items, and
 submit a **Material Transfer** (Stock Entry). Built 2026-10-02 on the pattern of the Betul exec PWA
@@ -90,6 +90,81 @@ of being blocked (Stock Users still get the red "Only X in …" and must ask a m
 - Production context (2026-10-02): SBGD has 1,440 negative items (−97,115 units) and 2,749 at zero; 1,408 of them have
   no valuation and only 93 of those a last purchase rate — expect managers to type rates often.
 
+## Order from Paper (BUILT LOCALLY 2026-10-20 — NOT DEPLOYED)
+A photo or PDF of a supplier's quotation / price list / order list (or a school book list) becomes a **draft
+Purchase Order** (optionally sent straight into the "Purchase Order Approval" workflow) or a **draft Sales Order**.
+Plan, costs and decisions: `KGS/PLAN_order_from_paper.md`; mockup https://claude.ai/artifact/5oCQ6wG8AHnKJrpm3MpKVB.
+Owner decisions (2026-10-20): Claude Haiku 5.5 with automatic fallback to Sonnet 5.5; settings changeable only by
+System Manager + Shop Owner; the Anthropic key is OK'd (data leaves the server: pages + candidate item names);
+OpenAI and Google Gemini shown as "Coming soon" behind a provider interface. Sales Orders ship switched OFF.
+
+**Flow.** `/staff/paper` → `paper.upload_paper` (≤ 10 photos re-encoded to JPEG ≤ 2000 px, or one PDF ≤ 10 MB /
+20 pages; magic-byte check; private Files `OP-…-N.jpg/pdf`; Order Paper "Uploaded") → read job on the **default**
+queue (`job_id` per paper, deduplicated, after commit) → AI reading (forced tool `record_paper`) → matching →
+"Ready" → the check screen polls every 2 s → person checks lines → `save_order` → draft PO/SO → names learned.
+If the reading looks wrong (lines don't add up to the printed total, or ≥ 2 unclear lines) it is read once more
+with the fallback model, inside the monthly page cap.
+
+**Matching ladder** (`paper_match.py`; green = sure, amber = one tap, red = left out unless chosen):
+1. remembered code for this party → 2. remembered wording for this party → 3. ISBN / barcode → 4. our item code,
+or their code already in ERPNext (Item Supplier `supplier_part_no` / Item Customer Detail `ref_code`) — all green;
+5. another party's remembered name → amber; 6. fuzzy (IDF over item names, short-form synonyms, class guard,
+MRP twin bonus — two editions of one book are told apart by the printed MRP) + optional AI double-check
+(`choose_items`, may only pick among OUR candidates) → amber; 7. nothing → red.
+A remembered line whose printed MRP changed, or whose item is now disabled, turns amber ("new edition?").
+The fuzzy index is built only inside the background job (never in a web worker — DANGER 21).
+
+**What `save_order` enforces** (the phone's checks are only convenience):
+- Refused while any amber line is unchecked; red/left-out lines are listed in the PO remark / SO comment.
+- Never back-dated (transaction date = today); needed-by ≥ today; warehouse = a leaf warehouse of the company.
+- PO rate = the paper's (printed rate, else amount ÷ qty, else MRP − discount) or "our usual buying price"; a line
+  with neither a paper price nor a buying price goes in at ₹0 (the save screen counts those). SO prices always come
+  from our selling list, never from the paper.
+- Inserted as the user (normal ERPNext permissions); "Send for Approval" via `apply_workflow` inside a savepoint —
+  if it fails the PO stays a draft and the screen says why.
+- Idempotent: `client_ref` + Redis lock; a paper no. already used for this party → "Save anyway?".
+- The pages are attached to the PO/SO (File copies) with a timeline comment.
+
+**Learning** happens only on save, only from lines a person kept: a *Code* alias (their code) and a *Text* alias
+(their wording; " C<class>" is added when the wording has no class of its own), plus ERPNext's `supplier_part_no`
+when empty. Purchase Managers (suppliers) and Sales Managers (customers) change/delete them under Remembered names.
+
+**Who sees what** — tiles and endpoints per role (each endpoint checks its own roles):
+| Role | Gets |
+|---|---|
+| Purchase User / Manager | "Purchase Order from paper" while the feature is on; Papers list |
+| Sales User / Manager | "Sales Order from paper" only while *Sales Orders from paper* is also on |
+| Purchase / Sales Manager, System Manager | change or delete remembered names (suppliers / customers) |
+| System Manager, Shop Owner | Settings: on/off, model, fallback, double-check, page caps, ₹/$ + GST, model price table |
+| Stock User / Manager | transfers as before; no paper tiles unless they also hold a purchase/sales role |
+
+**AI + money.** `paper_read.py`: Anthropic Messages API via `requests`, one retry on 408/409/429/5xx/529, errors
+turned into plain staff messages. Every call is recorded in `Order Paper.usage_json` (tokens, USD priced on the
+REQUESTED model id — the API may answer with a dated id), shown in Settings as ₹ incl. GST for the month. Estimated
+≈ ₹0.26/page on Haiku, ≈ ₹5.19 on Sonnet (7k in / 3k out tokens, ₹100/$, 18% GST — an estimate, not a measurement).
+
+**site_config keys** (never print the key; it is never sent to the phone, an Error Log or a document — tested):
+- `kgs_paper_ai_key` — the Anthropic key. Absent → tiles show "The AI service is not set up yet", nothing is read.
+- `kgs_paper_ai_fake` — TESTS ONLY: a reading dict or a path to one; honoured only with developer_mode or no real key.
+- `kgs_paper_ai_url` — TESTS ONLY: honoured only for 127.0.0.1 / localhost.
+
+**Deploy runbook (when the owner asks) — after 19:30 IST, quiet tills.** No migrate / `bench build` / FLUSHALL.
+1. Count bills in the last 10 min; anchor (book_seller HEAD, apps.txt, niced DB backup).
+2. `git pull upstream main` (ff only) as frappe_user.
+3. New tables without a migrate, child table first:
+   `bench --site splashbox.in execute frappe.reload_doc --args '["trustbit_school_book","doctype","<dt>"]'` for
+   `order_paper_model_price`, `order_paper_settings`, `order_paper`, `party_item_alias`.
+4. The key, without echo / history / process args, from `sites/`: `sudo -u frappe_user ../env/bin/python -c "import
+   getpass, frappe; frappe.init(site='splashbox.in', sites_path='.'); from frappe.installer import update_site_config;
+   update_site_config('kgs_paper_ai_key', getpass.getpass('key: '))"`.
+5. HUP web + drop `app_hooks` + website cache (new route rules: on the dev bench `/staff/papers`, `/staff/names`,
+   `/staff/settings` 404'd on a direct load until the cached hooks were dropped).
+6. `nginx -T | grep client_max_body_size` ≥ 20m (a 12 MB upload is ~16 MB as base64).
+7. Verify: the 5 new routes 200; boot `paper.ready = 1`; Settings opens for the owner; then one REAL paper end to
+   end with the owner (Order Paper → PO pending approval → owners' e-mail with the PDF).
+Rollback: `git reset --hard <anchor>` + HUP + cache drops; remove the key (`update_site_config(..., "None")` — the
+STRING "None"; Python None writes `null`). The four DocTypes are inert and can stay.
+
 ## Owner decisions (2026-10-02)
 | Question | Answer |
 |---|---|
@@ -111,6 +186,8 @@ of being blocked (Stock Users still get the red "Only X in …" and must ask a m
 | `trustbit_school_book_seller/www/staff/sw.min.js`, `manifest.webmanifest` | service worker (scope `/staff/`, `.min.js` = served raw, not Jinja) and manifest (not under `/assets`, which is cached ~1 year) |
 | `staff_app/api.py` | all endpoints (POST-only, Stock User/Manager, per-user rate limit 120/min) |
 | `staff_app/session_extend.py` | longer sessions for logins made through the app |
+| `staff_app/paper.py` · `paper_read.py` · `paper_match.py` | Order from Paper: endpoints + read job · AI providers, files, costs · item matching |
+| `trustbit_school_book/doctype/order_paper*`, `party_item_alias` | Order Paper, Order Paper Settings (single) + Order Paper Model Price (child), Party Item Alias |
 | `trustbit_school_book/print_format/kgs_transfer_slip/` | standard Print Format "KGS Transfer Slip" (Stock Entry) |
 | `staff_app/dev_tests/` | local-bench check scripts (see its README) — `check_*` names on purpose, so `bench run-tests` never imports them |
 
@@ -119,7 +196,8 @@ Rebuild after any frontend change: `cd frontend && yarn install && set -o pipefa
 `public/staff/`, `www/staff.html`, `www/staff/*` together.
 
 ## Routes
-`/staff/home` (home + manifest start_url) · `/staff/login` · `/staff/transfer` · `/staff/transfers` · `/staff/t/<Stock Entry>` · `/staff/bulk/<ref>`.
+`/staff/home` (home + manifest start_url) · `/staff/login` · `/staff/transfer` · `/staff/transfers` · `/staff/t/<Stock Entry>` · `/staff/bulk/<ref>`
+· `/staff/paper` · `/staff/paper/<Order Paper>` · `/staff/papers` · `/staff/names` · `/staff/settings` (Order from Paper).
 **Never make `/staff/` a page the app depends on:** production nginx 301s every trailing-slash URL (`/staff/` → `/staff`),
 and `/staff` is outside the PWA scope `/staff/` — Android then won't offer install / shows a browser bar (found on
 the first deploy, 2026-10-02; fixed by moving home to `/staff/home`). Bare `/staff` still opens the app.
@@ -136,6 +214,7 @@ screen needs a new rule, or a hard refresh on it 404s.
 | `stock_levels(item_codes, from, to)` | one call to refresh all lines after a warehouse change |
 | `create_transfer(from, to, items, client_ref, remarks)` | builds AND submits the Material Transfer |
 | `my_transfers(scope, days)`, `get_transfer(name)` | lists (Stock Manager may see everyone) / detail + slip PDF URL |
+| `trustbit_school_book_seller.staff_app.paper.*` | Order from Paper (upload, get/update paper, parties/items search, save, names, settings) — see that section |
 
 ### Rules `create_transfer` enforces (the phone's checks are only convenience)
 - **Availability under a row lock** (`SELECT … FOR UPDATE` on `tabBin`), summed across all lines of an item.
@@ -156,8 +235,9 @@ screen needs a new rule, or a hard refresh on it 404s.
 ## Longer sessions (`session_extend.py`)
 Production `session_expiry` is 01:00 and every user has 2FA, so without this staff would type password + OTP
 every idle hour. **Only sessions created by a login from the app** (`staff_app: 1` is sent with both the
-password and the OTP call) of a **Stock User/Manager** get `kgs_staff_session_days` days. Desk logins keep the
-hour. Three mechanisms (ported from Betul `ts_session_extend.py`):
+password and the OTP call) of a **user the app is open to** get `kgs_staff_session_days` days: Stock User/Manager,
+and Purchase / Sales staff only while Order from Paper is on for them (`app_user_allowed(include_settings=False)` —
+System Manager / Shop Owner opening only the settings page never get one). Desk logins keep the hour. Three mechanisms (ported from Betul `ts_session_extend.py`):
 1. `on_session_creation` stamps `session_expiry = "<days*24>:00:00"` + `staff_app = 1` into the session.
 2. `after_request` re-issues the `sid` cookie with the long Max-Age for stamped sessions.
 3. cron every 10 min (`touch_staff_sessions`) slides `tabSessions.lastupdate` so the DB path (used after a
@@ -172,6 +252,8 @@ existing ones live until they expire — to end them now, clear those users' ses
 - `kgs_staff_session_days: 0` — no new long sessions.
 - `kgs_staff_bulk_in_shop_hours: 1` — allow >150-line background transfers during shop hours (default: refused).
 - `kgs_staff_reco_digest_to: "a@x, b@y"` — weekly e-mail of app-made reconciliations (default: off).
+- Order from Paper: untick *Order from paper is on* in Order Paper Settings (owner can do it in the app), or remove
+  `kgs_paper_ai_key` — nothing more is sent to the AI; saved orders and remembered names stay.
 
 ## Scanning
 Android Chrome uses the native `BarcodeDetector`. iPhone Safari has none, so the `barcode-detector` polyfill
@@ -225,3 +307,14 @@ Option B (2026-10-03): `check_staff_reco.py` 43/43 (all six examples) · `check_
 make fresh items per run (fixed test items drifted as suites moved stock around).
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.
+Order from Paper (2026-10-20): `check_paper_api.py` 130/130 (normalising, class guard, MRP twins, alias ladder,
+upload refusals, fallback read, version conflicts, save PO + approval, idempotency, duplicate paper, learning,
+SO + copies, roles, long-session rule, settings, page cap, rate limit; the real Anthropic code path against a local
+mock server incl. 529 retry / 401 / credit error; the key in no log or document) · `check_paper_browser.py` 69/69
+(phone viewport with a real worker: PO paper → choose supplier → Correct / Change twin / search → sent for approval;
+same paper again → remembered + duplicate warning; SO with copies; owner settings + remembered names). Regressions
+after it: check_staff_api 63/63, check_staff_http 37/37, check_staff_bulk 43/43, check_staff_reco 43/43,
+check_staff_browser 22/22, check_staff_reco_browser 20/20, check_staff_bulk_browser 18/18.
+Not proven locally: the owners' approval e-mail (the job runs, but this Mac's wkhtmltopdf is an Intel binary —
+"Bad CPU type" — so the PO PDF attachment fails; production's works) and real AI accuracy / cost — that needs the
+owner's sample papers and the real key.

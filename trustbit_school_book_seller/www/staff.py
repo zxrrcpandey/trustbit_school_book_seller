@@ -11,7 +11,7 @@ import json
 import frappe
 import frappe.sessions
 
-from trustbit_school_book_seller.staff_app.api import app_enabled, sw_enabled, user_allowed
+from trustbit_school_book_seller.staff_app.api import app_enabled, app_user_allowed, sw_enabled
 
 # Never serve a Redis-cached shell that points at an old bundle.
 no_cache = 1
@@ -33,7 +33,7 @@ def get_context(context):
 	# in a full reload, which recomputes this for the real user. Presentation
 	# only — every endpoint re-checks the role.
 	is_guest = frappe.session.user in (None, "", "Guest")
-	context.staff_allowed = 1 if (is_guest or user_allowed()) else 0
+	context.staff_allowed = 1 if (is_guest or app_user_allowed()) else 0
 	# Who is signed in, so the app needs no whoami round-trip on launch (for a
 	# Guest that call is a 403). JSON string; "<" escaped so it can never
 	# close the <script> tag.
