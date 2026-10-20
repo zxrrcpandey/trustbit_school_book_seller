@@ -6,7 +6,7 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
-## [1.14.0] - 2026-10-20 (Staff app — new Home, bottom tab bar, More screen; built from the mockup https://claude.ai/artifact/MQutYJjoaazcXjnUDxRazs; NOT yet deployed)
+## [1.14.0] - 2026-10-20 (Staff app — new Home, bottom tab bar, More screen; built from the mockup https://claude.ai/artifact/MQutYJjoaazcXjnUDxRazs; live on splashbox.in 22:41 IST `bd50547`)
 
 ### Changed
 - **Home redesigned** (owner: "Home doesn't look good, it's very messy"). Top to bottom: KGS mark + "Good evening, <first name>" and the date; **Continue transfer** (green bar, only when a transfer is left on the phone); **Waiting for you** (only when something waits): Purchase Orders to approve (Shop Owners: count, who sent them, oldest — opens the ERP's list of POs waiting for approval), papers to check, papers that could not be read (one paper opens it, more open the Papers list filtered), and for everyone else "N of your POs wait for approval" (opens their own pending POs in the ERP); **Start** tiles in two columns, by role: Purchase Order, Receipt, Bill (separate tiles now, was one "Receipt or Bill" tile), Sales Order, Transfer — a lone tile or the last of an odd number runs the full width; **Recent**: papers and transfers in ONE list of 5 (Discarded papers left out), "kind · time" per row. A user with only papers or only transfers gets "Your recent papers / transfers" + See all

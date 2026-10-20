@@ -12,7 +12,7 @@ Print Format dumps), log `/root/predeploy_20261002_staff_app.log`. Verified: all
 registered, job `touch_staff_sessions` (*/10) created, `kgs_staff_session_days` = 7, 0 new Error Log / 5xx.
 **Not yet done:** a real phone sign-in + one real transfer with the owner (runbook step 9).
 
-## Home, bottom tab bar and More (1.14.0, built 2026-10-20 — NOT yet deployed)
+## Home, bottom tab bar and More (1.14.0 `bd50547`, LIVE 2026-10-20 22:41 IST)
 Built from the owner-approved mockup https://claude.ai/artifact/MQutYJjoaazcXjnUDxRazs (owner / purchase staff / stock
 staff / More artboards; the "before" board is the old Home).
 - **Home** (`pages/Home.vue`): greeting + date · Continue transfer (draft on this phone) · **Waiting for you**
@@ -30,6 +30,13 @@ staff / More artboards; the "before" board is the old Home).
   CSS `.rows` (dividers after the icon), `.pb-nav`, `.safe-nav`, token `--kgs-mute`.
 - **Deploy needs:** pull + graceful HUP of the web workers (`po_waiting` is new Python) + drop `app_hooks` and the website
   cache (new route rule `/staff/more`) — no migrate, build or flush. Phones pick up the new bundle on their next launch.
+- **Deployed 2026-10-20 22:39–22:41 IST** (user: "Deploy now", after shop hours; 0 bills in the 10 min before, 0 papers
+  being read): niced backup 91 s `20261020_223935-splashbox_in-database.sql.gz`, ff-merge `2db8c3d`→`bd50547`, HUP web,
+  `app_hooks` + website cache dropped. Anchor `/root/predeploy_20261020_home/` (HEAD before, apps.txt, backup log).
+  Verified: `/staff`, `/home`, `/more`, `/papers`, `/transfers`, `/paper` 200, bundle `index-D9yiXV12.js` 200, `po_waiting`
+  as Guest 403, boot + `po_waiting` as all 18 app users (3 Shop Owners; tiles per role; 0 POs pending at the time, so no
+  approval rows yet), 0 Error Log, 0 nginx 5xx, `post_deploy_verify_live.sh` all passed. Rollback: `git reset --hard 2db8c3d`
+  (as frappe_user) + HUP web + drop `app_hooks` / website cache.
 
 ## Bulk transfers (LIVE 2026-10-02 20:11 IST, `8f9f04c` + `41f7438` — owner asked for all four kinds)
 Deployed after hours (last bill 19:54): ff + app_hooks drop + HUP + website cache; workers need no restart (RQ forks a
