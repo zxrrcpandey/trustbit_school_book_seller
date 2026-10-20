@@ -12,7 +12,7 @@
 
       <section v-if="choices.length > 1">
         <h2 class="mb-2 text-[16px] font-bold">What should the paper become?</h2>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid gap-2" :class="choices.length > 2 ? 'grid-cols-1' : 'grid-cols-2'">
           <button
             v-for="c in choices"
             :key="c.key"
@@ -27,7 +27,7 @@
           </button>
         </div>
       </section>
-      <h2 v-else class="text-[16px] font-bold">{{ purpose === "so" ? "Sales Order" : "Purchase Order" }} from a paper</h2>
+      <h2 v-else class="text-[16px] font-bold">{{ PURPOSE[purpose].doctype }} from a paper</h2>
       <p class="text-[14px] text-ink-muted">{{ hint }}</p>
 
       <section class="grid grid-cols-2 gap-2">
@@ -93,7 +93,7 @@ const route = useRoute()
 const router = useRouter()
 const info = ref(null)
 const bootError = ref("")
-const purpose = ref(route.query.for === "so" ? "so" : "po")
+const purpose = ref(["so", "pr", "pi"].includes(route.query.for) ? route.query.for : "po")
 const pages = ref([])
 const copies = ref(null)
 const busy = ref(false)
@@ -106,17 +106,21 @@ let clientRef = newRef()
 const choices = computed(() => {
   const p = info.value?.paper || {}
   const out = []
-  if (p.po) out.push({ key: "po", title: "Purchase Order", sub: "we buy from a supplier" })
+  if (p.po) out.push({ key: "po", title: "Purchase Order", sub: "quotation or price list → order (owner approval)" })
+  if (p.pr) out.push({ key: "pr", title: "Purchase Receipt", sub: "goods came with a bill or challan → stock in" })
+  if (p.pi) out.push({ key: "pi", title: "Purchase Invoice", sub: "the supplier's bill → from a Receipt or PO, or adds stock" })
   if (p.so) out.push({ key: "so", title: "Sales Order", sub: "a school or shop buys" })
   return out
 })
 const aiReady = computed(() => !!info.value?.paper?.ready)
 const isPdf = computed(() => pages.value.length === 1 && pages.value[0].kind === "pdf")
-const hint = computed(() =>
-  purpose.value === "po"
-    ? "A quotation, price list or your own order list. The supplier is found from the GSTIN or name on the paper."
-    : "A school book list or a shop's order. You choose the customer on the next screen."
-)
+const HINT = {
+  po: "A quotation, price list or your own order list. The supplier is found from the GSTIN or name on the paper.",
+  pr: "The supplier's bill or challan that came with the goods. Next you link the PO it belongs to; at the end you save a draft, or submit when every line is checked.",
+  pi: "The supplier's bill. Next you link its Receipt (or PO); a bill with nothing to link adds the stock itself.",
+  so: "A school book list or a shop's order. You choose the customer on the next screen.",
+}
+const hint = computed(() => HINT[purpose.value])
 
 watch(pages, () => (clientRef = newRef()), { deep: false })
 
@@ -180,9 +184,9 @@ onMounted(async () => {
   try {
     info.value = await boot()
     const p = info.value.paper || {}
-    if (purpose.value === "so" && !p.so) purpose.value = "po"
-    if (purpose.value === "po" && !p.po && p.so) purpose.value = "so"
-    if (!p.po && !p.so) bootError.value = "Order from paper is not available for your account."
+    const ok = choices.value.map((c) => c.key)
+    if (!ok.includes(purpose.value) && ok.length) purpose.value = ok[0]
+    if (!ok.length) bootError.value = "Order from paper is not available for your account."
   } catch (e) {
     bootError.value = e.display ? e.display() : "Could not load."
   }

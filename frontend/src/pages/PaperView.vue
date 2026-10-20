@@ -45,6 +45,54 @@
       <router-link :to="newLink" class="block min-h-action rounded-xl bg-brand-deep py-4 font-bold text-white">Read another paper</router-link>
     </main>
 
+    <!-- Saved: Receipt / Bill -->
+    <main v-else-if="paper.status === 'Saved' && isBuy" class="space-y-3 p-4">
+      <div class="rounded-xl p-4" :class="paper.created_docstatus === 1 ? 'bg-ok-bg text-ok-text' : 'bg-brand-soft text-ink'">
+        <div class="text-[19px] font-bold">{{ kindTitle }} {{ paper.created_docstatus === 1 ? "submitted" : "saved as a draft" }}</div>
+        <p class="mt-1 text-[15px]">{{ paper.created_doc }} · {{ kept.length }} line{{ kept.length === 1 ? "" : "s" }}<template v-if="paper.created_total"> · ₹{{ money(paper.created_total) }}</template></p>
+      </div>
+      <p v-if="done && done.submit_error" class="rounded-lg bg-warn-bg p-3 font-semibold text-warn-text">Saved as a draft, but it could not be submitted: {{ done.submit_error }}</p>
+      <dl class="tnum divide-y divide-surface-line rounded-xl border border-surface-line bg-surface">
+        <div class="flex justify-between gap-3 px-4 py-3"><dt class="text-ink-muted">Supplier</dt><dd class="text-right font-semibold">{{ paper.party_title }}</dd></div>
+        <div v-if="paper.links && paper.links.docs && paper.links.docs.length" class="flex justify-between gap-3 px-4 py-3"><dt class="text-ink-muted">Linked to</dt><dd class="text-right font-semibold">{{ paper.links.docs.join(", ") }}</dd></div>
+        <div v-for="d in paper.still_due || []" :key="d.doc" class="flex justify-between gap-3 px-4 py-3"><dt class="text-ink-muted">Still due on {{ d.doc }}</dt><dd class="font-semibold">{{ d.lines }} line{{ d.lines === 1 ? "" : "s" }}</dd></div>
+        <div class="flex justify-between gap-3 px-4 py-3"><dt class="text-ink-muted">Saved by</dt><dd class="text-right">{{ paper.saved_by_name }} · {{ fmtDate(paper.saved_on) }}</dd></div>
+      </dl>
+      <p class="text-[14px] text-ink-muted">The paper is attached to {{ paper.created_doc }}.</p>
+      <section v-if="paper.bill" class="rounded-xl border-2 border-brand-deep bg-surface p-3">
+        <div class="text-[16px] font-bold">Next for this paper: the Bill</div>
+        <template v-if="paper.bill.paper">
+          <p class="text-[14px] text-ink-muted">{{ paper.bill.doc ? `It became ${paper.bill.doc}.` : "The bill paper is ready to check." }}</p>
+          <router-link :to="`/paper/${encodeURIComponent(paper.bill.paper)}`" class="mt-2 block min-h-secondary rounded-xl bg-brand-deep py-3 text-center font-bold text-white">Open the bill</router-link>
+        </template>
+        <template v-else-if="paper.bill.can">
+          <p class="text-[14px] text-ink-muted">From {{ paper.created_doc }}, using this reading. No second AI read.</p>
+          <button type="button" class="mt-2 min-h-action w-full rounded-xl bg-brand-deep font-bold text-white disabled:opacity-40" :disabled="busy" @click="doMakeBill">{{ busy ? "Making it…" : "Make the bill now" }}</button>
+        </template>
+        <p v-else-if="paper.bill.waiting" class="text-[14px] text-ink-muted">The Receipt is a draft. The bill can be made from here once the office submits it.</p>
+        <p v-else class="text-[14px] text-ink-muted">Not available: the Receipt is billed already, or your account cannot make bills.</p>
+      </section>
+      <p v-if="actionError" class="rounded-lg bg-danger-bg p-3 font-semibold text-danger-text">{{ actionError }}</p>
+      <div v-if="leftOut.length" class="rounded-xl border-2 border-warn-text bg-warn-bg p-3 text-warn-text">
+        <div class="font-bold">Left out ({{ leftOut.length }})</div>
+        <div v-for="l in leftOut" :key="l.idx" class="mt-1 text-[14px]">{{ l.text }}<template v-if="l.paper_qty"> · {{ fmt(l.paper_qty) }}</template></div>
+        <p class="mt-2 text-[14px]">Create the item{{ leftOut.length === 1 ? "" : "s" }} in the ERP, then receive {{ leftOut.length === 1 ? "it" : "them" }} separately.</p>
+      </div>
+      <a :href="docUrl" class="block min-h-action rounded-xl border-2 border-brand-deep py-4 text-center font-bold text-brand-deep">Open in the ERP</a>
+      <router-link :to="newLink" class="block min-h-action rounded-xl bg-brand-deep py-4 text-center font-bold text-white">Read another paper</router-link>
+    </main>
+
+    <!-- Link the PO / Receipt first -->
+    <PaperLinkStep
+      v-else-if="linkStep"
+      :paper="paper"
+      :party-how="partyHow"
+      :busy="busy"
+      :error="actionError"
+      @party="partyOpen = true"
+      @link="doLink"
+    />
+
     <!-- Saved -->
     <main v-else-if="paper.status === 'Saved'" class="space-y-3 p-4">
       <div class="rounded-xl p-4" :class="sentForApproval ? 'bg-ok-bg text-ok-text' : 'bg-brand-soft text-ink'">
@@ -86,6 +134,16 @@
         </div>
       </section>
 
+      <section v-if="isBuy" class="flex items-center justify-between gap-2 rounded-xl border border-surface-line bg-surface p-3">
+        <div class="min-w-0 text-[14px]">
+          <div class="text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Linked to</div>
+          <div class="font-semibold">{{ linkedText }}</div>
+        </div>
+        <button type="button" class="min-h-secondary flex-none rounded-xl border border-surface-line px-3 font-semibold text-brand-deep" :disabled="busy" @click="doLink('change')">Change</button>
+      </section>
+      <div v-if="isBuy && redBar" class="sticky top-14 z-20 rounded-xl border-2 border-danger-text bg-danger-bg p-3 text-[15px] font-bold text-danger-text" role="alert">
+        ✗ {{ redBar }}
+      </div>
       <p v-if="paperLine" class="text-[14px] text-ink-muted">{{ paperLine }}</p>
       <p v-for="(n, i) in paper.notes" :key="'n' + i" class="rounded-lg bg-brand-soft p-3 text-[14px]">{{ n }}</p>
       <p v-for="(w, i) in paper.paper.warnings" :key="'w' + i" class="rounded-lg bg-warn-bg p-3 text-[14px] text-warn-text">The AI noted: {{ w }}</p>
@@ -122,17 +180,37 @@
         :key="l.idx"
         :line="l"
         :is-po="isPo"
+        :kind="kind"
         :party-title="paper.party_title"
         :disabled="busy && busyIdx === l.idx"
+        :last="(paper.last_bought || {})[l.item_code] || null"
+        :usual-discount="paper.usual_discount"
         @ok="decide(l, 'ok')"
         @leave="decide(l, 'left')"
         @undo="decide(l, null)"
         @change="choosing = l"
         @qty="(v) => change(l, { qty: v === '' ? null : Number(v) })"
         @uom="(v) => change(l, { uom: v })"
+        @rate="(v) => change(l, { rate: v === '' ? null : Number(v) })"
+        @fix="change(l, { fix: 'qty' })"
+        @read="(r) => change(l, r)"
+        @last="lastOf = l"
       />
 
-      <section class="tnum space-y-1 rounded-xl border border-surface-line bg-surface p-3 text-[14px]">
+      <details v-if="isBuy && paper.not_on_paper && paper.not_on_paper.length" class="rounded-xl border border-surface-line bg-surface p-3">
+        <summary class="cursor-pointer font-semibold">On the {{ linkKindShort }}, not on this paper · {{ paper.not_on_paper.length }} line{{ paper.not_on_paper.length === 1 ? "" : "s" }}</summary>
+        <p class="mt-1 text-[13px] text-ink-faint">They stay due for the next delivery. Nothing is changed.</p>
+        <div v-for="r in paper.not_on_paper" :key="r.doc + r.idx" class="mt-1 text-[14px]">{{ r.doc }} line {{ r.idx }} · {{ r.item_name }} · {{ fmt(r.due) }} {{ r.uom }}</div>
+      </details>
+
+      <section v-if="isBuy && paper.totals" class="tnum space-y-1 rounded-xl border border-surface-line bg-surface p-3 text-[14px]">
+        <div class="flex justify-between gap-3"><span class="text-ink-muted">{{ kindTitle }} lines ({{ kept.length }})</span><b>₹{{ money(paper.totals.lines_net) }}</b></div>
+        <div v-for="n in paper.totals.notes" :key="n.kind + n.idx" class="flex justify-between gap-3"><span class="text-ink-muted">{{ n.kind === "left" ? `Left out (line ${n.idx})` : `Not received (line ${n.idx}, ${fmt(n.qty)})` }}</span><span>₹{{ money(n.amount) }}</span></div>
+        <div v-if="paper.totals.against" class="flex justify-between gap-3"><span class="text-ink-muted">{{ paper.totals.against.kind === "items" ? "Paper's item total" : "Paper's total less tax and charges" }}</span><b>₹{{ money(paper.totals.against.amount) }}</b></div>
+        <div v-if="(paper.charges || []).length" class="flex justify-between gap-3"><span class="text-ink-muted">Charges on the paper</span><span>{{ paper.charges.map((c) => `${c.label} ₹${money0(c.amount)}`).join(", ") }}</span></div>
+        <div class="pt-1 font-semibold" :class="paper.totals.ok ? 'text-ok-text' : 'text-danger-text'">{{ totalsLine }}</div>
+      </section>
+      <section v-else class="tnum space-y-1 rounded-xl border border-surface-line bg-surface p-3 text-[14px]">
         <div v-if="paper.paper.items_total" class="flex justify-between gap-3"><span class="text-ink-muted">Paper total</span><b>₹{{ money(paper.paper.items_total) }}<template v-if="paper.paper.total_qty"> · {{ fmt(paper.paper.total_qty) }}</template></b></div>
         <div v-else-if="paper.paper.grand_total" class="flex justify-between gap-3"><span class="text-ink-muted">Paper's grand total (with tax)</span><b>₹{{ money(paper.paper.grand_total) }}</b></div>
         <div class="flex justify-between gap-3"><span class="text-ink-muted">The {{ lines.length }} lines we read</span><b>{{ readTotal ? `₹${money(readTotal)} · ` : "" }}{{ fmt(readQty) }} qty</b></div>
@@ -148,17 +226,29 @@
     </main>
 
     <!-- Bottom bar (check screen) -->
-    <div v-if="paper && paper.status === 'Ready'" class="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-surface-line bg-surface px-4 pt-3">
+    <div v-if="paper && paper.status === 'Ready' && !linkStep" class="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-surface-line bg-surface px-4 pt-3">
       <div class="mx-auto max-w-lg">
         <p v-if="blockReason" class="mb-2 text-center text-[14px] font-semibold text-warn-text">{{ blockReason }}</p>
         <button type="button" class="min-h-action w-full rounded-xl bg-brand-deep text-[17px] font-bold text-white disabled:opacity-40" :disabled="!!blockReason || busy || !paper.can_save" @click="openSave">
-          Next: make the {{ isPo ? "Purchase Order" : "Sales Order" }}
+          {{ isBuy ? `Next: save the ${kindTitle}` : `Next: make the ${isPo ? "Purchase Order" : "Sales Order"}` }}
         </button>
       </div>
     </div>
 
+    <PurchaseSave
+      v-if="saveOpen && isBuy"
+      :paper="paper"
+      :kept="kept"
+      :left-out="leftOut"
+      :queue="() => queue"
+      @close="saveOpen = false"
+      @conflict="onSaveConflict"
+      @saved="onPurchaseSaved"
+    />
+    <LastBoughtSheet v-if="lastOf" :line="lastOf" :last="(paper.last_bought || {})[lastOf.item_code] || null" :usual="paper.usual_discount" :party-title="paper.party_title" :buy="isBuy" @close="lastOf = null" />
+
     <!-- Save -->
-    <div v-if="saveOpen" class="fixed inset-0 z-40 flex flex-col bg-surface-page">
+    <div v-if="saveOpen && !isBuy" class="fixed inset-0 z-40 flex flex-col bg-surface-page">
       <AppHeader :title="`Make the ${isPo ? 'Purchase Order' : 'Sales Order'}`">
         <template #right>
           <button type="button" class="px-3 py-2 font-semibold text-brand-deep" :disabled="saving" @click="saveOpen = false">Back</button>
@@ -271,7 +361,7 @@
       @pick="pickParty"
       @close="partyOpen = false"
     />
-    <ChooseItemSheet v-if="choosing" :line="choosing" :party-title="paper.party_title" @pick="pickItem" @leave="leaveChoosing" @close="choosing = null" />
+    <ChooseItemSheet v-if="choosing" :line="choosing" :party-title="paper.party_title" :paper-name="paper.name" @pick="pickItem" @leave="leaveChoosing" @close="choosing = null" />
   </div>
 </template>
 
@@ -280,12 +370,32 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 
 import AppHeader from "@/components/AppHeader.vue"
 import ChooseItemSheet from "@/components/ChooseItemSheet.vue"
+import LastBoughtSheet from "@/components/LastBoughtSheet.vue"
 import PaperLine from "@/components/PaperLine.vue"
+import PaperLinkStep from "@/components/PaperLinkStep.vue"
 import PaperReading from "@/components/PaperReading.vue"
 import PartySheet from "@/components/PartySheet.vue"
+import PurchaseSave from "@/components/PurchaseSave.vue"
 import { newRef } from "@/data/draft.js"
 import { fmt, fmtDate } from "@/data/format.js"
-import { discardPaper, getPaper, money, rereadPaper, saveOrder, searchSchools, sentPages, setParty, updateLines } from "@/data/paper.js"
+import {
+  PURPOSE,
+  discardPaper,
+  getPaper,
+  makeBill,
+  money,
+  money0,
+  purposeKey,
+  rereadPaper,
+  saveOrder,
+  searchSchools,
+  sentPages,
+  setLinks,
+  setParty,
+  updateLines,
+  lastCompare,
+} from "@/data/paper.js"
+import { useRouter } from "vue-router"
 
 const props = defineProps({ name: { type: String, required: true } })
 
@@ -318,18 +428,54 @@ const form = reactive({ needed_by: "", warehouse: "", rate_mode: "paper" })
 const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 let saveRef = newRef()
 
+const router = useRouter()
+const lastOf = ref(null)
 const isPo = computed(() => !paper.value || paper.value.purpose !== "Sales Order")
+const kind = computed(() => (paper.value ? purposeKey(paper.value.purpose) : "po"))
+const isBuy = computed(() => kind.value === "pr" || kind.value === "pi")
+const kindTitle = computed(() => PURPOSE[kind.value].title)
 const partyLabel = computed(() => (isPo.value ? "Supplier" : "Customer"))
 const reading = computed(() => paper.value && ["Uploaded", "Reading"].includes(paper.value.status))
 const lines = computed(() => paper.value?.lines || [])
 const copies = computed(() => paper.value?.copies || 0)
-const newLink = computed(() => `/paper?for=${isPo.value ? "po" : "so"}`)
+const newLink = computed(() => `/paper?for=${kind.value}`)
 const title = computed(() => {
   if (!paper.value) return "Order from paper"
   if (reading.value) return "Reading"
   if (paper.value.status === "Saved") return "Saved"
+  if (linkStep.value) return kind.value === "pi" ? "Link the bill" : "Link the PO"
+  if (paper.value.status === "Ready" && isBuy.value) return `${kindTitle.value} from paper`
   if (paper.value.status === "Ready") return isPo.value ? "Check the lines" : "Check the lines · Sales Order"
   return "Order from paper"
+})
+const linkStep = computed(() => !!paper.value && isBuy.value && paper.value.status === "Ready" && !paper.value.links)
+const linkKindShort = computed(() => (paper.value?.links?.doctype === "Purchase Receipt" ? "Receipt" : "PO"))
+const linkedText = computed(() => {
+  const l = paper.value?.links || {}
+  if (l.mode === "docs") return l.docs.join(", ")
+  return kind.value === "pi" ? "Nothing — the bill adds the stock" : "No PO"
+})
+// the money check: red until the lines add up to the paper (both save buttons stay off)
+const redBar = computed(() => {
+  const p = paper.value
+  if (!p || !isBuy.value || !p.totals) return ""
+  const probs = (p.problems || []).length
+  const miss = (p.totals.missing_bill_lines || []).length
+  const bits = []
+  if (!p.totals.ok && p.totals.against && !miss) {
+    const d = Number(p.totals.diff || 0)
+    bits.push(`₹${money(Math.abs(d))} ${d < 0 ? "short of" : "more than"} the paper`)
+  }
+  if (miss) bits.push(`${miss} line${miss === 1 ? "" : "s"} left out — a Bill must carry every line`)
+  if (probs) bits.push(`${probs} line${probs === 1 ? "" : "s"} to fix`)
+  return bits.join(" · ")
+})
+const totalsLine = computed(() => {
+  const t = paper.value?.totals
+  if (!t) return ""
+  if (!t.has_total) return "No total printed on the paper — each line is checked on its own."
+  if (t.ok) return t.gross_needed ? "✓ Lines add up. The grand total with GST is checked on the next screen." : "✓ Adds up to the paper."
+  return `✗ ₹${money(Math.abs(t.diff))} ${t.diff < 0 ? "short of" : "more than"} the paper`
 })
 
 const stateOf = (l) => (l.decision === "left" ? "left" : l.decision === "ok" || l.by_person ? "confirmed" : l.colour || "red")
@@ -373,6 +519,13 @@ const blockReason = computed(() => {
   if (!kept.value.length) return "Every line is left out"
   const noQty = kept.value.filter((l) => !Number(l.qty)).length
   if (noQty) return `Enter the quantity on ${noQty} line${noQty === 1 ? "" : "s"}`
+  if (isBuy.value) {
+    const probs = (paper.value.problems || []).length
+    if (probs) return `Fix ${probs} line${probs === 1 ? "" : "s"} first`
+    const t = paper.value.totals || {}
+    if ((t.missing_bill_lines || []).length) return "A Bill must carry every line of the paper"
+    if (!t.ok && !t.gross_needed) return "The lines don't add up to the paper yet"
+  }
   return ""
 })
 const partyHow = computed(() => {
@@ -411,16 +564,14 @@ const doneTitle = computed(() => {
   if (paper.value?.created_status === "Approved") return "Purchase Order approved"
   return "Purchase Order saved as a draft"
 })
-const docUrl = computed(() => `/app/${isPo.value ? "purchase-order" : "sales-order"}/${encodeURIComponent(paper.value?.created_doc || "")}`)
+const docUrl = computed(() => `/app/${PURPOSE[kind.value].slug}/${encodeURIComponent(paper.value?.created_doc || "")}`)
+// dearer than the last bill (per stock unit, after its discount) — shown, never changed
 const rateWarnings = computed(() =>
   kept.value
-    .filter((l) => l.paper_rate && l.last_purchase_rate)
     .map((l) => {
-      const factor = Number(l.conversion_factor || 1)
-      const last = l.last_purchase_rate * factor
-      const diff = (l.paper_rate - last) / last
-      if (Math.abs(diff) <= 0.2) return null
-      return `${l.item_name}: ₹${money(l.paper_rate)} on this paper, ₹${money(last)} last time (${diff > 0 ? "+" : ""}${Math.round(diff * 100)}%). Please check.`
+      const c = lastCompare(l, (paper.value.last_bought || {})[l.item_code], false)
+      if (!c || !c.dearer) return null
+      return `${l.item_name}: ₹${money(l.paper_rate / (Number(l.conversion_factor) || 1))} a copy on this paper, ₹${money(c.prev.rate)} on ${c.prev.doc} (${fmtDate(c.prev.date)}). ${c.chips.map((x) => x.text).join(" · ")}`
     })
     .filter(Boolean)
 )
@@ -520,6 +671,8 @@ function push(changes, extra = {}, idx = null) {
         const i = paper.value.lines.findIndex((l) => l.idx === nl.idx)
         if (i >= 0) paper.value.lines[i] = nl
       }
+      for (const k of ["totals", "problems", "not_on_paper"]) if (r[k] !== undefined) paper.value[k] = r[k]
+      if (lastOf.value) lastOf.value = paper.value.lines.find((l) => l.idx === lastOf.value.idx) || null
       if (extra.copies !== undefined) paper.value.copies = extra.copies
     } catch (e) {
       say(msg(e, "Could not save that change."))
@@ -564,6 +717,12 @@ async function pickParty(party) {
     const r = await setParty(props.name, party, paper.value.version)
     paper.value = r.conflict ? r.paper : r
     if (r.conflict) say("Someone else changed this paper — it was reloaded.")
+    if (!r.conflict && reading.value) {
+      // another supplier on a Receipt / Bill: matched again in the background
+      started = Date.now()
+      live.value = null
+      schedulePoll()
+    }
   } catch (e) {
     say(msg(e, "Could not set it."))
   } finally {
@@ -601,6 +760,47 @@ async function discard() {
     await load()
   } catch (e) {
     say(msg(e, "Could not discard it."))
+  } finally {
+    busy.value = false
+  }
+}
+
+// ── Receipt / Bill: links, save, the bill from the same reading ────────────
+async function doLink(mode, docs = []) {
+  actionError.value = ""
+  await queue
+  busy.value = true
+  try {
+    const r = await setLinks(props.name, mode, docs, paper.value.version)
+    paper.value = r.conflict ? r.paper : r
+    if (r.conflict) say("Someone else changed this paper — it was reloaded.")
+    window.scrollTo(0, 0)
+  } catch (e) {
+    actionError.value = msg(e, "Could not link it.")
+    say(actionError.value)
+  } finally {
+    busy.value = false
+  }
+}
+function onSaveConflict(p) {
+  paper.value = p
+  saveOpen.value = false
+  say("Someone else changed this paper — check it again.")
+}
+async function onPurchaseSaved(r) {
+  done.value = r
+  saveOpen.value = false
+  await load()
+  window.scrollTo(0, 0)
+}
+async function doMakeBill() {
+  actionError.value = ""
+  busy.value = true
+  try {
+    const r = await makeBill(props.name)
+    router.push(`/paper/${encodeURIComponent(r.name)}`)
+  } catch (e) {
+    actionError.value = msg(e, "Could not make the bill.")
   } finally {
     busy.value = false
   }

@@ -19,6 +19,40 @@
         <p class="text-[13px] text-ink-faint">Off: the tile disappears from the staff app and nothing can be read.</p>
       </section>
 
+      <section class="space-y-3 rounded-2xl border border-surface-line bg-surface p-4">
+        <h2 class="text-[15px] font-extrabold">Receipts and Bills from paper</h2>
+        <label class="flex min-h-secondary items-center justify-between gap-3 text-[15px] font-semibold">
+          Receipts and Bills are on
+          <input v-model="v.pr_pi_enabled" type="checkbox" class="h-6 w-6 accent-[var(--kgs-brand-deep)]" />
+        </label>
+        <div>
+          <div class="text-[14px] font-semibold text-ink-muted">Who may make them ({{ receivers.length }})</div>
+          <p v-if="!receivers.length" class="mt-1 text-[14px] font-semibold text-warn-text">Nobody yet — add at least one person.</p>
+          <div v-for="(r, i) in receivers" :key="r.user" class="mt-2 flex items-center justify-between gap-3 rounded-xl border border-surface-line px-3 py-2">
+            <span class="min-w-0"><span class="block font-bold">{{ r.full_name }}</span><span class="block truncate text-[13px] text-ink-faint">{{ r.user }}<template v-if="r.enabled === 0"> · disabled</template></span></span>
+            <button type="button" class="min-h-secondary flex-none px-2 text-[14px] font-semibold text-danger-text" @click="receivers.splice(i, 1)">Remove</button>
+          </div>
+          <input v-model="who" type="search" placeholder="Add a Purchase User or Manager…" class="mt-2 h-12 w-full rounded-lg border border-surface-line bg-surface px-3" aria-label="Add a person" @input="findWho" />
+          <button
+            v-for="u in whoHits"
+            :key="u.user"
+            type="button"
+            class="mt-1 flex w-full flex-col rounded-lg border border-surface-line px-3 py-2 text-left"
+            @click="addWho(u)"
+          >
+            <b>{{ u.full_name || u.user }}</b><span class="text-[13px] text-ink-faint">{{ u.user }}</span>
+          </button>
+        </div>
+        <label class="block text-[14px] font-semibold text-ink-muted">
+          Freight / packing charges go to
+          <select v-model="v.freight_account" class="mt-1 h-12 w-full rounded-lg border border-surface-line bg-surface px-2 text-[16px] text-ink">
+            <option value="">Not set — a bill with charges can't be saved</option>
+            <option v-for="a in data.freight_accounts" :key="a" :value="a">{{ a }}</option>
+          </select>
+        </label>
+        <p class="text-[13px] text-ink-faint">A Receipt or Bill must add up to the paper before it can be saved. Purchase Orders stay open to every Purchase User and Manager.</p>
+      </section>
+
       <section class="space-y-2 rounded-2xl border border-surface-line bg-surface p-4">
         <h2 class="text-[15px] font-extrabold">AI provider</h2>
         <div v-for="p in data.providers" :key="p.name" class="flex items-center gap-3 rounded-xl px-3 py-3" :class="p.active ? 'border-2 border-brand-deep bg-brand-soft' : 'border border-dashed border-ink-faint text-ink-muted'">
@@ -129,7 +163,7 @@
 import { onMounted, reactive, ref } from "vue"
 
 import AppHeader from "@/components/AppHeader.vue"
-import { getPaperSettings, savePaperSettings } from "@/data/paper.js"
+import { getPaperSettings, savePaperSettings, searchReceivers } from "@/data/paper.js"
 
 const data = ref(null)
 const v = reactive({})
@@ -138,12 +172,40 @@ const error = ref("")
 const busy = ref(false)
 const saved = ref(false)
 const pricesOpen = ref(false)
+const receivers = ref([])
+const who = ref("")
+const whoHits = ref([])
+let whoTimer = null
+
+function findWho() {
+  clearTimeout(whoTimer)
+  const txt = who.value.trim()
+  if (!txt) {
+    whoHits.value = []
+    return
+  }
+  whoTimer = setTimeout(async () => {
+    try {
+      const have = new Set(receivers.value.map((r) => r.user))
+      whoHits.value = (await searchReceivers(txt)).filter((u) => !have.has(u.user)).slice(0, 8)
+    } catch {
+      whoHits.value = []
+    }
+  }, 250)
+}
+function addWho(u) {
+  receivers.value.push({ user: u.user, full_name: u.full_name || u.user, enabled: 1 })
+  who.value = ""
+  whoHits.value = []
+}
 
 function apply(d) {
   data.value = d
   Object.assign(v, d.values)
-  for (const k of ["enabled", "so_enabled", "auto_fallback", "rerank"]) v[k] = !!Number(v[k])
+  for (const k of ["enabled", "so_enabled", "auto_fallback", "rerank", "pr_pi_enabled"]) v[k] = !!Number(v[k])
+  v.freight_account = v.freight_account || ""
   models.value = d.models.map((m) => ({ ...m }))
+  receivers.value = (d.receivers || []).map((r) => ({ ...r }))
 }
 
 async function save() {
@@ -151,8 +213,8 @@ async function save() {
   saved.value = false
   busy.value = true
   try {
-    const values = { ...v, models: models.value.filter((m) => String(m.model || "").trim()) }
-    for (const k of ["enabled", "so_enabled", "auto_fallback", "rerank"]) values[k] = values[k] ? 1 : 0
+    const values = { ...v, models: models.value.filter((m) => String(m.model || "").trim()), receivers: receivers.value.map((r) => r.user) }
+    for (const k of ["enabled", "so_enabled", "auto_fallback", "rerank", "pr_pi_enabled"]) values[k] = values[k] ? 1 : 0
     apply(await savePaperSettings(values))
     saved.value = true
   } catch (e) {

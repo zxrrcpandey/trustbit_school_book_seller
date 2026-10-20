@@ -88,7 +88,7 @@ const papers = ref(null)
 const error = ref("")
 
 const paper = computed(() => info.value?.paper || {})
-const paperUser = computed(() => !!(paper.value.po || paper.value.so))
+const paperUser = computed(() => !!(paper.value.po || paper.value.so || paper.value.pr || paper.value.pi))
 const tiles = computed(() => {
   const out = []
   if (info.value?.can_transfer) {
@@ -100,6 +100,8 @@ const tiles = computed(() => {
     })
   }
   if (paper.value.po) out.push({ to: "/paper?for=po", title: "Purchase Order from paper", sub: "Photo or PDF of a quotation or order list" })
+  if (paper.value.pr || paper.value.pi)
+    out.push({ to: `/paper?for=${paper.value.pr ? "pr" : "pi"}`, title: "Receipt or Bill from paper", sub: "The supplier's bill: link the PO, check, save or submit" })
   if (paper.value.so) out.push({ to: "/paper?for=so", title: "Sales Order from paper", sub: "A school book list or a shop's order" })
   return out
 })

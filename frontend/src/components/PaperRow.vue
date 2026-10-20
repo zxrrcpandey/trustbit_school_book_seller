@@ -3,7 +3,7 @@
     <span class="min-w-0">
       <span class="block truncate font-semibold">{{ p.party_title || "Supplier / customer not chosen" }}</span>
       <span class="block text-[13px] text-ink-faint">
-        {{ p.purpose === "Sales Order" ? "SO" : "PO" }} · {{ p.name }} · {{ fmtDate(p.creation) }}<template v-if="showOwner"> · {{ p.owner_name }}</template>
+        {{ SHORT[p.purpose] || "PO" }} · {{ p.name }} · {{ fmtDate(p.creation) }}<template v-if="showOwner"> · {{ p.owner_name }}</template>
       </span>
     </span>
     <span class="flex-none text-right">
@@ -18,6 +18,7 @@ import { computed } from "vue"
 
 import { fmtDate } from "@/data/format.js"
 
+const SHORT = { "Purchase Order": "PO", "Sales Order": "SO", "Purchase Receipt": "PR", "Purchase Invoice": "PI" }
 const props = defineProps({ p: { type: Object, required: true }, showOwner: { type: Boolean, default: false } })
 const LABEL = { Uploaded: "Reading", Reading: "Reading", Ready: "To check", Saved: "Saved", Failed: "Not read", Discarded: "Discarded" }
 const label = computed(() => LABEL[props.p.status] || props.p.status)

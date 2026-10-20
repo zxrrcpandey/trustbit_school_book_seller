@@ -6,6 +6,21 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.13.0] - 2026-10-20 (Order from Paper — Purchase Receipts and Bills from paper, item ranking, last bought; mockup v4)
+
+### New Features
+- **Receipt and Bill from paper** (PO / Receipt / Bill chosen before reading): the supplier's bill or challan becomes a **Purchase Receipt** (linked to the supplier's open, approved POs) or a **Purchase Invoice** (linked to unbilled Receipts, to POs as a bill that adds stock, or to nothing). Only the people listed in Order Paper Settings ("Who may make them" — owner's choice: Dolly + Vishnu) get them; POs stay open to every Purchase User / Manager
+- **Link step** before the check screen: the supplier's open documents with a match % ("3 of 5 paper lines are on this PO"), the best one ticked from 60 %, POs waiting for the owners shown greyed. The paper's lines are matched against the linked document's items first; each line shows the PO / Receipt line it lands on, "Probably … line N", or "Not on the linked PO"
+- **Money check that blocks** (owner: "block until it's fixed"): Σ net rate × qty must equal the paper's item total (or grand total less GST and charges) within ₹1, or neither *Save draft* nor *Submit now* works — on the phone and on the server. A line whose qty × rate ≠ its printed amount is "Doesn't add up" with a one-tap fix ("Make it 9") or an edit; more than ordered is amber (Keep / Make it N), never blocked. A Bill must carry every line. The save screen shows ERPNext's own GST (India Compliance in- / out-state template), the paper's freight / packing charges (Add → an Actual tax row on the account set in Settings) and the grand total against the paper's
+- **Bill from the same reading**: after a Receipt, "Make the bill now" makes the Bill paper from the same reading (no second AI read) linked to that Receipt; a Bill made straight from a paper is read by the AI
+- Draft only (Submit refused): a repeat bill no. for the supplier, or a date in a filed GSTR-3B period (monthly or its QRMP quarter — Rule 8 / 14)
+- **Item ranking** on the choose sheet: rank, match %, and reasons from what the shop did with each item (stock, sold in 12 months, last sold / bought, bought from this supplier); a dead twin drops below the live item; "Xxx…" catch-all items are never suggested (still findable, flagged); a paper addressed TO the shop has its sender / addressee swapped; suppliers who supplied most of the matched items are suggested when the paper's name is unknown
+- **Last bought**: the last 3 submitted bills of each item (rate per stock unit after discount, discount off list, supplier, date, bill no.) with chips against this paper ("Same rate as last time", "+₹12 a copy · ₹600", "30% off, was 32%", "MRP 650 → 692"), and the supplier's usual discount; shown only — the rate always comes from the paper. The PO save screen's "dearer than last time" warning now uses it
+
+### Changed
+- New DocType Order Paper Receiver (child of Order Paper Settings); Order Paper gets the Receipt / Bill purposes and `source_paper` / `bill_paper`; Settings gets *Receipts and Bills are on*, the list of people and the freight account
+- Changing the supplier on a Receipt / Bill paper re-matches in the background (reason "rematch": the stored reading, no AI call)
+
 ## [1.12.0] - 2026-10-20 (Order from Paper — the lines appear while the AI reads; live on splashbox.in 05:58 IST `a6cd7d3`, line-by-line streaming `5d1986f` 06:03 IST)
 
 ### New Features

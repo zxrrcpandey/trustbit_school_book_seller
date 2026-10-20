@@ -15,7 +15,7 @@
       <section v-if="line && line.candidates && line.candidates.length">
         <h2 class="mb-2 text-[15px] font-bold">Best matches</h2>
         <button
-          v-for="c in line.candidates.slice(0, 5)"
+          v-for="(c, i) in line.candidates.slice(0, 5)"
           :key="c.item_code"
           type="button"
           class="mb-2 flex w-full items-start gap-3 rounded-xl bg-surface p-3 text-left"
@@ -25,14 +25,25 @@
         >
           <span class="mt-1 h-[18px] w-[18px] flex-none rounded-full" :class="picked === c.item_code ? 'border-[6px] border-brand-deep' : 'border-2 border-ink-faint'" />
           <span class="min-w-0 flex-1">
-            <span class="block font-semibold">{{ c.item_name }}</span>
-            <span class="block text-[13px] text-ink-faint">
-              {{ c.item_code }}<template v-if="c.cls"> · Class {{ c.cls }}</template><template v-if="c.mrp"> · MRP ₹{{ money(c.mrp) }}</template>
+            <span class="flex items-start justify-between gap-2">
+              <span class="min-w-0">
+                <span class="block text-[12px] font-bold uppercase tracking-wide text-ink-faint">#{{ i + 1 }}<template v-if="i === 0"> Best match</template></span>
+                <span class="block font-semibold">{{ c.item_name }}</span>
+              </span>
+              <span v-if="c.pct != null" class="tnum flex-none rounded-full px-2 text-[13px] font-bold" :class="band(c.pct)">{{ c.pct }}%</span>
             </span>
-            <span v-if="c.class_mismatch" class="mt-1 inline-block rounded-full bg-warn-bg px-2 text-[13px] font-semibold text-warn-text">Class {{ c.cls }}, paper says {{ line.line_class }}</span>
-            <span v-else-if="c.mrp_match" class="mt-1 inline-block rounded-full bg-ok-bg px-2 text-[13px] font-semibold text-ok-text">Same MRP as the paper</span>
+            <span class="block text-[13px] text-ink-faint">
+              {{ c.item_code }}<template v-if="c.cls"> · Class {{ c.cls }}</template><template v-if="c.mrp"> · MRP ₹{{ money0(c.mrp) }}</template>
+            </span>
+            <span class="mt-1 flex flex-wrap gap-1">
+              <span v-for="(r, j) in reasons(c, i)" :key="j" class="rounded-full px-2 text-[12px] font-semibold" :class="r.ok === true ? 'bg-ok-bg text-ok-text' : r.ok === false ? 'bg-warn-bg text-warn-text' : 'bg-surface-line text-ink-muted'">{{ r.ok === true ? "✓ " : r.ok === false ? "✗ " : "" }}{{ r.text }}</span>
+            </span>
+            <span v-if="facts[c.item_code] && facts[c.item_code][0]" class="tnum mt-1 block text-[12px] text-ink-faint">
+              Last bought ₹{{ money(facts[c.item_code][0].rate) }}<template v-if="facts[c.item_code][0].discount != null"> · {{ facts[c.item_code][0].discount }}% off ₹{{ money0(facts[c.item_code][0].list) }}</template> · {{ facts[c.item_code][0].supplier_name }}
+            </span>
           </span>
         </button>
+        <p class="text-[12px] text-ink-faint">"Xxx" catch-all items are never suggested.</p>
       </section>
 
       <section>
@@ -62,7 +73,8 @@
           <span class="mt-1 h-[18px] w-[18px] flex-none rounded-full" :class="picked === r.item_code ? 'border-[6px] border-brand-deep' : 'border-2 border-ink-faint'" />
           <span class="min-w-0 flex-1">
             <span class="block font-semibold">{{ r.item_name }}</span>
-            <span class="block text-[13px] text-ink-faint">{{ r.item_code }}<template v-if="r.cls"> · Class {{ r.cls }}</template><template v-if="r.mrp"> · MRP ₹{{ money(r.mrp) }}</template></span>
+            <span class="block text-[13px] text-ink-faint">{{ r.item_code }}<template v-if="r.cls"> · Class {{ r.cls }}</template><template v-if="r.mrp"> · MRP ₹{{ money0(r.mrp) }}</template></span>
+            <span v-if="r.catch_all" class="mt-1 inline-block rounded-full bg-warn-bg px-2 text-[12px] font-semibold text-warn-text">"Xxx" catch-all item — use only if nothing else fits</span>
           </span>
         </button>
       </section>
@@ -84,14 +96,44 @@
 import { computed, onMounted, ref, watch } from "vue"
 
 import AppHeader from "@/components/AppHeader.vue"
-import { fmt } from "@/data/format.js"
-import { money, searchPaperItems } from "@/data/paper.js"
+import { fmt, fmtDate } from "@/data/format.js"
+import { band, getItemFacts, money, money0, searchPaperItems } from "@/data/paper.js"
 
 const props = defineProps({
   line: { type: Object, default: null },
   partyTitle: { type: String, default: "" },
   allowLeave: { type: Boolean, default: true },
   current: { type: String, default: "" },
+  paperName: { type: String, default: "" },
+})
+const facts = ref({})
+
+// plain reasons for the rank: class / MRP against the paper, what the shop did with the item
+function reasons(c, i) {
+  const l = props.line || {}
+  const f = c.facts || {}
+  const out = []
+  if (c.class_mismatch) out.push({ ok: false, text: `Class ${c.cls}, paper says ${l.line_class}` })
+  else if (l.line_class && c.cls === l.line_class && c.mrp_match) out.push({ ok: true, text: "Same class and MRP as the paper" })
+  else if (l.line_class && c.cls === l.line_class) out.push({ ok: true, text: "Same class as the paper" })
+  else if (c.mrp_match) out.push({ ok: true, text: "Same MRP as the paper" })
+  if (!c.mrp_match && l.mrp && c.mrp && !c.class_mismatch) out.push({ ok: false, text: `MRP ₹${money0(c.mrp)}, paper says ₹${money0(l.mrp)}` })
+  if (f.from_party) out.push({ ok: true, text: `Bought from ${props.partyTitle || "this supplier"}${f.party_date ? ", " + fmtDate(f.party_date) : ""}` })
+  if (f.sold_12m) out.push({ ok: true, text: `Sold ${fmt(f.sold_12m)} in the last 12 months` })
+  if (f.stock) out.push({ text: `Stock ${fmt(f.stock)}` })
+  if (f.dead) out.push({ ok: false, text: "Never bought or sold — probably an old copy" })
+  const first = (l.candidates || [])[0]
+  if (i > 0 && first && first.item_name === c.item_name) out.push({ text: "Same name as #1" })
+  return out
+}
+onMounted(async () => {
+  const codes = ((props.line && props.line.candidates) || []).slice(0, 5).map((c) => c.item_code)
+  if (!codes.length || !props.paperName) return
+  try {
+    facts.value = (await getItemFacts(props.paperName, codes)).last_bought || {}
+  } catch {
+    facts.value = {}
+  }
 })
 defineEmits(["pick", "leave", "close"])
 

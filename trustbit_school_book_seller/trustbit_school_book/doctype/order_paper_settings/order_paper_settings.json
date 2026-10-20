@@ -9,6 +9,11 @@
   "so_enabled",
   "column_break_switches",
   "provider",
+  "section_receipts",
+  "pr_pi_enabled",
+  "receivers",
+  "column_break_receipts",
+  "freight_account",
   "section_models",
   "ai_model",
   "rerank",
@@ -51,6 +56,35 @@
    "label": "AI Provider",
    "options": "Anthropic",
    "reqd": 1
+  },
+  {
+   "fieldname": "section_receipts",
+   "fieldtype": "Section Break",
+   "label": "Receipts and Bills"
+  },
+  {
+   "default": "1",
+   "description": "Only the people listed here see Receipt and Bill in the staff app. Purchase Orders from paper stay open to every Purchase User.",
+   "fieldname": "pr_pi_enabled",
+   "fieldtype": "Check",
+   "label": "Receipts and Bills from Paper Are On"
+  },
+  {
+   "fieldname": "receivers",
+   "fieldtype": "Table",
+   "label": "Who May Make Receipts and Bills",
+   "options": "Order Paper Receiver"
+  },
+  {
+   "fieldname": "column_break_receipts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Freight, packing or forwarding printed on a bill is added to the bill as a charge (Actual) on this account.",
+   "fieldname": "freight_account",
+   "fieldtype": "Link",
+   "label": "Freight and Packing Go To",
+   "options": "Account"
   },
   {
    "fieldname": "section_models",
@@ -142,7 +176,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-10-20 00:00:00.000000",
+ "modified": "2026-10-20 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trustbit School Book",
  "name": "Order Paper Settings",

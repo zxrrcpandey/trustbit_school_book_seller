@@ -32,6 +32,20 @@ class OrderPaperSettings(Document):
 			frappe.throw(_("Model {0} has no row in the price table. Add its price first.").format(self.ai_model))
 		if cint(self.auto_fallback) and self.fallback_model and self.fallback_model not in seen:
 			frappe.throw(_("Better model {0} has no row in the price table.").format(self.fallback_model))
+		# who may make Receipts and Bills from a paper: each person once, enabled users only
+		seen_users, rows = set(), []
+		for row in self.get("receivers") or []:
+			if not row.user or row.user in seen_users:
+				continue
+			if not cint(frappe.db.get_value("User", row.user, "enabled")):
+				frappe.throw(_("User {0} is disabled.").format(row.user))
+			seen_users.add(row.user)
+			rows.append(row)
+		self.set("receivers", rows)
+		if self.freight_account:
+			acc = frappe.db.get_value("Account", self.freight_account, ["is_group", "disabled"], as_dict=True)
+			if not acc or cint(acc.is_group) or cint(acc.disabled):
+				frappe.throw(_("{0} is not an account bills can be charged to.").format(self.freight_account))
 		for f in ("month_page_limit", "peak_month_page_limit"):
 			if cint(self.get(f)) < 0:
 				self.set(f, 0)

@@ -17,6 +17,11 @@
 # web worker (DANGER 21: no catalogue loads on the 3 POS web workers). Party-
 # dependent layers (1, 2, 4, 5) are plain indexed lookups, so changing the
 # supplier on the check screen re-matches without the index.
+#
+# "Xxx…" items and the DEACTIVATE group are an old catch-all (1,747 enabled
+# "Xxx" items on 2026-10-20, CLAUDE.md Rule 16): never suggested by the smart
+# search, flagged in a person's search. Candidates are then re-ordered by what
+# the shop did with each item (rank_candidates) — stock, sales, earlier purchases.
 
 import math
 import re
@@ -24,7 +29,7 @@ from bisect import bisect_left
 from collections import defaultdict
 
 import frappe
-from frappe.utils import cint, flt, getdate, nowdate
+from frappe.utils import add_days, cint, flt, getdate, nowdate
 
 PRESELECT = 0.55  # fuzzy score from which the best item is preselected (amber)
 SUGGEST = 0.30  # below this a candidate is not even shown
@@ -343,10 +348,7 @@ class ItemIndex:
 			i += 1
 		return out
 
-	def search(self, text, line_class=None, mrp=None, limit=CANDIDATES_KEPT):
-		line = [t for t in dict.fromkeys(tokens(text)) if _scorable(t)]
-		if not line:
-			return []
+	def _weights(self, line):
 		weights, acc = {}, defaultdict(float)
 		for t in line:
 			if t in self.idf:
@@ -364,6 +366,41 @@ class ItemIndex:
 						if i not in seen:
 							seen.add(i)
 							acc[i] += 0.8 * weights[t]
+		return weights, acc
+
+	def _score(self, i, line, weights, line_class, mrp):
+		it, its = self.items[i], self.toks[i]
+		total_w = sum(weights.values()) or 1.0
+		matched = 0.0
+		for t in line:
+			if t in its:
+				matched += weights[t]
+			elif len(t) >= 3 and any(len(u) >= 3 and (u.startswith(t) or t.startswith(u)) for u in its):
+				matched += 0.8 * weights[t]
+		item_w = sum(self.idf.get(u, 0) for u in its) or 1.0
+		item_hit = sum(self.idf.get(u, 0) for u in its if u in line or any(
+			len(u) >= 3 and len(t) >= 3 and (u.startswith(t) or t.startswith(u)) for t in line))
+		score = 0.7 * (matched / total_w) + 0.3 * (item_hit / item_w)
+		mismatch = bool(line_class and it["cls"] and line_class != it["cls"])
+		if line_class and it["cls"] == line_class:
+			score += 0.10
+		mrp_match = bool(mrp and (same_money(mrp, it["mrp"]) or same_money(mrp, it["name_mrp"])))
+		if mrp_match:
+			score += 0.12
+		elif mrp and (it["mrp"] or it["name_mrp"]):
+			score -= 0.05
+		return {
+			"item_code": it["item_code"], "item_name": it["item_name"], "cls": it["cls"],
+			"mrp": it["mrp"] or it["name_mrp"], "score": round(min(score, 1.2), 3),
+			"class_mismatch": 1 if mismatch else 0, "mrp_match": 1 if mrp_match else 0,
+			"_o": score * (0.6 if mismatch else 1.0),
+		}
+
+	def search(self, text, line_class=None, mrp=None, limit=CANDIDATES_KEPT):
+		line = [t for t in dict.fromkeys(tokens(text)) if _scorable(t)]
+		if not line:
+			return []
+		weights, acc = self._weights(line)
 		if not acc:  # only very common words ("ENGLISH BOOK") — use them after all
 			for t in line:
 				for i in self.postings.get(t, ())[:5000]:
@@ -371,38 +408,29 @@ class ItemIndex:
 		if not acc:
 			return []
 		pool = sorted(acc, key=acc.get, reverse=True)[:60]
-		total_w = sum(weights.values()) or 1.0
-		out = []
-		for i in pool:
-			it, its = self.items[i], self.toks[i]
-			matched = 0.0
-			for t in line:
-				if t in its:
-					matched += weights[t]
-				elif len(t) >= 3 and any(len(u) >= 3 and (u.startswith(t) or t.startswith(u)) for u in its):
-					matched += 0.8 * weights[t]
-			item_w = sum(self.idf.get(u, 0) for u in its) or 1.0
-			item_hit = sum(self.idf.get(u, 0) for u in its if u in line or any(
-				len(u) >= 3 and len(t) >= 3 and (u.startswith(t) or t.startswith(u)) for t in line))
-			score = 0.7 * (matched / total_w) + 0.3 * (item_hit / item_w)
-			mismatch = bool(line_class and it["cls"] and line_class != it["cls"])
-			if line_class and it["cls"] == line_class:
-				score += 0.10
-			mrp_match = bool(mrp and (same_money(mrp, it["mrp"]) or same_money(mrp, it["name_mrp"])))
-			if mrp_match:
-				score += 0.12
-			elif mrp and (it["mrp"] or it["name_mrp"]):
-				score -= 0.05
-			order = score * (0.6 if mismatch else 1.0)
-			out.append({
-				"item_code": it["item_code"], "item_name": it["item_name"], "cls": it["cls"],
-				"mrp": it["mrp"] or it["name_mrp"], "score": round(min(score, 1.2), 3),
-				"class_mismatch": 1 if mismatch else 0, "mrp_match": 1 if mrp_match else 0, "_o": order,
-			})
+		out = [self._score(i, line, weights, line_class, mrp) for i in pool]
 		out.sort(key=lambda c: c["_o"], reverse=True)
 		for c in out:
 			c.pop("_o")
 		return [c for c in out if c["score"] >= SUGGEST][:limit]
+
+	def score_items(self, text, item_codes, line_class=None, mrp=None):
+		"""{item_code: score} for the given items only (the rows of a linked PO /
+		Receipt), with the same weights as search(). Items not in the index
+		(disabled, catch-all) are left out."""
+		line = [t for t in dict.fromkeys(tokens(text)) if _scorable(t)]
+		if not line or not item_codes:
+			return {}
+		if not hasattr(self, "_pos"):
+			self._pos = {it["item_code"]: i for i, it in enumerate(self.items)}
+		weights, _acc = self._weights(line)
+		out = {}
+		for code in item_codes:
+			i = self._pos.get(code)
+			if i is not None:
+				c = self._score(i, line, weights, line_class, mrp)
+				out[code] = {"score": c["score"], "class_mismatch": c["class_mismatch"], "mrp_match": c["mrp_match"]}
+		return out
 
 
 def _scorable(t):
@@ -438,10 +466,16 @@ def selling_prices(item_codes=None):
 	return out
 
 
+def is_catch_all(item_name, item_group):
+	"""An "Xxx…" item or one in an "xxx …" / DEACTIVATE group — never a real book to order."""
+	n, g = str(item_name or "").strip().upper(), str(item_group or "").strip().upper()
+	return n.startswith("XXX") or g.startswith("XXX") or g == "DEACTIVATE"
+
+
 def load_index():
 	has_class = frappe.db.has_column("Item", "custom_class")
 	rows = frappe.db.sql(
-		f"""select name, item_name, {"custom_class" if has_class else "null"} as cls
+		f"""select name, item_name, item_group, {"custom_class" if has_class else "null"} as cls
 		from `tabItem` where disabled = 0 and has_variants = 0""",
 		as_dict=True,
 	)
@@ -450,8 +484,215 @@ def load_index():
 		{"item_code": r.name, "item_name": r.item_name or r.name, "cls": item_class(r.cls, r.item_name),
 			"mrp": prices.get(r.name, 0.0), "name_mrp": price_in_name(r.item_name)}
 		for r in rows
+		if not is_catch_all(r.item_name, r.item_group)
 	]
 	return ItemIndex(items)
+
+
+# ── what the shop did with an item (tells twins apart; paper_rank.py) ────────
+
+ACTIVE_DAYS = 365
+SUPPLIERS_KEPT = 6
+
+
+def item_activity(item_codes):
+	"""{item_code: {"stock", "sold_12m", "last_sold", "last_bought", "suppliers": {supplier: last date}}}.
+	Indexed by item_code (Bin, Sales / Purchase Invoice, Purchase Receipt, Purchase
+	Order items): 300 of the busiest items took 1.4 s on production (2026-10-20)."""
+	codes = tuple(dict.fromkeys(str(c) for c in item_codes if c))
+	if not codes:
+		return {}
+	since = add_days(nowdate(), -ACTIVE_DAYS)
+	out = {c: {"stock": 0.0, "sold_12m": 0.0, "last_sold": None, "last_bought": None, "suppliers": {}} for c in codes}
+	for r in frappe.db.sql(
+		"select item_code, sum(actual_qty) as q from `tabBin` where item_code in %s group by item_code", (codes,), as_dict=True
+	):
+		out[r.item_code]["stock"] = flt(r.q)
+	for r in frappe.db.sql(
+		"""select sii.item_code, max(case when si.is_return = 0 then si.posting_date end) as last,
+			sum(case when si.posting_date >= %(since)s then sii.stock_qty else 0 end) as q
+		from `tabSales Invoice Item` sii join `tabSales Invoice` si on si.name = sii.parent
+		where sii.item_code in %(codes)s and si.docstatus = 1
+		group by sii.item_code""",
+		{"codes": codes, "since": since},
+		as_dict=True,
+	):
+		a = out[r.item_code]
+		a["last_sold"], a["sold_12m"] = str(r.last) if r.last else None, max(0.0, flt(r.q))
+	rows = frappe.db.sql(
+		"""select x.item_code, x.supplier, max(x.d) as last from (
+			select pii.item_code, pi.supplier, pi.posting_date as d from `tabPurchase Invoice Item` pii
+				join `tabPurchase Invoice` pi on pi.name = pii.parent
+				where pii.item_code in %(codes)s and pi.docstatus = 1 and pi.is_return = 0
+			union all
+			select pri.item_code, pr.supplier, pr.posting_date from `tabPurchase Receipt Item` pri
+				join `tabPurchase Receipt` pr on pr.name = pri.parent
+				where pri.item_code in %(codes)s and pr.docstatus = 1 and pr.is_return = 0
+			union all
+			select poi.item_code, po.supplier, po.transaction_date from `tabPurchase Order Item` poi
+				join `tabPurchase Order` po on po.name = poi.parent
+				where poi.item_code in %(codes)s and po.docstatus = 1
+		) x group by x.item_code, x.supplier order by x.item_code, last desc""",
+		{"codes": codes},
+		as_dict=True,
+	)
+	for r in rows:
+		a = out[r.item_code]
+		last = str(r.last) if r.last else None
+		if last and (not a["last_bought"] or last > a["last_bought"]):
+			a["last_bought"] = last
+		if r.supplier and len(a["suppliers"]) < SUPPLIERS_KEPT:
+			a["suppliers"][r.supplier] = last
+	return out
+
+
+# ── ranking: match % and what the shop did with each candidate ─────────────
+
+DEAD_PENALTY = 0.08  # never bought, never sold, no stock: usually an old duplicate code
+FROM_PARTY_BONUS = 0.06  # bought from this supplier before
+ACTIVE_BONUS = 0.03  # in stock or sold in the last 12 months
+
+
+def pct(score, exact=False):
+	"""Match % shown to a person. Exact layers are 100. A fuzzy match is never
+	"sure": the preselect threshold maps to 60 (amber) and the best possible
+	fuzzy score to 89, so the colour of the % agrees with the line's state."""
+	if exact:
+		return 100
+	s = flt(score)
+	if s >= PRESELECT:
+		return int(min(89, round(60 + (s - PRESELECT) * 29 / 0.55)))
+	return int(max(1, round(s / PRESELECT * 59)))
+
+
+def rank_candidates(cands, activity, party=None):
+	"""Re-order a line's candidates by what the shop did with each item; give
+	each its match % and the facts the choose sheet turns into reasons. A dead
+	twin drops below the live item with the same name."""
+	for c in cands:
+		a = activity.get(c["item_code"]) or {}
+		from_party = bool(party and party in (a.get("suppliers") or {}))
+		active = flt(a.get("sold_12m")) > 0 or flt(a.get("stock")) > 0
+		dead = not active and not a.get("last_bought") and not a.get("last_sold")
+		adj = (-DEAD_PENALTY if dead else 0.0) + (FROM_PARTY_BONUS if from_party else ACTIVE_BONUS if active else 0.0)
+		c["rank_score"] = round(flt(c["score"]) + adj, 3)
+		c["pct"] = pct(c["rank_score"])
+		c["facts"] = {
+			"stock": flt(a.get("stock")), "sold_12m": flt(a.get("sold_12m")), "last_sold": a.get("last_sold"),
+			"last_bought": a.get("last_bought"), "party_date": (a.get("suppliers") or {}).get(party) if party else None,
+			"dead": 1 if dead else 0, "from_party": 1 if from_party else 0,
+		}
+	cands.sort(key=lambda c: c["rank_score"] * (0.6 if c.get("class_mismatch") else 1.0), reverse=True)
+	return cands
+
+
+def party_suggestions(activity, item_codes, limit=3):
+	"""Suppliers who supplied most of the matched items — offered when the paper
+	names no supplier we know. [(supplier, items supplied)]."""
+	count = defaultdict(int)
+	for code in set(item_codes):
+		for s in (activity.get(code) or {}).get("suppliers") or {}:
+			count[s] += 1
+	return sorted(count.items(), key=lambda kv: -kv[1])[:limit]
+
+
+# ── what we paid before (submitted bills only) ───────────────────────────────
+
+USUAL_DAYS = 365
+
+
+def last_bought(item_codes, n=3):
+	"""{item_code: [last n bill lines, newest first]} from SUBMITTED Purchase
+	Invoices only (never receipts: 892 of 5,310 linked receipt lines differ from
+	their bill; never Item.last_purchase_rate: moved by POs/receipts, keeps no
+	discount). Per stock unit; net_rate already carries a discount on the whole
+	bill; free copies (net 0) and returns are left out."""
+	codes = tuple(dict.fromkeys(str(c) for c in item_codes if c))
+	if not codes:
+		return {}
+	rows = frappe.db.sql(
+		"""select * from (
+			select pii.item_code, pi.name as doc, pi.supplier, pi.supplier_name, pi.posting_date, pi.bill_no,
+				pii.stock_qty, pii.conversion_factor, pii.net_rate, pii.price_list_rate,
+				row_number() over (partition by pii.item_code order by pi.posting_date desc, pi.creation desc, pii.idx) as rn
+			from `tabPurchase Invoice Item` pii join `tabPurchase Invoice` pi on pi.name = pii.parent
+			where pii.item_code in %(codes)s and pi.docstatus = 1 and pi.is_return = 0 and pii.net_rate > 0
+		) x where x.rn <= %(n)s order by x.item_code, x.rn""",
+		{"codes": codes, "n": cint(n) or 3},
+		as_dict=True,
+	)
+	out = defaultdict(list)
+	for r in rows:
+		cf = flt(r.conversion_factor) or 1.0
+		rate, lst = flt(r.net_rate) / cf, flt(r.price_list_rate) / cf
+		out[r.item_code].append({
+			"doc": r.doc, "supplier": r.supplier, "supplier_name": r.supplier_name or r.supplier,
+			"date": str(r.posting_date), "bill_no": r.bill_no or "", "qty": flt(r.stock_qty),
+			"rate": round(rate, 2), "list": round(lst, 2) if lst > 0 else None,
+			"discount": round((1 - rate / lst) * 100, 1) if lst > 0 and rate <= lst else None,
+		})
+	return dict(out)
+
+
+def supplier_usual_discount(supplier):
+	"""The discount this supplier gave most often in 12 months (shown for an item
+	never bought before): {"pct", "lines", "of"} or None when too few lines."""
+	if not supplier:
+		return None
+	rows = frappe.db.sql(
+		"""select round((1 - pii.net_rate / pii.price_list_rate) * 100) as d, count(*) as n
+		from `tabPurchase Invoice Item` pii join `tabPurchase Invoice` pi on pi.name = pii.parent
+		where pi.supplier = %s and pi.docstatus = 1 and pi.is_return = 0 and pi.posting_date >= %s
+			and pii.price_list_rate > 0 and pii.net_rate > 0 and pii.net_rate <= pii.price_list_rate
+		group by d order by n desc""",
+		(supplier, add_days(nowdate(), -USUAL_DAYS)),
+		as_dict=True,
+	)
+	total = sum(cint(r.n) for r in rows)
+	if total < 5:
+		return None
+	return {"pct": cint(rows[0].d), "lines": cint(rows[0].n), "of": total}
+
+
+# ── who WE are (a paper must never make us the supplier / customer) ─────────
+
+
+def our_identity():
+	"""{"gstins": {...}, "names": [normalised company names + abbreviations ≥ 3 letters],
+	"display": [company names as written]}."""
+	if getattr(frappe.local, "_kgs_paper_ours", None) is not None:
+		return frappe.local._kgs_paper_ours
+	gstins, names, display = set(), [], []
+	gst_col = frappe.db.has_column("Company", "gstin")
+	for c in frappe.get_all("Company", fields=["company_name", "abbr", "tax_id"] + (["gstin"] if gst_col else [])):
+		for g in (c.get("gstin"), c.tax_id):
+			if g:
+				gstins.add(str(g).strip().upper())
+		if c.company_name:
+			display.append(c.company_name)
+		for n in (c.company_name, c.abbr):
+			k = norm_name(n)
+			if len(k.replace(" ", "")) >= 3 and k not in names:
+				names.append(k)
+	if frappe.db.has_column("Address", "gstin") and frappe.db.has_column("Address", "is_your_company_address"):
+		for g in frappe.db.sql_list("select gstin from `tabAddress` where is_your_company_address = 1 and ifnull(gstin, '') != ''"):
+			gstins.add(str(g).strip().upper())
+	frappe.local._kgs_paper_ours = {"gstins": gstins, "names": names, "display": display}
+	return frappe.local._kgs_paper_ours
+
+
+def norm_name(s):
+	return re.sub(r"[^A-Z0-9]+", " ", str(s or "").upper()).strip()
+
+
+def is_us(name=None, gstin=None, ours=None):
+	ours = ours or our_identity()
+	if gstin and str(gstin).strip().upper() in ours["gstins"]:
+		return True
+	k = norm_name(name)
+	if not k:
+		return False
+	return any(k == n or (len(n) >= 8 and f" {n} " in f" {k} ") for n in ours["names"])
 
 
 # ── exact layers (indexed lookups; safe in a web request) ────────────────────

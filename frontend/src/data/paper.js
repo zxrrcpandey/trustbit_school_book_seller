@@ -32,14 +32,62 @@ export const listAliases = (partyType, party, txt, start = 0) => call("list_alia
 export const changeAlias = (name, itemCode) => call("change_alias", { name, item_code: itemCode })
 export const deleteAlias = (name) => call("delete_alias", { name })
 
+// Receipts and Bills
+export const setLinks = (name, mode, docs, version) => call("set_links", { name, mode, docs: docs || [], version })
+export const previewPurchase = (args) => call("preview_purchase", args, { timeoutMs: 60000 })
+export const makeBill = (name) => call("make_bill", { name }, { timeoutMs: 60000 })
+export const getItemFacts = (name, itemCodes) => call("get_item_facts", { name, item_codes: itemCodes })
+export const searchReceivers = (txt) => call("search_receivers", { txt })
+
 export const getPaperSettings = () => call("get_paper_settings", {})
 export const savePaperSettings = (values) => call("save_paper_settings", { values })
 
 export const PURPOSE = {
-  po: { doctype: "Purchase Order", party: "Supplier", partyLower: "supplier", short: "PO" },
-  so: { doctype: "Sales Order", party: "Customer", partyLower: "customer", short: "SO" },
+  po: { doctype: "Purchase Order", party: "Supplier", partyLower: "supplier", short: "PO", title: "Purchase Order", slug: "purchase-order" },
+  so: { doctype: "Sales Order", party: "Customer", partyLower: "customer", short: "SO", title: "Sales Order", slug: "sales-order" },
+  pr: { doctype: "Purchase Receipt", party: "Supplier", partyLower: "supplier", short: "PR", title: "Receipt", slug: "purchase-receipt" },
+  pi: { doctype: "Purchase Invoice", party: "Supplier", partyLower: "supplier", short: "PI", title: "Bill", slug: "purchase-invoice" },
 }
-export const purposeKey = (doctype) => (doctype === "Sales Order" ? "so" : "po")
+export const purposeKey = (doctype) => Object.keys(PURPOSE).find((k) => PURPOSE[k].doctype === doctype) || "po"
+
+// match % colours: 90+ sure, 60–89 to check, below 60 not found
+export const band = (pct) => (pct >= 90 ? "bg-ok-bg text-ok-text" : pct >= 60 ? "bg-warn-bg text-warn-text" : "bg-danger-bg text-danger-text")
+
+// "Last bought" against this line, per stock unit. Only informs: never blocks.
+// When the discount is the same and the MRP moved, a dearer rate is the new MRP, not a worse deal.
+export function lastCompare(l, last, buy) {
+  if (!last || !last.length) return null
+  const prev = last[0]
+  const cf = Number(l.conversion_factor || 1) || 1
+  const rate = Number(buy ? l.buy_rate : l.paper_rate) || 0
+  const out = { prev, chips: [], dearer: false, extra: 0 }
+  if (!rate) return out
+  const mine = rate / cf
+  const diff = mine - prev.rate
+  const disc = l.discount_percent != null && l.discount_percent !== "" ? Number(l.discount_percent) : null
+  const list = l.mrp ? Number(l.mrp) / cf : null
+  const sameDisc = disc != null && prev.discount != null && Math.abs(disc - prev.discount) < 0.5
+  const mrpMoved = list && prev.list && Math.abs(list - prev.list) > Math.max(0.5, prev.list * 0.005)
+  if (Math.abs(diff) <= Math.max(0.01, prev.rate * 0.005)) {
+    out.chips.push({ ok: true, text: "Same rate as last time" })
+    return out
+  }
+  if (sameDisc) out.chips.push({ ok: true, text: `Same ${fmtPct(disc)}% off` })
+  else if (disc != null && prev.discount != null) out.chips.push({ ok: disc > prev.discount, text: `${fmtPct(disc)}% off, was ${fmtPct(prev.discount)}%` })
+  if (mrpMoved) out.chips.push({ info: true, text: `MRP ₹${money0(prev.list)} → ₹${money0(list)}` })
+  const qty = Number(l.qty || 0) * cf
+  if (diff > 0 && !(sameDisc && mrpMoved)) {
+    out.dearer = true
+    out.extra = diff * qty
+    out.chips.push({ ok: false, text: `+₹${money0(diff)} a copy${qty ? ` · ₹${money0(diff * qty)}` : ""}` })
+  } else if (diff < 0) out.chips.push({ ok: true, text: `₹${money0(-diff)} a copy cheaper` })
+  return out
+}
+const fmtPct = (n) => (Math.round(Number(n) * 10) / 10).toString()
+export function money0(n) {
+  const v = Number(n || 0)
+  return v % 1 ? money(v) : v.toLocaleString("en-IN")
+}
 
 export function money(n) {
   return Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })

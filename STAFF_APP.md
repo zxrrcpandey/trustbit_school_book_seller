@@ -187,6 +187,7 @@ when empty. Purchase Managers (suppliers) and Sales Managers (customers) change/
 | Role | Gets |
 |---|---|
 | Purchase User / Manager | "Purchase Order from paper" while the feature is on; Papers list |
+| … and listed under *Who may make them* | "Receipt or Bill from paper" while *Receipts and Bills are on* |
 | Sales User / Manager | "Sales Order from paper" only while *Sales Orders from paper* is also on |
 | Purchase / Sales Manager, System Manager | change or delete remembered names (suppliers / customers) |
 | System Manager, Shop Owner | Settings: on/off, model, fallback, double-check, page caps, ₹/$ + GST, model price table |
@@ -218,6 +219,53 @@ REQUESTED model id — the API may answer with a dated id), shown in Settings as
    end with the owner (Order Paper → PO pending approval → owners' e-mail with the PDF).
 Rollback: `git reset --hard <anchor>` + HUP + cache drops; remove the key (`update_site_config(..., "None")` — the
 STRING "None"; Python None writes `null`). The four DocTypes are inert and can stay.
+
+### Receipts and Bills from paper (1.13.0, built 2026-10-20 — mockup v4 https://claude.ai/artifact/SFuLzMwDr3QV6LXPSGZAGb)
+Owner decisions (20-10): (1) totals that don't match **block both Save draft and Submit** until fixed; (2) only the
+people on the Settings list make Receipts / Bills (Dolly + Vishnu); (3) a Bill after a Receipt comes from the same
+reading, a Bill made directly is read by the AI; match % shown everywhere; last purchase rate + discount shown.
+Code: `staff_app/paper_purchase.py` (open documents, linking, money check, build PR/PI) called from `paper.py`.
+- **Who:** `can_make` = Purchase role + Order Paper Settings `pr_pi_enabled` + the user in `receivers` (child DocType
+  Order Paper Receiver). Boot `paper.pr` / `paper.pi`; the home tile "Receipt or Bill from paper".
+- **Link step** (`set_links(name, mode, docs, version)`, modes `docs` / `none` / `change`): Receipt → the supplier's
+  submitted POs with something to receive (+ Pending Approval POs greyed — ERPNext receives only a submitted PO); Bill →
+  Receipts with `per_billed < 100` (due = qty − already billed incl. draft bills) first, then POs (a bill that adds
+  stock). One doctype per paper. Doc % = paper lines found on it ÷ paper lines (scored in the read job against the doc's
+  items: `score_docs`, never the index in a web request — DANGER 21); ticked from 60 %. A supplier change re-runs the
+  job with reason `rematch` (stored `ai_json`, no AI).
+- **Line ↔ row:** sure (exact, or a clear lead ≥ 0.60 by 0.12) → green "On the PO" 90–100 %; weaker → amber
+  "Probably X line N"; no row → "Not on the linked PO" (allowed, goes in without a row). Unit and conversion come from the
+  row (uom locked). More than due → amber card *Keep N* / *Make it due* (never blocked; over-receipt allowance is 1000 %).
+- **Rates:** the paper's NET rate (`paper_read.paper_rate`) ÷ the unit ratio, else the row's rate; a person can type a
+  rate (never ₹0 — Rule 16). `line_check`: qty × (rate / rate less discount / MRP less discount) must be within
+  max(₹1, 0.6 % × qty, 0.1 % of the amount) of the printed amount, else "Doesn't add up" with *Make it N* when the
+  amount ÷ rate is a whole number, or an edit of the numbers as read.
+- **Money check** (`pp.totals`, on every change and again in `save_order`): Σ net rate × qty (+ Receipt: amounts of
+  left-out lines and quantities not received) must equal the paper's item total, or its grand total less GST and charges,
+  within ₹1. A Bill must carry every line. Nothing printed → each line is checked on its own. The save screen
+  (`preview_purchase`) builds the document in memory: ERPNext / India Compliance GST template + rows, freight / packing
+  charges the person adds (Actual, on Total, account = Settings *freight account*), rounding, grand total vs the paper.
+- **Draft only** (Submit refused, Save draft allowed): the bill no. already on a Receipt / Bill of this supplier
+  (`repeat_bill` — "Check supplier invoice uniqueness" is off on production), or a posting date inside a FILED GSTR-3B
+  period, monthly or its QRMP quarter (`filed_period`, Rule 8 / 14).
+- **Documents:** Receipt — posting today, `supplier_delivery_note` = bill no., rows linked `purchase_order` /
+  `purchase_order_item`, `price_list_rate` + discount kept for history, the paper's printed MRP → `custom_pack_mrp`
+  (Shelf Prices, trustbit_barcode). Bill — `bill_no`, `bill_date` = posting date = the paper's date (`set_posting_time`),
+  rows linked `purchase_receipt` / `pr_detail` + PO, `update_stock = 0` when linked to a Receipt (stock never twice), 1
+  otherwise. Inserted as the user; Submit inside a savepoint — a failed submit leaves the draft and says why. The paper is
+  attached; the remark names the paper and the left-out lines.
+- **Bill from the Receipt** (`make_bill`): a new Order Paper (purpose Bill, `source_paper` → the Receipt paper, which
+  gets `bill_paper`) with the same reading and decisions, linked to that Receipt, files copied; offered on the saved
+  screen once the Receipt is submitted and not fully billed.
+- **Ranking** (`paper_match.rank_candidates`): fuzzy score − 0.08 for a dead item (no stock, no sale in 12 months, never
+  bought / sold) + 0.06 bought from this supplier (else + 0.03 if active); the choose sheet shows rank, %, reasons and
+  last bought (`get_item_facts`). "Xxx…" items and the xxx / DEACTIVATE groups are never suggested (search still finds
+  them, flagged). A paper written by US (our GSTIN / name as the sender) has sender and addressee swapped
+  (`_swap_if_ours`). Unknown supplier → suggestions from who supplied the matched items.
+- **Last bought** (`paper_match.last_bought`): last 3 submitted Purchase Invoice lines per item with `net_rate > 0`,
+  per stock unit (`net_rate ÷ conversion_factor`), discount = 1 − net ÷ list; the supplier's usual discount over 12
+  months (≥ 5 lines). Shown on the line and in a sheet; never copied into the rate.
+- **Kill switch:** untick *Receipts and Bills are on* in `/staff/settings` (POs keep working).
 
 ## Owner decisions (2026-10-02)
 | Question | Answer |
@@ -361,6 +409,16 @@ Option B (2026-10-03): `check_staff_reco.py` 43/43 (all six examples) · `check_
 make fresh items per run (fixed test items drifted as suites moved stock around).
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.
+Receipts and Bills (1.13.0, 2026-10-20): `check_paper_purchase.py` 77/77 on a throwaway site with India Compliance
+(`setup_paper_purchase_site.py paper.local`: KGS-like company + GSTIN, in-state / out-state / unregistered suppliers,
+books nil-rated, stationery 18 %, production's buying / stock / accounts settings) — access, PR from an approved PO
+(over-delivery, misread qty fix, money check blocking both buttons, ₹0 refused, GST 72 on the register only, submit,
+row links, net rates), repeat bill no. → draft only, Bill from the Receipt (blocked while a line is missing; packing
+charge; submitted), direct Bill out-state IGST + freight, filed period → draft only, last bought, rematch, ranking facts ·
+`check_paper_purchase_browser.py` 48/48 (phone viewport, paper.local on :8002 with a real worker: tile, link step with
+match % + Best fit, red bar, Make it 9, Keep 60, Receipt submitted with linked rows, Make the bill now → Bill check
+screen linked to the Receipt with no AI call, owner settings list + freight account). Regressions: `check_paper_api.py`
+152/152, `check_paper_browser.py` 83/83.
 Order from Paper (2026-10-20; counts after 1.12.0 — live lines): `check_paper_api.py` 152/152 (+ the stream scanner
 over random fragment sizes / a cut-off answer, live lines per poll + new run on restart, the fallback starting over,
 streamed SSE from the mock incl. a stream broken half-way, the beta header sent / refused, a broken final JSON) · `check_paper_browser.py` 83/83 (+ cards with the printed

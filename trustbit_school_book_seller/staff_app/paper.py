@@ -2,17 +2,21 @@
 # KGS Staff app — Order from Paper: a photo / PDF of a supplier's quotation,
 # price list or order list (or a school's book list) → a DRAFT Purchase Order
 # (optionally sent into the "Purchase Order Approval" workflow) or a DRAFT
-# Sales Order. Plan: KGS/PLAN_order_from_paper.md. Nothing is ever submitted.
+# Sales Order; a supplier's bill or challan → a Purchase Receipt or Purchase
+# Invoice, linked to its PO / Receipt first, saved as a draft or submitted
+# (paper_purchase.py). Plan: KGS/PLAN_order_from_paper.md + mockup v4.
 #
 # Flow: upload_paper → background read job (paper_read: AI; paper_match:
-# our items) → check screen (get_paper / update_lines / set_party) →
-# save_order (inserts AS THE USER, attaches the pages, learns the confirmed
-# lines as "remembered names" = Party Item Alias).
+# our items) → [Receipt / Bill: set_links] → check screen (get_paper /
+# update_lines / set_party) → save_order (inserts AS THE USER, attaches the
+# pages, learns the confirmed lines as "remembered names" = Party Item Alias)
+# → [after a submitted Receipt: make_bill, from the same reading, no AI].
 #
 # Every endpoint is POST-only and re-checks role, kill switches and rate limit.
-# Purchase side: Purchase User / Purchase Manager; sales side: Sales User /
-# Sales Manager (and only while "Sales Orders from Paper" is on). Settings:
-# System Manager / Shop Owner. The AI key never leaves site_config.
+# Purchase side: Purchase User / Purchase Manager (Receipts and Bills: only
+# the people listed in Order Paper Settings); sales side: Sales User / Sales
+# Manager (and only while "Sales Orders from Paper" is on). Settings: System
+# Manager / Shop Owner. The AI key never leaves site_config.
 
 import base64
 import binascii
@@ -25,6 +29,7 @@ from frappe import _
 from frappe.utils import add_days, cint, flt, getdate, now_datetime, nowdate
 
 from trustbit_school_book_seller.staff_app import paper_match as pm
+from trustbit_school_book_seller.staff_app import paper_purchase as pp
 from trustbit_school_book_seller.staff_app import paper_read as pr
 from trustbit_school_book_seller.staff_app.api import (
 	_CLIENT_REF_RE,
@@ -39,10 +44,14 @@ from trustbit_school_book_seller.trustbit_school_book.doctype.party_item_alias.p
 	can_edit,
 )
 
+_BUY_MANAGERS = ("Purchase Manager", "System Manager", "Shop Owner")
 PURPOSES = {
-	"Purchase Order": {"party_type": "Supplier", "roles": PAPER_PO_ROLES, "managers": ("Purchase Manager", "System Manager", "Shop Owner")},
+	"Purchase Order": {"party_type": "Supplier", "roles": PAPER_PO_ROLES, "managers": _BUY_MANAGERS},
 	"Sales Order": {"party_type": "Customer", "roles": PAPER_SO_ROLES, "managers": ("Sales Manager", "System Manager", "Shop Owner")},
+	"Purchase Receipt": {"party_type": "Supplier", "roles": PAPER_PO_ROLES, "managers": _BUY_MANAGERS},
+	"Purchase Invoice": {"party_type": "Supplier", "roles": PAPER_PO_ROLES, "managers": _BUY_MANAGERS},
 }
+SHORT = {"Purchase Order": "PO", "Sales Order": "SO", "Purchase Receipt": "PR", "Purchase Invoice": "PI"}
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024  # all pages together, after decoding
 MAX_PDF_BYTES = 10 * 1024 * 1024
 DEFAULT_NEEDED_DAYS = 7
@@ -61,13 +70,17 @@ def _roles(user=None):
 	return set(frappe.get_roles(user))
 
 
-def can_make(purpose, settings=None, roles=None):
+def can_make(purpose, settings=None, roles=None, user=None):
 	settings = settings or pr.get_settings()
 	roles = roles if roles is not None else _roles()
 	if not settings.enabled or purpose not in PURPOSES:
 		return False
 	if purpose == "Sales Order" and not settings.so_enabled:
 		return False
+	if pp.is_purchase(purpose):
+		# owners' decision 2026-10-20: only the people on the Settings list
+		if not settings.pr_pi_enabled or (user or frappe.session.user) not in (settings.receivers or []):
+			return False
 	return bool(roles & set(PURPOSES[purpose]["roles"]))
 
 
@@ -88,7 +101,11 @@ def _guard(purpose=None):
 			frappe.throw(_("Unknown order type."))
 		if purpose == "Sales Order" and not settings.so_enabled:
 			raise frappe.PermissionError(_("Sales Orders from paper are not switched on yet."))
+		if pp.is_purchase(purpose) and not settings.pr_pi_enabled:
+			raise frappe.PermissionError(_("Receipts and Bills from paper are switched off."))
 		if not can_make(purpose, settings):
+			if pp.is_purchase(purpose):
+				raise frappe.PermissionError(_("Receipts and Bills from paper are only for the people the owners listed in Settings."))
 			raise frappe.PermissionError(
 				_("Making a Purchase Order needs the Purchase User role.") if purpose == "Purchase Order"
 				else _("Making a Sales Order needs the Sales User role."))
@@ -117,6 +134,8 @@ def boot_info():
 		"enabled": s.enabled,
 		"po": 1 if can_make("Purchase Order", s, roles) else 0,
 		"so": 1 if can_make("Sales Order", s, roles) else 0,
+		"pr": 1 if can_make("Purchase Receipt", s, roles) else 0,
+		"pi": 1 if can_make("Purchase Invoice", s, roles) else 0,
 		"names": 1 if s.enabled and names else 0,
 		"settings": 1 if roles & set(PAPER_SETTINGS_ROLES) else 0,
 		"ready": 1 if pr.provider_ready(s) else 0,
@@ -407,6 +426,8 @@ def _live(name, since=0, run=None):
 
 
 def run_read_job(name, model=None, reason="first"):
+	"""reason: first / reread (the AI reads) or rematch (the supplier changed on a
+	Receipt / Bill: the stored reading is matched again, no AI, no cost)."""
 	paper = frappe.get_doc("Order Paper", name)
 	if paper.status in ("Saved", "Discarded"):
 		return
@@ -421,32 +442,48 @@ def run_read_job(name, model=None, reason="first"):
 	live = LiveReading(name)
 	status, error, state, data, used_model = "Failed", None, None, None, model
 	try:
-		blocks = pr.content_blocks(name)
-		pages = cint(paper.page_count) or 1
-		label = _model_label(settings, model)
-		live.begin(label, _("Reading again with {0}.").format(label) if reason != "first" else "")
-		data, res = pr.read(provider, model, blocks, on_progress=live)
-		usage.append(pr.usage_entry(settings, res, reason, pages, provider.name))
-		notes = []
-		if reason == "first" and settings.auto_fallback and settings.fallback_model and settings.fallback_model != model:
-			why = pr.looks_wrong(data)
-			if why and _pages_left(settings) - pages >= 0:
-				try:
-					label2 = _model_label(settings, settings.fallback_model)
-					live.begin(label2, _("Reading again with {0} because {1}.").format(label2, why))
-					data2, res2 = pr.read(provider, settings.fallback_model, blocks, on_progress=live)
-					usage.append(pr.usage_entry(settings, res2, "fallback", pages, provider.name))
-					if data2["lines"]:
-						data, used_model = data2, settings.fallback_model
-						notes.append(_("Read again with {0} because {1}.").format(_model_label(settings, used_model), why))
-				except pr.PaperReadError as e:
-					frappe.log_error(title=f"Order Paper {name}: fallback read failed", message=e.detail)
-		if not data["lines"]:
-			raise pr.PaperReadError(_("No item lines were found on this paper. Take a clearer photo of the whole page."), "0 lines")
-		live.phase("matching")
-		state = build_state(paper, data, settings, provider, usage, notes)
+		if reason == "rematch":
+			data, used_model, notes = pr._json(paper.ai_json, None), paper.ai_model, list((old_state or {}).get("notes") or [])
+			if not data or not data.get("lines"):
+				raise pr.PaperReadError(_("The reading is missing. Read the paper again."), "rematch without ai_json")
+			live.begin(_model_label(settings, used_model))
+			live.phase("matching")
+			state = build_state(paper, data, settings, provider, usage, notes, party=(old_state or {}).get("party"))
+		else:
+			blocks = pr.content_blocks(name)
+			pages = cint(paper.page_count) or 1
+			label = _model_label(settings, model)
+			ours = pm.our_identity()
+			live.begin(label, _("Reading again with {0}.").format(label) if reason != "first" else "")
+			data, res = pr.read(provider, model, blocks, on_progress=live, ours=ours)
+			usage.append(pr.usage_entry(settings, res, reason, pages, provider.name))
+			notes = []
+			if reason == "first" and settings.auto_fallback and settings.fallback_model and settings.fallback_model != model:
+				why = pr.looks_wrong(data)
+				if why and _pages_left(settings) - pages >= 0:
+					try:
+						label2 = _model_label(settings, settings.fallback_model)
+						live.begin(label2, _("Reading again with {0} because {1}.").format(label2, why))
+						data2, res2 = pr.read(provider, settings.fallback_model, blocks, on_progress=live, ours=ours)
+						usage.append(pr.usage_entry(settings, res2, "fallback", pages, provider.name))
+						if data2["lines"]:
+							data, used_model = data2, settings.fallback_model
+							notes.append(_("Read again with {0} because {1}.").format(_model_label(settings, used_model), why))
+					except pr.PaperReadError as e:
+						frappe.log_error(title=f"Order Paper {name}: fallback read failed", message=e.detail)
+			if not data["lines"]:
+				raise pr.PaperReadError(_("No item lines were found on this paper. Take a clearer photo of the whole page."), "0 lines")
+			if _swap_if_ours(data):
+				notes.append(_("This is the shop's own paper — the party is the one it is addressed to."))
+			live.phase("matching")
+			state = build_state(paper, data, settings, provider, usage, notes)
 		if old_state:
 			_carry_decisions(old_state, state)
+			if reason == "rematch":
+				state["party_how"] = old_state.get("party_how") or "chosen"
+			if pp.is_purchase(paper.purpose):
+				compose_all(state, paper.purpose, paper.party_type, cint(paper.default_copies))
+				pp.doc_pcts(state, pm.exact_layers(state["lines"], paper.party_type, state.get("party")))
 		status = "Ready"
 	except pr.PaperReadError as e:
 		error = e.staff_message
@@ -542,21 +579,50 @@ def name_candidates(party_type, printed, limit=3):
 	return [{"party": r.name, "title": r.title or r.name, "score": round(s, 2)} for s, _l, r in scored[:limit] if s >= 0.5]
 
 
-def build_state(paper, data, settings, provider, usage, notes):
+def _swap_if_ours(data):
+	"""On the shop's own paper (its order list on its letterhead) the party is
+	the business it is addressed to — KGS is never its own supplier. True when swapped."""
+	if not (data.get("party_name") or data.get("party_gstin")) or not pm.is_us(data.get("party_name"), data.get("party_gstin")):
+		return False
+	data["party_name"], data["buyer_name"] = data.get("buyer_name") or "", data.get("party_name")
+	data["party_gstin"], data["buyer_gstin"] = data.get("buyer_gstin") or "", data.get("party_gstin")
+	return True
+
+
+def build_state(paper, data, settings, provider, usage, notes, party=None):
 	party_type = paper.party_type
-	party, how, cands = detect_party(party_type, data)
+	purpose = paper.purpose
+	if party:  # rematch: the supplier a person chose
+		how, cands = "chosen", name_candidates(party_type, data.get("party_name") or "")
+	else:
+		party, how, cands = detect_party(party_type, data)
 	lines = data["lines"]
 	discount_note = data.get("discount_note") or ""
 
 	exact = pm.exact_layers(lines, party_type, party)
 	need_fuzzy = [ln for ln in lines if ln["idx"] not in exact or exact[ln["idx"]]["how"] == "other_party"]
+	docs = pp.open_docs(purpose, party, paper.company) if pp.is_purchase(purpose) else []
 	fuzzy = {}
-	if need_fuzzy:
+	if need_fuzzy or docs:
 		index = pm.load_index()
 		for ln in need_fuzzy:
 			cls = pm.class_of(ln.get("class_hint")) or pm.class_of(ln["text"])
 			fuzzy[ln["idx"]] = index.search(ln["text"], line_class=cls, mrp=ln.get("mrp"))
+		if docs:
+			pp.score_docs(index, lines, docs)
 		del index
+
+	# what the shop did with each suggested item: dead twins drop, items bought
+	# from this supplier rise (rank_candidates)
+	activity = pm.item_activity({c["item_code"] for cs in fuzzy.values() for c in cs} | {h["item_code"] for h in exact.values()})
+	for cs in fuzzy.values():
+		pm.rank_candidates(cs, activity, party if party_type == "Supplier" else None)
+	if not party and party_type == "Supplier":
+		known = {c["party"] for c in cands}
+		tops = [cs[0]["item_code"] for cs in fuzzy.values() if cs] + [h["item_code"] for h in exact.values()]
+		for sup, n in pm.party_suggestions(activity, tops):
+			if sup not in known and n >= 2 and not cint(frappe.db.get_value("Supplier", sup, "disabled")):
+				cands.append({"party": sup, "title": _party_name("Supplier", sup), "score": 0, "items": n})
 
 	# AI double-check: only lines that stay amber/red and have a real choice
 	ai = {}
@@ -599,7 +665,12 @@ def build_state(paper, data, settings, provider, usage, notes):
 		"discount_note": discount_note,
 		"lines": out_lines,
 	}
-	compose_all(state, paper.purpose, party_type, cint(paper.default_copies), exact=exact)
+	if pp.is_purchase(purpose):
+		state["open_docs"] = docs
+		state["links"] = None  # the person links the PO / Receipt (or "No PO") first
+	compose_all(state, purpose, party_type, cint(paper.default_copies), exact=exact)
+	if pp.is_purchase(purpose):
+		pp.doc_pcts(state, exact)
 	return state
 
 
@@ -612,7 +683,7 @@ def _fuzzy_pick(cands, ai_choice):
 		c = next((c for c in ok if c["item_code"] == ai_choice), None)
 		if c:
 			return c["item_code"], "ai_pick" if cands and cands[0]["item_code"] != ai_choice else "ai_agrees"
-	if ok and ok[0]["score"] >= pm.PRESELECT:
+	if ok and ok[0].get("rank_score", ok[0]["score"]) >= pm.PRESELECT:
 		return ok[0]["item_code"], ""
 	return None, ""
 
@@ -632,9 +703,17 @@ def compose_all(state, purpose, party_type, copies, exact=None):
 			codes.add(ln["fuzzy_pick"])
 		if ln.get("by_person") and ln.get("item_code"):
 			codes.add(ln["item_code"])
+	purchase = pp.is_purchase(purpose)
+	if purchase:
+		codes |= {r["item_code"] for r in pp.linked_rows(state)}
 	info = pm.item_details(codes)
 	for ln in lines:
 		_compose(ln, exact.get(ln["idx"]), info, purpose, copies)
+	if purchase:
+		pp.apply_links(state, info, exact, purpose)
+		for ln in lines:
+			if ln.get("colour") == "green" and not ln.get("by_person") and not flt(ln.get("qty")):
+				ln["colour"], ln["note"] = "amber", _("No quantity on the paper — enter it")
 
 
 def _compose(ln, hit, info, purpose, copies):
@@ -643,8 +722,10 @@ def _compose(ln, hit, info, purpose, copies):
 		# keep the person's item / unit / qty; refresh only facts about the item
 		_set_item(ln, info[ln["item_code"]], keep_uom=True)
 		ln["colour"] = "green"
+		ln["pct"] = 100
 		return
 	ln["how"], ln["note"], ln["alias"], ln["other_party"] = "none", "", None, None
+	ln.pop("unit_ratio", None)
 	ln["problems"] = []
 	item_code = None
 	if hit and hit["how"] != "other_party":
@@ -672,6 +753,12 @@ def _compose(ln, hit, info, purpose, copies):
 	it = info.get(item_code) if item_code else None
 	if item_code and not it:  # item deleted since
 		ln["colour"], ln["note"], item_code = "red", _("Not in our items"), None
+	# match %: exact layers 100, else the fuzzy candidate's own %
+	if ln["how"] in ("alias_code", "alias_text", "barcode", "item_code", "party_code"):
+		ln["pct"] = 100
+	else:
+		c = next((c for c in ln.get("candidates") or [] if c["item_code"] == item_code), None)
+		ln["pct"] = c.get("pct", pm.pct(c.get("score"))) if c else (80 if ln["how"] == "other_party" else None)
 	if not it:
 		for k in ("item_code", "item_name", "item_cls", "item_mrp", "stock_uom", "uom"):
 			ln[k] = None
@@ -697,6 +784,8 @@ def _compose(ln, hit, info, purpose, copies):
 			ln["colour"], ln["note"] = "amber", _("Unit {0} on the paper — choose ours").format(ln.get("unit"))
 	if ln["colour"] == "green" and purpose == "Purchase Order" and not ln.get("qty"):
 		ln["colour"], ln["note"] = "amber", _("No quantity on the paper — enter it")
+	if ln["colour"] == "green" and ln.get("pct") is None:
+		ln["pct"] = 100
 
 
 def _set_item(ln, it, alias=None, keep_uom=False):
@@ -729,19 +818,26 @@ def _carry_decisions(old_state, new_state):
 	def key(ln):
 		return (pm.code_key(ln.get("code")), pm.match_key(ln.get("text")))
 
-	old = {key(ln): ln for ln in old_state.get("lines") or [] if ln.get("by_person") or ln.get("decision")}
+	old = {key(ln): ln for ln in old_state.get("lines") or [] if ln.get("by_person") or ln.get("decision") or ln.get("rate_by_person")}
 	for ln in new_state["lines"]:
 		o = old.get(key(ln))
 		if not o:
 			continue
 		for k in ("decision", "by_person", "qty_by_person", "item_code", "item_name", "item_cls", "item_mrp", "stock_uom",
-				"uoms", "uom", "conversion_factor", "unit_known", "can_keep", "colour", "last_purchase_rate"):
+				"uoms", "uom", "conversion_factor", "unit_known", "can_keep", "colour", "last_purchase_rate",
+				"rate_by_person", "buy_rate", "unit_ratio"):
 			if k in o:
 				ln[k] = o[k]
 		if o.get("qty_by_person"):
 			ln["qty"] = o.get("qty")
 	if old_state.get("party") and not new_state.get("party"):
 		new_state["party"] = old_state["party"]
+	# the same supplier's links stay (a re-read); a new supplier links again
+	if old_state.get("links") and old_state.get("party") == new_state.get("party") and "links" in new_state:
+		still = {d["name"] for d in new_state.get("open_docs") or [] if d["linkable"]}
+		links = dict(old_state["links"])
+		if links.get("mode") != "docs" or set(links.get("docs") or []) <= still:
+			new_state["links"] = links
 
 
 def _money(v):
@@ -786,7 +882,20 @@ def _paper_payload(paper, settings=None):
 		"ready": 1 if pr.provider_ready(settings) else 0,
 		# the check screen and the "sent for approval" screen both name the approvers
 		"owners": _owner_names() if purpose == "Purchase Order" and paper.status in ("Ready", "Saved") else [],
+		"short": SHORT.get(purpose, ""),
+		"source_paper": paper.get("source_paper"), "bill_paper": paper.get("bill_paper"),
 	}
+	if paper.status in ("Ready", "Saved") and purpose != "Sales Order":
+		# what we paid before (never copied into a rate: shown next to it)
+		out["last_bought"] = pm.last_bought({ln.get("item_code") for ln in out["lines"] if ln.get("item_code")})
+		out["usual_discount"] = pm.supplier_usual_discount(party) if party else None
+	if pp.is_purchase(purpose):
+		out.update(_purchase_payload(paper, state, data, settings))
+		if paper.status == "Saved" and paper.created_doc:
+			out.update(_saved_purchase_info(paper, state))
+	if paper.status == "Ready" and pp.is_purchase(purpose):
+		out["save"] = _purchase_save_info(paper, state, data, settings)
+		return out
 	if paper.status == "Ready":
 		company = paper.company
 		whs = _warehouses(company)
@@ -800,6 +909,53 @@ def _paper_payload(paper, settings=None):
 			"can_send": 1 if purpose == "Purchase Order" and _approval_active() and "Purchase User" in _roles() else 0,
 		}
 	return out
+
+
+def _purchase_payload(paper, state, data, settings):
+	"""Links, the documents to link and the money check of a Receipt / Bill."""
+	links = state.get("links")
+	docs = state.get("open_docs") or []
+	keep, left, _pending = _lines_to_save(state, paper.purpose)
+	used = {(ln.get("doc_row") or {}).get("name") for ln in state["lines"] if ln.get("doc_row") and ln.get("decision") != "left"}
+	linked = set((links or {}).get("docs") or [])
+	not_on_paper = [
+		{"doc": r["parent"], "idx": r["idx"], "item_name": r["item_name"], "due": r["due"], "uom": r["uom"]}
+		for d in docs if d["name"] in linked for r in d["rows"] if r["due"] > 0 and r["name"] not in used
+	]
+	tot = pp.totals(state, data, paper.purpose, keep, left)
+	problems = [{"idx": ln["idx"], "text": ln.get("item_name") or ln.get("text"), "why": p}
+		for ln in keep for p in [pp.line_problem(ln, paper.purpose)] if p]
+	return {
+		"links": links,
+		"open_docs": [{k: d.get(k) for k in ("doctype", "name", "date", "owner_name", "status", "linkable", "why", "bill_no",
+			"pct", "hits", "due_lines", "draft_bills")} | {"lines": len(d["rows"])} for d in docs],
+		"doc_preselect": pp.DOC_PRESELECT,
+		"not_on_paper": not_on_paper[:60],
+		"totals": tot,
+		"problems": problems,
+		"charges": data.get("charges") or [],
+		"tax_total": data.get("tax_total"),
+		"freight_account": settings.get("freight_account") or "",
+	}
+
+
+def _purchase_save_info(paper, state, data, settings):
+	company = paper.company
+	whs = _warehouses(company)
+	rows = pp.linked_rows(state)
+	row_wh = next((r["warehouse"] for r in rows if r.get("warehouse") in whs), None)
+	default_wh = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+	bill_date = pp.parse_paper_date(paper.paper_date)
+	if bill_date and (bill_date > getdate(nowdate()) or bill_date < getdate(add_days(nowdate(), -400))):
+		bill_date = None
+	return {
+		"warehouses": whs,
+		"warehouse": row_wh or (default_wh if default_wh in whs else (whs[0] if whs else None)),
+		"posting_date": str(nowdate()) if paper.purpose == pp.RECEIPT else str(bill_date or nowdate()),
+		"bill_date_read": 1 if bill_date else 0,
+		"bill_no": paper.paper_no or "",
+		"today": str(nowdate()),
+	}
 
 
 def _approval_active():
@@ -825,9 +981,9 @@ def _duplicate(paper, party):
 		return None
 	row = frappe.db.sql(
 		"""select name, created_doctype, created_doc, saved_on from `tabOrder Paper`
-		where party_type = %s and party = %s and paper_no = %s and status = 'Saved' and name != %s
+		where purpose = %s and party_type = %s and party = %s and paper_no = %s and status = 'Saved' and name != %s
 		order by saved_on desc limit 1""",
-		(paper.party_type, party, paper.paper_no, paper.name),
+		(paper.purpose, paper.party_type, party, paper.paper_no, paper.name),
 		as_dict=True,
 	)
 	if not row:
@@ -874,17 +1030,81 @@ def set_party(name, party, version=None):
 		return conflict
 	party = _party_ok(paper.party_type, party)
 	state = _state(paper)
+	changed = state.get("party") != party
 	state["party"] = party
 	state["party_how"] = "chosen"
+	if pp.is_purchase(paper.purpose) and changed:
+		# another supplier = other POs / Receipts: match the stored reading again
+		# against them in the background (the word index never loads in a web worker)
+		state["links"], state["open_docs"] = None, []
+		paper.db_set({"lines_json": json.dumps(state), "party": party, "status": "Reading", "error": None,
+			"state_version": cint(paper.state_version) + 1})
+		_enqueue_read(paper.name, None, "rematch")
+		return _paper_payload(paper)
 	compose_all(state, paper.purpose, paper.party_type, cint(paper.default_copies))
 	paper.db_set({"lines_json": json.dumps(state), "party": party, "state_version": cint(paper.state_version) + 1})
 	return _paper_payload(paper)
 
 
 @frappe.whitelist(methods=["POST"])
+def set_links(name, mode, docs=None, version=None):
+	"""Receipt / Bill: link the paper to the supplier's PO(s) or unbilled
+	Receipt(s) — mode "docs" — or to nothing ("none": not ordered / the bill adds
+	the stock itself). mode "change" opens the choice again."""
+	paper = _load(name, lock=True)
+	_guard(paper.purpose)
+	_editable(paper)
+	if not pp.is_purchase(paper.purpose):
+		frappe.throw(_("Only a Receipt or a Bill is linked."))
+	conflict = _check_version(paper, version)
+	if conflict:
+		return conflict
+	state = _state(paper)
+	if isinstance(docs, str):
+		docs = json.loads(docs or "[]")
+	if mode == "change":
+		state["links"] = None
+	elif mode == "none":
+		state["links"] = {"mode": "none", "doctype": None, "docs": []}
+	elif mode == "docs":
+		if not state.get("party"):
+			frappe.throw(_("Choose the supplier first."))
+		fresh = {d["name"]: d for d in pp.open_docs(paper.purpose, state["party"], paper.company)}
+		names = list(dict.fromkeys(str(d) for d in docs or []))[:10]
+		if not names:
+			frappe.throw(_("Tick a document to link, or choose \"No PO\"."))
+		chosen = []
+		for n in names:
+			d = fresh.get(n)
+			if not d:
+				frappe.throw(_("{0} is not open for this supplier any more.").format(n))
+			if not d["linkable"]:
+				frappe.throw(_("{0} cannot be linked: {1}.").format(n, d["why"].lower() if d["why"] else _("not submitted")))
+			chosen.append(d)
+		if len({d["doctype"] for d in chosen}) > 1:
+			frappe.throw(_("Link Receipts or POs, not both: a bill from a Receipt never adds stock again."))
+		# keep the stored scores (doc_scores); refresh due quantities and rows
+		old = {d["name"]: d for d in state.get("open_docs") or []}
+		for n, d in fresh.items():
+			if n in old:
+				d.update({k: old[n].get(k) for k in ("pct", "hits", "due_lines") if k in old[n]})
+		state["open_docs"] = list(fresh.values())
+		state["links"] = {"mode": "docs", "doctype": chosen[0]["doctype"], "docs": names}
+	else:
+		frappe.throw(_("Unknown choice."))
+	compose_all(state, paper.purpose, paper.party_type, cint(paper.default_copies))
+	pp.doc_pcts(state, pm.exact_layers(state["lines"], paper.party_type, state.get("party")))
+	paper.db_set({"lines_json": json.dumps(state), "state_version": cint(paper.state_version) + 1})
+	return _paper_payload(paper)
+
+
+@frappe.whitelist(methods=["POST"])
 def update_lines(name, changes, version=None, copies=None):
-	"""changes: [{idx, decision?: "ok" | "left" | null, item_code?, uom?, qty?}]
-	Returns {"version", "lines": [the changed lines]} or {"conflict": 1, "paper"}."""
+	"""changes: [{idx, decision?: "ok" | "left" | null, item_code?, uom?, qty?,
+	  rate? (Receipt / Bill: our rate), read_qty? / read_rate? / read_amount?
+	  (a number misread from the paper), fix?: "qty" (the quantity the line's
+	  amount stands for)}]
+	Returns {"version", "lines": [the changed lines], "totals"?} or {"conflict": 1, "paper"}."""
 	paper = _load(name, lock=True)
 	_guard(paper.purpose)
 	_editable(paper)
@@ -896,6 +1116,12 @@ def update_lines(name, changes, version=None, copies=None):
 	state = _state(paper)
 	by_idx = {ln["idx"]: ln for ln in state["lines"]}
 	touched = set()
+	purchase = pp.is_purchase(paper.purpose)
+	if purchase:
+		for ch in (changes or [])[:500]:
+			ln = by_idx.get(cint(ch.get("idx"))) if isinstance(ch, dict) else None
+			if ln:
+				_purchase_change(ln, ch)
 
 	if copies is not None:
 		c = cint(copies)
@@ -930,6 +1156,9 @@ def update_lines(name, changes, version=None, copies=None):
 			u = next((u for u in ln.get("uoms") or [] if u["uom"] == ch["uom"]), None)
 			if not u:
 				frappe.throw(_("Unit {0} is not set up for {1}.").format(ch["uom"], ln.get("item_name") or ""))
+			row = ln.get("doc_row")
+			if row and u["uom"] != row["uom"] and not ch.get("item_code"):
+				frappe.throw(_("This line is on {0}, in {1}: ERPNext needs the same unit.").format(row["parent"], row["uom"]))
 			ln["uom"], ln["conversion_factor"], ln["unit_known"] = u["uom"], u["factor"], 1
 		if "qty" in ch:
 			q = flt(ch["qty"]) if ch["qty"] not in (None, "") else None
@@ -955,10 +1184,63 @@ def update_lines(name, changes, version=None, copies=None):
 			if d is None and ln.get("by_person") and not ch.get("item_code"):
 				# undo: back to what the paper matched by itself
 				ln["by_person"] = 0
-				compose_all({"lines": [ln], "party": state.get("party")}, paper.purpose, paper.party_type, cint(paper.default_copies))
+				if not purchase:
+					compose_all({"lines": [ln], "party": state.get("party")}, paper.purpose, paper.party_type, cint(paper.default_copies))
+	if purchase:
+		# rows, over-delivery, rates and totals depend on every line: compose all again
+		compose_all(state, paper.purpose, paper.party_type, cint(paper.default_copies))
+		touched = set(by_idx)
 	version = cint(paper.state_version) + 1
 	paper.db_set({"lines_json": json.dumps(state), "state_version": version, "default_copies": paper.default_copies})
-	return {"version": version, "lines": [by_idx[i] for i in sorted(touched)]}
+	out = {"version": version, "lines": [by_idx[i] for i in sorted(touched)]}
+	if purchase:
+		data = pr._json(paper.ai_json, {}) or {}
+		pay = _purchase_payload(paper, state, data, pr.get_settings())
+		out.update({k: pay[k] for k in ("totals", "problems", "not_on_paper")})
+	return out
+
+
+def _purchase_change(ln, ch):
+	"""A Receipt / Bill line: our rate, or a number misread from the paper."""
+	def num(v, what):
+		if v in (None, ""):
+			return None
+		n = flt(v)
+		if n <= 0 or n > 1e8:
+			frappe.throw(_("{0} must be more than 0.").format(what))
+		return n
+
+	if "rate" in ch:
+		r = num(ch["rate"], _("The rate"))
+		ln["buy_rate"], ln["rate_by_person"] = r, 1 if r else 0
+		ln["rate_src"] = "person" if r else None
+	for key, field, what in (("read_qty", "paper_qty", _("The quantity")), ("read_rate", "rate", _("The rate")),
+			("read_amount", "amount", _("The amount"))):
+		if key in ch:
+			ln[field] = num(ch[key], what)
+			ln["read_fixed"] = 1
+	if ch.get("fix") == "qty":
+		c = pr.line_check({"qty": ln.get("paper_qty"), "rate": ln.get("rate"), "mrp": ln.get("mrp"), "amount": ln.get("amount"),
+			"discount_percent": ln.get("discount_percent")})
+		if not c or not c.get("fix_qty"):
+			frappe.throw(_("This line needs no quantity fix."))
+		ln["paper_qty"], ln["read_fixed"] = c["fix_qty"], 1
+	if any(k in ch for k in ("read_qty", "read_rate", "read_amount", "fix")):
+		ln["paper_rate"] = pr.paper_rate(ln)
+		ln["paper_amount"] = pr.line_amount(ln)
+		if not ln.get("qty_by_person") and ln.get("paper_qty"):
+			ln["qty"] = round(flt(ln["paper_qty"]) * (flt(ln.get("unit_ratio")) or 1.0), 6)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_item_facts(name, item_codes):
+	"""The choose sheet: what we paid before for these items (last 3 bills)."""
+	paper = _load(name)
+	_guard(paper.purpose)
+	if isinstance(item_codes, str):
+		item_codes = json.loads(item_codes or "[]")
+	codes = [str(c) for c in (item_codes or [])][:30]
+	return {"last_bought": pm.last_bought(codes)}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -997,7 +1279,7 @@ def search_items(txt):
 		isbn = f" or i.custom_isbn_barcode like %(w{i})s" if has_isbn else ""
 		conds.append(f"(i.item_name like %(w{i})s or i.name like %(w{i})s{isbn})")
 	rows = frappe.db.sql(
-		f"""select i.name as item_code, i.item_name, i.stock_uom, {"i.custom_class" if has_class else "null"} as cls
+		f"""select i.name as item_code, i.item_name, i.item_group, i.stock_uom, {"i.custom_class" if has_class else "null"} as cls
 		from `tabItem` i
 		where i.disabled = 0 and i.has_variants = 0 and {" and ".join(conds)}
 		order by i.item_name asc limit 20""",
@@ -1008,6 +1290,9 @@ def search_items(txt):
 	for r in rows:
 		r["cls"] = pm.item_class(r.cls, r.item_name)
 		r["mrp"] = prices.get(r.item_code) or pm.price_in_name(r.item_name)
+		# "Xxx…" catch-all items: still findable, but flagged (never suggested)
+		r["catch_all"] = 1 if pm.is_catch_all(r.item_name, r.pop("item_group", None)) else 0
+	rows.sort(key=lambda r: r["catch_all"])
 	return rows
 
 
@@ -1106,7 +1391,10 @@ def _qty_problem(ln):
 
 @frappe.whitelist(methods=["POST"])
 def save_order(name, client_ref, send_for_approval=0, warehouse=None, needed_by=None, school=None,
-		rate_mode="paper", allow_duplicate=0, version=None):
+		rate_mode="paper", allow_duplicate=0, version=None, posting_date=None, bill_no=None, submit=0, charges=None):
+	"""PO / SO: a draft (a PO optionally sent for approval). Receipt / Bill:
+	a draft, or submitted when submit=1 — posting_date (a Bill: the bill date),
+	bill_no and charges (indexes of the paper's freight lines to add) too."""
 	paper = _load(name, lock=True)
 	settings = _guard(paper.purpose)
 	purpose = paper.purpose
@@ -1123,9 +1411,214 @@ def save_order(name, client_ref, send_for_approval=0, warehouse=None, needed_by=
 	if not frappe.cache.set(lock_key, 1, ex=180, nx=True):
 		frappe.throw(_("This paper is being saved right now. Please wait a moment."))
 	try:
+		if pp.is_purchase(purpose):
+			return _save_purchase(paper, settings, warehouse, posting_date, bill_no, cint(submit), _charges_arg(charges),
+				allow_duplicate)
 		return _save(paper, settings, purpose, send_for_approval, warehouse, needed_by, school, rate_mode, allow_duplicate)
 	finally:
 		frappe.cache.delete(lock_key)
+
+
+def _charges_arg(charges):
+	if isinstance(charges, str):
+		charges = json.loads(charges or "[]")
+	return sorted({cint(i) for i in charges or [] if str(i).lstrip("-").isdigit()})
+
+
+def _purchase_ready(paper, settings, warehouse, posting_date, bill_no, charges):
+	"""Everything a Receipt / Bill needs before it can be built — shared by the
+	preview and the save. Returns (state, data, party, keep, left, warehouse, date, bill_no)."""
+	purpose = paper.purpose
+	state = _state(paper)
+	data = pr._json(paper.ai_json, {}) or {}
+	party = state.get("party")
+	if not party:
+		frappe.throw(_("Choose the supplier first."))
+	party = _party_ok("Supplier", party)
+	if not state.get("links"):
+		frappe.throw(_("Link the PO first, or choose \"No PO\"."))
+	keep, left, pending = _lines_to_save(state, purpose)
+	if pending:
+		frappe.throw(_("Check {0} more line(s) first.").format(len(pending)))
+	if not keep:
+		frappe.throw(_("No lines to save — every line was left out."))
+	for ln in keep:
+		p = _qty_problem(ln) or pp.line_problem(ln, purpose)
+		if p:
+			frappe.throw(_("Line {0} ({1}): {2}.").format(ln["idx"], ln.get("item_name") or ln.get("text"), p))
+	# the linked documents must still be open, with the same rows
+	if (state["links"].get("mode")) == "docs":
+		fresh = {d["name"]: d for d in pp.open_docs(purpose, party, paper.company)}
+		for n in state["links"].get("docs") or []:
+			if n not in fresh or not fresh[n]["linkable"]:
+				frappe.throw(_("{0} is not open any more. Link again.").format(n))
+		rows = {r["name"] for d in fresh.values() for r in d["rows"]}
+		for ln in keep:
+			if ln.get("doc_row") and ln["doc_row"]["name"] not in rows:
+				frappe.throw(_("Line {0}: its row on {1} changed. Link again.").format(ln["idx"], ln["doc_row"]["parent"]))
+	whs = _warehouses(paper.company)
+	warehouse = warehouse or frappe.db.get_single_value("Stock Settings", "default_warehouse")
+	if warehouse not in whs:
+		frappe.throw(_("Choose a warehouse of {0}.").format(paper.company))
+	if purpose == pp.RECEIPT:
+		date = getdate(nowdate())
+	else:
+		date = getdate(posting_date) if posting_date else None
+		if not date:
+			frappe.throw(_("Enter the bill date."))
+		if date > getdate(nowdate()):
+			frappe.throw(_("The bill date cannot be in the future."))
+		if date < getdate(add_days(nowdate(), -400)):
+			frappe.throw(_("The bill date is more than a year ago. Make this bill in the ERP."))
+	bill_no = (bill_no if bill_no is not None else paper.paper_no or "").strip()[:140]
+	if purpose == pp.BILL and not bill_no:
+		frappe.throw(_("Enter the supplier's bill no."))
+	if charges and not settings.get("freight_account"):
+		frappe.throw(_("No account is set for freight. Ask the owner to set it in Settings."))
+	return state, data, party, keep, left, warehouse, date, bill_no
+
+
+def _purchase_check(paper, settings, state, data, party, keep, left, warehouse, date, bill_no, charges):
+	"""(doc, numbers, draft_only reasons): the unsaved Receipt / Bill and its money check."""
+	doc = pp.build_doc(paper, state, data, paper.purpose, party, keep, left, warehouse, date, bill_no, charges,
+		settings.get("freight_account"))
+	tot = pp.totals(state, data, paper.purpose, keep, left, charges)
+	numbers = pp.preview_numbers(doc, data, tot)
+	draft_only = []
+	rep = pp.repeat_bill(paper.purpose, party, bill_no)
+	if rep:
+		draft_only.append(_("Bill no. {0} is already on {1}").format(bill_no, rep["name"]))
+	filed = pp.filed_period(paper.company, date) if paper.purpose == pp.BILL else None
+	if filed:
+		draft_only.append(_("GSTR-3B for {0} is filed: the accountant decides on this bill").format(f"{filed[:2]}-{filed[2:]}"))
+	return doc, numbers, tot, draft_only
+
+
+@frappe.whitelist(methods=["POST"])
+def preview_purchase(name, warehouse=None, posting_date=None, bill_no=None, charges=None):
+	"""The save screen of a Receipt / Bill: ERPNext's own totals (GST as India
+	Compliance sets it, freight, rounding) against the paper, and what leaves
+	only "Save draft". Nothing is saved."""
+	paper = _load(name)
+	settings = _guard(paper.purpose)
+	if not pp.is_purchase(paper.purpose):
+		frappe.throw(_("Only a Receipt or a Bill has a preview."))
+	_editable(paper)
+	charges = _charges_arg(charges)
+	args = _purchase_ready(paper, settings, warehouse, posting_date, bill_no, charges)
+	state, data, party, keep, left = args[:5]
+	doc, numbers, tot, draft_only = _purchase_check(paper, settings, *args, charges)
+	new_mrp = [{"idx": ln["idx"], "item_name": ln.get("item_name"), "paper": flt(ln.get("mrp")), "ours": flt(ln.get("item_mrp"))}
+		for ln in keep if pp._new_mrp(ln)] if frappe.get_meta(f"{paper.purpose} Item").has_field("custom_pack_mrp") and (
+		paper.purpose == pp.RECEIPT or cint(doc.get("update_stock"))) else []
+	return {
+		"numbers": numbers, "totals": tot, "draft_only": draft_only, "update_stock": cint(doc.get("update_stock")) if paper.purpose == pp.BILL else 1,
+		"lines": len(keep), "qty": sum(flt(ln.get("qty")) for ln in keep), "new_mrp": new_mrp,
+		"taxes": [{"description": t.description or t.account_head, "amount": flt(t.tax_amount)} for t in doc.taxes if flt(t.tax_amount)],
+	}
+
+
+def _save_purchase(paper, settings, warehouse, posting_date, bill_no, submit, charges, allow_duplicate):
+	purpose = paper.purpose
+	args = _purchase_ready(paper, settings, warehouse, posting_date, bill_no, charges)
+	state, data, party, keep, left, warehouse, date, bill_no = args
+	doc, numbers, tot, draft_only = _purchase_check(paper, settings, *args, charges)
+	if not numbers.get("ok"):
+		if tot["missing_bill_lines"]:
+			ln = tot["missing_bill_lines"][0]
+			frappe.throw(_("Line {0} ({1}) is on the bill but not here. A bill must carry every line.").format(ln["idx"], ln["text"]))
+		frappe.throw(_("The total is ₹{0} off the paper. Fix it first — nothing was saved.").format(_money(abs(numbers.get("diff") or 0))))
+	if submit and draft_only:
+		frappe.throw(_("Only a draft can be saved: {0}.").format("; ".join(draft_only)))
+	dup = _duplicate(paper, party)
+	if dup and not cint(allow_duplicate):
+		return {"ok": 0, "duplicate": dup}
+
+	doc.flags.kgs_paper_remark = doc.get("remarks") if doc.meta.has_field("remarks") else _("From paper {0}").format(paper.name)
+	doc.insert()  # AS THE USER: normal permissions, ERPNext + India Compliance validations
+	state["made_rows"] = {str(ln["idx"]): doc.items[i].name for i, ln in enumerate(keep) if i < len(doc.items)}
+	_attach_pages(paper, doc)
+	learned = learn_aliases(paper, party, keep)
+
+	submit_error = None
+	if submit:
+		frappe.db.savepoint("kgs_paper_submit")
+		try:
+			doc.reload()
+			doc.submit()
+		except Exception as e:
+			frappe.db.rollback(save_point="kgs_paper_submit")
+			frappe.clear_messages()
+			submit_error = re.sub(r"<[^>]+>", "", str(e) or "")[:500] or _("It could not be submitted.")
+	paper.db_set({
+		"status": "Saved", "created_doctype": purpose, "created_doc": doc.name, "party": party,
+		"saved_by": frappe.session.user, "saved_on": now_datetime(), "lines_json": json.dumps(state),
+	})
+	out = _saved_response(paper)
+	out["submit_error"] = submit_error
+	out["learned"] = learned
+	return out
+
+
+@frappe.whitelist(methods=["POST"])
+def make_bill(name, client_ref=None):
+	"""After a submitted Receipt made from this paper: the Bill from the SAME
+	reading — no second AI read, no cost. Its lines are the Receipt's rows."""
+	src = _load(name, lock=True)
+	_guard(pp.BILL)
+	if src.purpose != pp.RECEIPT or src.status != "Saved" or src.created_doctype != pp.RECEIPT:
+		frappe.throw(_("A bill is made from a paper that became a Receipt."))
+	if src.get("bill_paper"):
+		st = frappe.db.get_value("Order Paper", src.bill_paper, "status")
+		if st and st != "Discarded":
+			return {"name": src.bill_paper, "already": 1}
+	pr_doc = frappe.db.get_value(pp.RECEIPT, src.created_doc, ["docstatus", "per_billed"], as_dict=True)
+	if not pr_doc or pr_doc.docstatus != 1:
+		frappe.throw(_("{0} is not submitted yet. The bill can be made once the office submits it.").format(src.created_doc))
+	if flt(pr_doc.per_billed) >= 100:
+		frappe.throw(_("{0} is already fully billed.").format(src.created_doc))
+	state = _state(src)
+	made = state.get("made_rows") or {}
+	docs = [d for d in pp.open_docs(pp.BILL, src.party, src.company) if d["name"] == src.created_doc]
+	if not docs:
+		frappe.throw(_("{0} has nothing left to bill.").format(src.created_doc))
+	rows = {r["name"]: r for r in docs[0]["rows"]}
+	lines = []
+	for ln in state["lines"]:
+		ln = dict(ln)
+		for k in ("doc_scores", "doc_row", "link_how", "link_pct", "over"):
+			ln.pop(k, None)
+		row = rows.get(made.get(str(ln["idx"])))
+		if row:
+			ln["pin_row"] = row["name"]  # this paper line became that Receipt row
+			ln["by_person"], ln["decision"], ln["colour"] = 1, "ok", "green"
+			ln["item_code"] = row["item_code"]
+		elif ln.get("decision") != "left" and not (ln.get("colour") == "red" and not ln.get("by_person")):
+			ln["decision"] = "left"  # was not on the Receipt
+		lines.append(ln)
+	new_state = {
+		"v": 1, "party": src.party, "party_how": "receipt", "party_candidates": [], "notes": [
+			_("Made from {0} with the same reading — no second AI read.").format(src.created_doc)],
+		"discount_note": state.get("discount_note") or "", "lines": lines, "open_docs": docs,
+		"links": {"mode": "docs", "doctype": pp.RECEIPT, "docs": [src.created_doc]},
+	}
+	paper = frappe.get_doc({
+		"doctype": "Order Paper", "purpose": pp.BILL, "status": "Ready", "company": src.company, "party_type": "Supplier",
+		"party": src.party, "client_ref": frappe.generate_hash(length=20) if not _CLIENT_REF_RE.match(client_ref or "") else client_ref,
+		"page_count": src.page_count, "file_kind": src.file_kind, "ai_json": src.ai_json, "ai_model": src.ai_model,
+		"ai_provider": src.ai_provider, "paper_party_text": src.paper_party_text, "paper_gstin": src.paper_gstin,
+		"paper_no": src.paper_no, "paper_date": src.paper_date, "paper_kind": src.paper_kind, "source_paper": src.name,
+		"usage_json": "[]", "state_version": 1,
+	})
+	compose_all(new_state, pp.BILL, "Supplier", 0)
+	pp.doc_pcts(new_state, {})
+	paper.lines_json = json.dumps(new_state)
+	paper.insert(ignore_permissions=True)
+	for f in pr.paper_files(src.name):
+		frappe.get_doc({"doctype": "File", "file_url": f.file_url, "file_name": f.file_name, "is_private": 1,
+			"attached_to_doctype": "Order Paper", "attached_to_name": paper.name}).insert(ignore_permissions=True)
+	src.db_set("bill_paper", paper.name)
+	return {"name": paper.name}
 
 
 def _save(paper, settings, purpose, send_for_approval, warehouse, needed_by, school, rate_mode, allow_duplicate):
@@ -1254,12 +1747,40 @@ def _saved_response(paper, already=0):
 	keep, left, _p = _lines_to_save(state, paper.purpose)
 	return {
 		"ok": 1, "already": already, "name": paper.name, "doctype": dt, "doc": dn,
-		"workflow_state": wf, "grand_total": flt(vals.get("grand_total")),
+		"workflow_state": wf, "grand_total": flt(vals.get("grand_total")), "docstatus": cint(vals.get("docstatus")),
 		"lines": len(keep), "qty": sum(flt(ln.get("qty")) for ln in keep),
 		"left_out": [{"text": ln["text"], "qty": ln.get("qty")} for ln in left],
 		"url": f"/app/{frappe.scrub(dt).replace('_', '-')}/{dn}",
 		"owners": _owner_names() if dt == "Purchase Order" else [],
 	}
+
+
+def _saved_purchase_info(paper, state):
+	"""The "Saved" screen of a Receipt / Bill: submitted or draft, links, what is
+	still due on the PO, and whether the Bill can be made from this reading."""
+	dt, dn = paper.created_doctype, paper.created_doc
+	vals = frappe.db.get_value(dt, dn, ["docstatus", "grand_total", "per_billed"] if dt == pp.RECEIPT else ["docstatus", "grand_total"],
+		as_dict=True) or {}
+	links = state.get("links") or {}
+	still_due = []
+	if links.get("doctype") == pp.ORDER:
+		for po in links.get("docs") or []:
+			n = frappe.db.sql("""select count(*) from `tabPurchase Order Item` where parent = %s and qty > received_qty""", po)[0][0]
+			if n:
+				still_due.append({"doc": po, "lines": cint(n)})
+	bill = None
+	if dt == pp.RECEIPT:
+		bp = paper.get("bill_paper")
+		bp_status = frappe.db.get_value("Order Paper", bp, ["status", "created_doc"], as_dict=True) if bp else None
+		can = cint(vals.get("docstatus")) == 1 and flt(vals.get("per_billed")) < 100 and can_make(pp.BILL)
+		bill = {
+			"paper": bp if bp_status and bp_status.status != "Discarded" else None,
+			"doc": bp_status.created_doc if bp_status and bp_status.status != "Discarded" else None,
+			"can": 1 if can and not (bp_status and bp_status.status != "Discarded") else 0,
+			"waiting": 1 if cint(vals.get("docstatus")) == 0 else 0,
+		}
+	return {"created_docstatus": cint(vals.get("docstatus")), "created_total": flt(vals.get("grand_total")),
+		"still_due": still_due, "bill": bill}
 
 
 # ── remembered names (Party Item Alias) ──────────────────────────────────────
@@ -1420,7 +1941,37 @@ def delete_alias(name):
 # ── settings (System Manager + Shop Owner) ───────────────────────────────────
 
 _SETTING_FIELDS = ("enabled", "so_enabled", "provider", "ai_model", "fallback_model", "auto_fallback", "rerank",
-	"month_page_limit", "peak_month_page_limit", "usd_rate", "gst_percent")
+	"month_page_limit", "peak_month_page_limit", "usd_rate", "gst_percent", "pr_pi_enabled", "freight_account")
+
+
+def _receiver_rows(users):
+	rows = frappe.get_all("User", filters={"name": ["in", list(users) or [""]]}, fields=["name", "full_name", "enabled"])
+	by = {r.name: r for r in rows}
+	return [{"user": u, "full_name": (by[u].full_name if u in by else u) or u, "enabled": cint(by[u].enabled) if u in by else 0}
+		for u in users]
+
+
+def _freight_accounts():
+	company = _company()
+	return frappe.get_all(
+		"Account",
+		filters={"company": company, "is_group": 0, "disabled": 0, "root_type": "Expense"},
+		order_by="account_name asc", pluck="name", limit_page_length=300,
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def search_receivers(txt=""):
+	"""Settings: enabled desk users with Purchase User / Manager, for the list of
+	people who may make Receipts and Bills."""
+	_guard_settings()
+	users = set(frappe.get_all("Has Role", filters={"role": ["in", list(PAPER_PO_ROLES)], "parenttype": "User"}, pluck="parent"))
+	filters = {"name": ["in", list(users) or [""]], "enabled": 1, "user_type": "System User"}
+	or_filters = None
+	if txt:
+		or_filters = {"name": ["like", f"%{txt}%"], "full_name": ["like", f"%{txt}%"]}
+	return frappe.get_all("User", filters=filters, or_filters=or_filters, fields=["name as user", "full_name"],
+		order_by="full_name asc", limit_page_length=30)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -1446,6 +1997,8 @@ def get_paper_settings():
 		"key_set": 1 if (frappe.conf.get("kgs_paper_ai_key") or "").strip() else 0,
 		"fake": 1 if pr.fake_allowed() else 0,
 		"usage": usage,
+		"receivers": _receiver_rows(s.receivers or []),
+		"freight_accounts": _freight_accounts(),
 	}
 
 
@@ -1458,6 +2011,14 @@ def save_paper_settings(values):
 	for k in _SETTING_FIELDS:
 		if k in values:
 			doc.set(k, values[k])
+	if isinstance(values.get("receivers"), list):
+		doc.set("receivers", [])
+		for u in values["receivers"][:50]:
+			u = str((u or {}).get("user") if isinstance(u, dict) else u or "").strip()
+			if u:
+				if not frappe.db.exists("User", u):
+					frappe.throw(_("User {0} not found.").format(u))
+				doc.append("receivers", {"user": u})
 	if isinstance(values.get("models"), list):
 		doc.set("model_prices", [])
 		for m in values["models"][:20]:
