@@ -6,7 +6,7 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
-## [1.14.1] - 2026-10-21 (Staff app — loading screen + Trustbit logo; not deployed yet)
+## [1.14.1] - 2026-10-21 (Staff app — loading screen + Trustbit logo; live on splashbox.in 00:24 IST `fbc43c0`)
 
 ### Added
 - **Loading screen** (owner: "when we open the page it shows a blank, black page while loading"). The page itself now carries a light screen with the KGS icon, "KGS Staff", a spinner and "Loading…" — drawn before any app code arrives (inline styles in the page, no download needed), replaced by the app when the first screen is ready (the app now mounts after the sign-in check, so there is no empty frame in between). After 12 s it says "Still loading. The internet seems slow." with **Try again**; if the app's code fails to download it says "Couldn't load the app. Check the internet, then try again." at once. The installed app's launch colour (manifest `background_color`) is the page grey `#f4f6f5` instead of white, so launch → loading screen → app has no colour jump

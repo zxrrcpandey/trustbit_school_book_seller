@@ -38,7 +38,7 @@ staff / More artboards; the "before" board is the old Home).
   approval rows yet), 0 Error Log, 0 nginx 5xx, `post_deploy_verify_live.sh` all passed. Rollback: `git reset --hard 2db8c3d`
   (as frappe_user) + HUP web + drop `app_hooks` / website cache.
 
-## Loading screen + "Powered by Trustbit" (1.14.1, 2026-10-21 — not deployed yet)
+## Loading screen + "Powered by Trustbit" (1.14.1 `fbc43c0`, LIVE 2026-10-21 00:24 IST)
 Owner: "when we open the page it shows a blank, black page while loading" + "add the Trustbit logo at Home, the login
 page and the bottom of the settings page".
 - **Why it was blank:** `#app` was empty until the 106 KB (gzip) bundle downloaded and ran, and nothing coloured the page
@@ -59,6 +59,12 @@ page and the bottom of the settings page".
 - Manifest `background_color` `#ffffff` → `#f4f6f5` (the page grey): launch → loading screen → app without a colour jump.
 - **Deploy needs:** pull only (frontend-only: the shell is `no_cache`, the manifest is served from `www/`). No HUP, migrate,
   build or flush. Phones show it on their next launch. Verify: `/staff/home` contains `kgs-splash`, the logo URL is 200.
+- **Deployed 2026-10-21 00:24 IST** (user: "Deploy now", 0 bills in the 10 min before): ff-merge `69412a3`→`fbc43c0` only —
+  no backup (no DB change), no HUP / flush / migrate / build. Anchor `/root/predeploy_20261021_splash/` (HEAD before).
+  Verified: 6 `/staff` routes 200 with bundle `index-BSzS8Vfx.js`, logo + icon PNG 200, manifest background `#f4f6f5`, SW
+  `07f340985c04`; headless phone against splashbox.in with the bundle held: loading screen on `rgb(244,246,245)` with icon +
+  logo loaded, then the sign-in page with the logo, 0 page errors; 0 Error Log, 0 nginx 5xx, local patches intact,
+  `post_deploy_verify_live.sh` all passed. Rollback: `git reset --hard 69412a3` (as frappe_user) — nothing else.
 
 ## Bulk transfers (LIVE 2026-10-02 20:11 IST, `8f9f04c` + `41f7438` — owner asked for all four kinds)
 Deployed after hours (last bill 19:54): ff + app_hooks drop + HUP + website cache; workers need no restart (RQ forks a
