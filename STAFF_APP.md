@@ -220,7 +220,14 @@ REQUESTED model id — the API may answer with a dated id), shown in Settings as
 Rollback: `git reset --hard <anchor>` + HUP + cache drops; remove the key (`update_site_config(..., "None")` — the
 STRING "None"; Python None writes `null`). The four DocTypes are inert and can stay.
 
-### Receipts and Bills from paper (1.13.0, built 2026-10-20 — mockup v4 https://claude.ai/artifact/SFuLzMwDr3QV6LXPSGZAGb)
+### Receipts and Bills from paper (1.13.0 `cf01b91`, LIVE 2026-10-20 15:57 IST — mockup v4 https://claude.ai/artifact/SFuLzMwDr3QV6LXPSGZAGb)
+Deployed in shop hours at the user's request, the light way (no migrate / build / flush / restart, no full backup in shop
+hours): before-copy = the 09:00 IST backup + dumps of `tabOrder Paper` and the Settings Singles rows in
+`/root/predeploy_20261020_pr_pi/` (HEAD before `1f056db`); ff-merge; `reload_doc` order_paper_receiver, order_paper_settings,
+order_paper; Settings saved with *Receipts and Bills are on*, receivers dollykhare.sb + vishnuk.kgs, freight account
+"Freight & Forwarding Charges - KGS" (the one in use; "Freight and Forwarding Charges - KGS" was last used 13-05); HUP web;
+app_hooks + website cache dropped. Verified: routes 200 with the new bundle, Guest 403, pr/pi = 1 only for the two
+receivers, six PO papers read by the old code open fine, 0 Error Log / 0 nginx 5xx, `post_deploy_verify_live.sh` passed.
 Owner decisions (20-10): (1) totals that don't match **block both Save draft and Submit** until fixed; (2) only the
 people on the Settings list make Receipts / Bills (Dolly + Vishnu); (3) a Bill after a Receipt comes from the same
 reading, a Bill made directly is read by the AI; match % shown everywhere; last purchase rate + discount shown.

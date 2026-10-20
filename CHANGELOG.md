@@ -6,7 +6,7 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
-## [1.13.0] - 2026-10-20 (Order from Paper — Purchase Receipts and Bills from paper, item ranking, last bought; mockup v4)
+## [1.13.0] - 2026-10-20 (Order from Paper — Purchase Receipts and Bills from paper, item ranking, last bought; mockup v4; live on splashbox.in 15:57 IST `cf01b91`)
 
 ### New Features
 - **Receipt and Bill from paper** (PO / Receipt / Bill chosen before reading): the supplier's bill or challan becomes a **Purchase Receipt** (linked to the supplier's open, approved POs) or a **Purchase Invoice** (linked to unbilled Receipts, to POs as a bill that adds stock, or to nothing). Only the people listed in Order Paper Settings ("Who may make them" — owner's choice: Dolly + Vishnu) get them; POs stay open to every Purchase User / Manager
