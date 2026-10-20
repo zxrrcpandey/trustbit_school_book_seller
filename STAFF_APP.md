@@ -128,6 +128,16 @@ Owner decisions (2026-10-20): Claude Haiku 5.5 with automatic fallback to Sonnet
 System Manager + Shop Owner; the Anthropic key is OK'd (data leaves the server: pages + candidate item names);
 OpenAI and Google Gemini shown as "Coming soon" behind a provider interface. Sales Orders ship switched OFF.
 
+**Sonnet 5.5 / Opus 5.5 refuse a forced tool call (1.13.1).** `tool_choice` "tool"/"any" → HTTP 400 `tool_choice: type
+"tool" and "any" are not supported for this model.` (also Fable 5.1 / Mythos 5.1; Haiku 5.5 still takes it). Until 1.13.1
+that 400 was shown as "Model … is not available" — every Sonnet/Opus read failed on 20-10. `NO_FORCED_TOOL` models (and
+any model that sends that 400, remembered per process) get `tool_choice` `{"type": "auto", "disable_parallel_tool_use":
+true}`, the line `TOOL_ONLY` appended to the system prompt, `max_tokens + THINKING_ROOM` (they always think first — a
+silent ~8 s before the first line) and, when streamed, `eager_input_streaming: true` on the tool instead of the beta
+header. A text answer (`end_turn` without the tool) is asked for once more. "Not available" now means 404 / not found only.
+Settings note: on 20-10 the Better model is Haiku (= the main model), so the automatic second read is OFF — the user's
+choice at 17:55 IST; set Better model = Sonnet 5.5 in `/staff/settings` to turn it back on.
+
 **Flow.** `/staff/paper` → `paper.upload_paper` (≤ 10 photos re-encoded to JPEG ≤ 2000 px, or one PDF ≤ 10 MB /
 20 pages; magic-byte check; private Files `OP-…-N.jpg/pdf`; Order Paper "Uploaded") → read job on the **default**
 queue (`job_id` per paper, deduplicated, after commit) → AI reading (forced tool `record_paper`) → matching →

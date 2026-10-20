@@ -6,6 +6,13 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.13.1] - 2026-10-20 (Order from Paper — Sonnet 5.5 / Opus 5.5 can read papers again)
+
+### Fixed
+- **Every read with Claude Sonnet 5.5 or Opus 5.5 failed as "Model … is not available"** (6 failures on 20-10: the owner's Receipt OP-2026-00042 at 17:31 IST, re-reads at 12:47–16:13). The models are on the account; they refuse a FORCED tool call (`tool_choice` "tool" → HTTP 400 `tool_choice: type "tool" and "any" are not supported for this model.`), and the error text was read as "model not available" because it contains "model" and "not". These models now get `tool_choice` "auto" (at most one call) + an instruction naming the tool, 16k more `max_tokens` (they always think first), and the lines stream through the tool's `eager_input_streaming` (no beta header). A text answer instead of the tool is asked for once more. Any newer model that refuses a forced call is switched to "auto" on the spot (that refusal does not count as a try). Haiku 5.5 keeps the old request unchanged
+- "Model … is not available" is now shown only for a model the service does not know (404 / not found), not for every refusal that mentions the model
+- Measured on production with the paper that failed (1 photo, 5 lines, ₹6,744): Sonnet 5.5 10.9 s (first line 8.3 s), Opus 5.5 12.5 s, Haiku 5.5 6.9 s — all three add up to the paper; Haiku marked all 5 lines unclear, Sonnet / Opus none
+
 ## [1.13.0] - 2026-10-20 (Order from Paper — Purchase Receipts and Bills from paper, item ranking, last bought; mockup v4; live on splashbox.in 15:57 IST `cf01b91`)
 
 ### New Features

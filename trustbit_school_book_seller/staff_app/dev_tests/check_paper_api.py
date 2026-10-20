@@ -612,26 +612,45 @@ SEEN = []
 PLAN = []
 
 
-def sse(payload, cut=None, bad=False):
+NO_FORCED_MOCK = ("claude-sonnet-5-5", "claude-opus-5-5", "claude-future-6")  # models the mock refuses a forced call for
+
+
+def sse(payload, cut=None, bad=False, think=False, text_only=False):
 	"""A message as server-sent events, the tool input in small JSON fragments.
 	cut = stop after that many fragments with an overloaded error event;
-	bad = the JSON breaks after the lines (fine-grained streaming does not validate it)."""
+	bad = the JSON breaks after the lines (fine-grained streaming does not validate it);
+	think = a (hidden) thinking block comes first, as Sonnet / Opus 5.5 send it;
+	text_only = the model answers in text and never calls the tool."""
 	block = payload["content"][0]
 	text = json.dumps(block["input"])
 	if bad:
 		text = text[:-1] + ', "items_total": 1,,}'
 	ev = [{"type": "message_start", "message": {"id": payload["id"], "type": "message", "role": "assistant", "model": payload["model"],
-		"content": [], "stop_reason": None, "usage": {"input_tokens": payload["usage"]["input_tokens"], "output_tokens": 1}}},
-		{"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}},
+		"content": [], "stop_reason": None, "usage": {"input_tokens": payload["usage"]["input_tokens"], "output_tokens": 1}}}]
+	i = 0
+	if think:
+		ev += [{"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": "", "signature": ""}},
+			{"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": ""}},
+			{"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "c2ln"}},
+			{"type": "content_block_stop", "index": 0}]
+		i = 1
+	if text_only:
+		ev += [{"type": "content_block_start", "index": i, "content_block": {"type": "text", "text": ""}},
+			{"type": "content_block_delta", "index": i, "delta": {"type": "text_delta", "text": "The paper lists six books."}},
+			{"type": "content_block_stop", "index": i},
+			{"type": "message_delta", "delta": {"stop_reason": "end_turn", "stop_sequence": None}, "usage": {"output_tokens": 40}},
+			{"type": "message_stop"}]
+		return "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in ev).encode()
+	ev += [{"type": "content_block_start", "index": i, "content_block": {"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}},
 		{"type": "ping"}]
-	frags = [text[i : i + 11] for i in range(0, len(text), 11)]
+	frags = [text[k : k + 11] for k in range(0, len(text), 11)]
 	for j, f in enumerate(frags):
 		if cut is not None and j == cut:
 			ev.append({"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}})
 			break
-		ev.append({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": f}})
+		ev.append({"type": "content_block_delta", "index": i, "delta": {"type": "input_json_delta", "partial_json": f}})
 	else:
-		ev += [{"type": "content_block_stop", "index": 0},
+		ev += [{"type": "content_block_stop", "index": i},
 			{"type": "message_delta", "delta": {"stop_reason": payload["stop_reason"], "stop_sequence": None}, "usage": {"output_tokens": payload["usage"]["output_tokens"]}},
 			{"type": "message_stop"}]
 	return "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in ev).encode()
@@ -644,18 +663,30 @@ class Mock(BaseHTTPRequestHandler):
 	def do_POST(self):
 		body = json.loads(self.rfile.read(int(self.headers["content-length"])))
 		SEEN.append({"headers": dict(self.headers), "body": body})
-		status, payload = PLAN.pop(0) if PLAN else (200, None)
-		cut, bad = None, False
+		tc = body.get("tool_choice") or {}
+		no_forced = body["model"].startswith(NO_FORCED_MOCK)
+		if no_forced and tc.get("type") in ("tool", "any"):
+			# what the real service answers Sonnet / Opus 5.5 (seen on production 2026-10-20)
+			status, payload = 400, {"type": "error", "error": {"type": "invalid_request_error",
+				"message": 'tool_choice: type "tool" and "any" are not supported for this model.'}}
+		else:
+			status, payload = PLAN.pop(0) if PLAN else (200, None)
+		cut, bad, text_only = None, False, False
 		if status == "cut":
 			status, cut, payload = 200, payload, None
 		elif status == "badjson":
 			status, bad, payload = 200, True, None
+		elif status == "text":
+			status, text_only, payload = 200, True, None
 		if payload is None:
+			name = tc.get("name") or body["tools"][0]["name"]
 			payload = {"id": "msg_1", "type": "message", "model": body["model"] + "-20261001", "stop_reason": "tool_use",
-				"content": [{"type": "tool_use", "id": "t1", "name": body["tool_choice"]["name"], "input": READING1}],
+				"content": [{"type": "tool_use", "id": "t1", "name": name, "input": READING1}],
 				"usage": {"input_tokens": 6000, "output_tokens": 2500}}
+			if text_only and not body.get("stream"):
+				payload.update(stop_reason="end_turn", content=[{"type": "text", "text": "The paper lists six books."}])
 			if body.get("stream"):
-				raw = sse(payload, cut, bad)
+				raw = sse(payload, cut, bad, think=no_forced, text_only=text_only)
 				self.send_response(200)
 				self.send_header("content-type", "text/event-stream")
 				self.end_headers()
@@ -722,6 +753,50 @@ PLAN[:] = [(400, {"type": "error", "error": {"type": "invalid_request_error", "m
 paper.reread(m3)
 q = read(m3, None, "reread")
 check("anthropic: credit used up → plain message", q["status"] == "Failed" and "credit" in q["error"].lower())
+
+# Sonnet / Opus 5.5 refuse a forced tool call (production, 2026-10-20: every re-read
+# with them failed as "Model … is not available")
+paper.reread(m3, "claude-sonnet-5-5")
+n0 = len(SEEN)
+q = read(m3, "claude-sonnet-5-5", "reread")
+b, h = SEEN[-1]["body"], SEEN[-1]["headers"]
+check("sonnet 5.5: one request, tool_choice auto (at most one call) — never the forced call it refuses",
+	len(SEEN) - n0 == 1 and b["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}, (len(SEEN) - n0, b.get("tool_choice")))
+check("sonnet 5.5: the instruction names the tool, room for thinking, lines stream via eager_input_streaming (no beta header)",
+	b["system"].endswith(pr.TOOL_ONLY.format(name="record_paper")) and b["max_tokens"] == pr.READ_MAX_TOKENS + pr.THINKING_ROOM
+	and b["tools"][0].get("eager_input_streaming") is True and "anthropic-beta" not in h and b.get("stream") is True)
+check("sonnet 5.5: thinking block first, then the tool → Ready with all 6 lines", q["status"] == "Ready" and len(q["lines"]) == 6, (q["status"], q.get("error")))
+PLAN[:] = [("text", None)]
+paper.reread(m3, "claude-opus-5-5")
+n0 = len(SEEN)
+q = read(m3, "claude-opus-5-5", "reread")
+check("opus 5.5: answered in text instead of the tool → asked once more, then Ready",
+	q["status"] == "Ready" and len(SEEN) - n0 == 2 and len(q["lines"]) == 6, (q["status"], len(SEEN) - n0, q.get("error")))
+PLAN[:] = [("text", None), ("text", None)]
+paper.reread(m3, "claude-opus-5-5")
+q = read(m3, "claude-opus-5-5", "reread")
+check("opus 5.5: text twice → Failed with a plain 'try again', not 'not available'",
+	q["status"] == "Failed" and "try again" in q["error"].lower() and "not available" not in q["error"].lower(), q.get("error"))
+prov = pr.AnthropicProvider()
+blocks = [{"type": "text", "text": "x"}]
+n0 = len(SEEN)
+r_ = prov.call_tool("claude-future-6", "sys", blocks, pr.READ_TOOL, 1000)
+check("a newer model that refuses the forced call → remembered, asked again with auto at once (no try used up)",
+	len(SEEN) - n0 == 2 and SEEN[-2]["body"]["tool_choice"]["type"] == "tool" and SEEN[-1]["body"]["tool_choice"]["type"] == "auto"
+	and not pr.forced_tool_ok("claude-future-6") and r_["input"].get("lines"))
+n0 = len(SEEN)
+prov.call_tool("claude-future-6", "sys", blocks, pr.RERANK_TOOL, 500)
+check("…and the next call for it goes straight to auto", len(SEEN) - n0 == 1 and SEEN[-1]["body"]["tool_choice"]["type"] == "auto")
+n0 = len(SEEN)
+prov.call_tool("claude-haiku-5-5", "sys", blocks, pr.READ_TOOL, 1000)
+check("haiku 5.5 keeps the forced call and its max_tokens", SEEN[-1]["body"]["tool_choice"] == {"type": "tool", "name": "record_paper"}
+	and SEEN[-1]["body"]["max_tokens"] == 1000 and "eager_input_streaming" not in SEEN[-1]["body"]["tools"][0])
+e1 = pr._http_error(400, 'tool_choice: type "tool" and "any" are not supported for this model.', "m", "")
+e2 = pr._http_error(404, "model: claude-x not found", "claude-x", "")
+e3 = pr._http_error(400, "temperature is not supported for this model", "m", "")
+check("'not available' only for a model the service does not know",
+	"not available" not in e1.staff_message and "not available" in e2.staff_message and "not available" not in e3.staff_message,
+	(e1.staff_message, e2.staff_message, e3.staff_message))
 CONF["kgs_paper_ai_url"] = "https://evil.example.com/v1/messages"
 check("URL override to a foreign host ignored", pr.AnthropicProvider()._url() == pr.ANTHROPIC_URL)
 leaks = frappe.db.sql("select count(*) from `tabError Log` where error like %s", f"%{SECRET}%")[0][0]

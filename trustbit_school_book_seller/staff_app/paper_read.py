@@ -33,6 +33,22 @@ STREAM_BETA = "fine-grained-tool-streaming-2025-05-14"
 READ_TIMEOUT = 240  # seconds per AI call (the job's own timeout is 600)
 READ_MAX_TOKENS = 16000
 RERANK_MAX_TOKENS = 4000
+# Sonnet 5.5, Opus 5.5, Fable 5.1 and Mythos 5.1 refuse a FORCED tool call
+# (HTTP 400 'tool_choice: type "tool" and "any" are not supported for this
+# model.'). They get tool_choice "auto" + a plain instruction to answer through
+# the tool, and one more try if they answer in text. They always think before
+# answering, so they get more room (max_tokens counts the thinking too). Lines
+# stream through the tool's own eager_input_streaming flag, not the beta header.
+# Haiku 5.5 still takes the forced call and keeps the old request unchanged.
+NO_FORCED_TOOL = ("claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1", "claude-mythos-5-1")
+_NO_FORCED_SEEN = set()  # any other model the API refused a forced call for (this process)
+THINKING_ROOM = 16000
+TOOL_ONLY = "\n\nGive your whole answer by calling the {name} tool exactly once. Do not write the answer as text."
+
+
+def forced_tool_ok(model):
+	m = (model or "").strip()
+	return not (m.startswith(NO_FORCED_TOOL) or m in _NO_FORCED_SEEN)
 MAX_LINES = 400
 MAX_PAGES = 20
 MAX_PHOTOS = 10
@@ -183,6 +199,11 @@ class _StreamBroke(Exception):
 		self.detail = detail
 
 
+class _NoToolCall(PaperReadError):
+	"""The model answered without calling the tool. Only possible when the call
+	was not forced (tool_choice "auto"): worth one more try."""
+
+
 class LineStream:
 	"""Finds each finished object of the top-level "lines" array while the tool
 	input is still arriving as JSON fragments, so the phone can show the lines
@@ -296,35 +317,33 @@ class AnthropicProvider(Provider):
 		key = self._key()
 		if not key:
 			raise PaperReadError(_("The AI service is not set up yet. Ask the office (AI key missing)."), "kgs_paper_ai_key not set")
-		body = {
-			"model": model,
-			"max_tokens": max_tokens,
-			"system": system,
-			"messages": [{"role": "user", "content": [self._block(b) for b in content]}],
-			"tools": [tool],
-			"tool_choice": {"type": "tool", "name": tool["name"]},
-		}
-		if on_progress:
-			body["stream"] = True  # the lines reach the phone while the AI is still writing
-		headers = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"}
-		if on_progress:
-			headers["anthropic-beta"] = STREAM_BETA
+		forced = forced_tool_ok(model)
+		body, headers = self._request(key, model, system, content, tool, max_tokens, forced, bool(on_progress))
 		last = ""
-		for attempt in range(2):
+		attempt = 0
+		while attempt < 2:
+			attempt += 1
+			first = attempt == 1
 			try:
 				res = requests.post(self._url(), headers=headers, data=json.dumps(body), timeout=(10, timeout), stream=bool(on_progress))
 			except requests.RequestException as e:
 				last = f"{type(e).__name__}"
-				if attempt == 0:
+				if first:
 					time.sleep(3)
 					continue
 				raise PaperReadError(_("Could not reach the AI service. Please try again."), last)
 			if res.status_code == 200 and on_progress:
 				try:
 					return self._parse_stream(res, tool["name"], model, on_progress, time.monotonic() + timeout)
+				except _NoToolCall as e:
+					last = e.detail
+					if first:
+						on_progress("restart", None)
+						continue
+					raise
 				except _StreamBroke as e:
 					last = e.detail
-					if attempt == 0:
+					if first:
 						on_progress("restart", None)
 						time.sleep(3)
 						continue
@@ -332,16 +351,53 @@ class AnthropicProvider(Provider):
 				finally:
 					res.close()
 			if res.status_code == 200:
-				return self._parse(res, tool["name"], model)
+				try:
+					return self._parse(res, tool["name"], model)
+				except _NoToolCall as e:
+					last = e.detail
+					if first:
+						continue
+					raise
 			msg = _error_text(res)
 			last = f"HTTP {res.status_code}: {msg}"
+			if res.status_code == 400 and forced and "tool_choice" in msg.lower():
+				# a model that refuses forced tool calls (newer than NO_FORCED_TOOL):
+				# remember it and ask again with "auto" — this refusal is not a try
+				_NO_FORCED_SEEN.add((model or "").strip())
+				forced = False
+				body, headers = self._request(key, model, system, content, tool, max_tokens, forced, bool(on_progress))
+				attempt -= 1
+				continue
 			if res.status_code == 400 and headers.pop("anthropic-beta", None) and "beta" in msg.lower():
 				continue  # the beta was withdrawn: read without it (the lines then arrive at the end)
-			if res.status_code in self._RETRY and attempt == 0:
+			if res.status_code in self._RETRY and first:
 				time.sleep(min(20, max(2, flt(res.headers.get("retry-after")) or 5)))
 				continue
 			raise _http_error(res.status_code, msg, model, last)
 		raise PaperReadError(_("The AI service is busy. Please try again in a minute."), last)
+
+	def _request(self, key, model, system, content, tool, max_tokens, forced, stream):
+		body = {
+			"model": model,
+			"max_tokens": max_tokens,
+			"system": system,
+			"messages": [{"role": "user", "content": [self._block(b) for b in content]}],
+			"tools": [tool],
+		}
+		headers = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"}
+		if forced:
+			body["tool_choice"] = {"type": "tool", "name": tool["name"]}
+			if stream:
+				headers["anthropic-beta"] = STREAM_BETA
+		else:
+			body["tool_choice"] = {"type": "auto", "disable_parallel_tool_use": True}
+			body["system"] = system + TOOL_ONLY.format(name=tool["name"])
+			body["max_tokens"] = max_tokens + THINKING_ROOM
+			if stream:
+				body["tools"] = [dict(tool, eager_input_streaming=True)]
+		if stream:
+			body["stream"] = True  # the lines reach the phone while the AI is still writing
+		return body, headers
 
 	@staticmethod
 	def _parse(res, tool_name, model):
@@ -351,6 +407,11 @@ class AnthropicProvider(Provider):
 			raise PaperReadError(_("The AI service sent an answer we could not understand. Please try again."), res.text[:500])
 		usage = data.get("usage") or {}
 		block = next((c for c in data.get("content") or [] if c.get("type") == "tool_use" and c.get("name") == tool_name), None)
+		if not block and data.get("stop_reason") in ("end_turn", "stop_sequence"):
+			raise _NoToolCall(
+				_("The paper could not be read. Please try again."),
+				f"answered without the tool; stop_reason={data.get('stop_reason')}",
+			)
 		if not block or not isinstance(block.get("input"), dict):
 			raise PaperReadError(
 				_("The paper could not be read. If it is very long, send fewer pages at a time."),
@@ -421,6 +482,8 @@ class AnthropicProvider(Provider):
 			raise _StreamBroke(f"stream broke: {type(e).__name__}")
 		if not finished:
 			raise _StreamBroke(f"stream ended early; stop_reason={stop}")
+		if block is None and stop in ("end_turn", "stop_sequence"):
+			raise _NoToolCall(_("The paper could not be read. Please try again."), f"answered without the tool; stop_reason={stop}")
 		data = None
 		if block is not None:
 			text = "".join(parts)
@@ -459,7 +522,11 @@ def _http_error(status, msg, model, detail):
 		return PaperReadError(_("The AI key was not accepted. Ask the office to check it."), detail)
 	if "credit" in low or "billing" in low:
 		return PaperReadError(_("The AI credit is used up. Ask the owner to top it up."), detail)
-	if status == 404 or "model" in low and "not" in low:
+	# only a model the service does not know — not every refusal that says "model … not …"
+	# (the tool_choice refusal of Sonnet/Opus 5.5 once showed up here as "not available")
+	if status == 404 or "not_found" in low or "model" in low and any(
+		w in low for w in ("not found", "does not exist", "unknown model", "invalid model", "not available")
+	):
 		return PaperReadError(_("Model {0} is not available. Change it in Order from Paper → Settings.").format(model), detail)
 	if status == 413 or "too large" in low or "too long" in low:
 		return PaperReadError(_("The paper is too large for one reading. Send fewer pages."), detail)
