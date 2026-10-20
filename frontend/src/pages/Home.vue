@@ -74,6 +74,7 @@
           </div>
         </section>
       </template>
+      <BrandFooter class="pb-2 pt-3" />
     </main>
   </div>
 </template>
@@ -83,6 +84,7 @@ import { computed, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
 
 import AppHeader from "@/components/AppHeader.vue"
+import BrandFooter from "@/components/BrandFooter.vue"
 import Icon from "@/components/Icon.vue"
 import ListRow from "@/components/ListRow.vue"
 import { boot, myTransfers, poWaiting } from "@/data/api.js"

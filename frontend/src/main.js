@@ -22,4 +22,11 @@ if ("serviceWorker" in navigator && window.location.protocol === "https:") {
   }
 }
 
-createApp(App).use(router).mount("#app")
+// Mount once the first screen is decided (sign-in check done), so the loading
+// screen in index.html stays up until then instead of flashing an empty page.
+// Mounting replaces it. A failed first navigation still mounts, as before.
+const app = createApp(App).use(router)
+router
+  .isReady()
+  .catch(() => {})
+  .then(() => app.mount("#app"))

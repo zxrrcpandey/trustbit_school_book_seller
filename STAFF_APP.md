@@ -38,6 +38,28 @@ staff / More artboards; the "before" board is the old Home).
   approval rows yet), 0 Error Log, 0 nginx 5xx, `post_deploy_verify_live.sh` all passed. Rollback: `git reset --hard 2db8c3d`
   (as frappe_user) + HUP web + drop `app_hooks` / website cache.
 
+## Loading screen + "Powered by Trustbit" (1.14.1, 2026-10-21 — not deployed yet)
+Owner: "when we open the page it shows a blank, black page while loading" + "add the Trustbit logo at Home, the login
+page and the bottom of the settings page".
+- **Why it was blank:** `#app` was empty until the 106 KB (gzip) bundle downloaded and ran, and nothing coloured the page
+  before the CSS file arrived — an installed app on a dark-mode phone shows that as black.
+- **Loading screen** = plain HTML + an inline `<style>` + a tiny inline `<script>` in `frontend/index.html`, INSIDE
+  `<div id="app">` (`#kgs-splash`: KGS icon, "KGS Staff", spinner, "Loading…", Powered by Trustbit). Vue's mount
+  replaces it. `main.js` mounts only after `router.isReady()` (the sign-in check), so there is no empty frame between
+  the two. After 12 s: "Still loading. The internet seems slow." + Try again (`location.reload()`); a failed download of
+  a script / stylesheet / modulepreload (window `error` event, capture phase): "Couldn't load the app…" at once. The
+  watcher sits in `<head>` because Vite puts the bundle's `<script>` there. Colours are copied from `tokens.css` (the
+  page must draw before any CSS file arrives).
+- **Jinja trap:** the shell is rendered by `www/staff.py` through Jinja — the loading screen's CSS / JS must never contain
+  two curly braces in a row or a brace followed by `%` / `#`. `postbuild.mjs` fails the build unless the shell has exactly
+  the 4 `{{ staff_* }}` placeholders and still carries `#kgs-splash` + the logo.
+- **Logo:** `frontend/icons/trustbit-logo.png` (the 150×50 brand file; postbuild copies it to `/assets/…/staff/icons/`),
+  `components/BrandFooter.vue` ("Powered by" + logo, 24 px tall — sharp on 2× screens) at the end of Home, the bottom of
+  the sign-in page (`mt-auto`), More (above the version) and Order from paper → Settings; also on the loading screen.
+- Manifest `background_color` `#ffffff` → `#f4f6f5` (the page grey): launch → loading screen → app without a colour jump.
+- **Deploy needs:** pull only (frontend-only: the shell is `no_cache`, the manifest is served from `www/`). No HUP, migrate,
+  build or flush. Phones show it on their next launch. Verify: `/staff/home` contains `kgs-splash`, the logo URL is 200.
+
 ## Bulk transfers (LIVE 2026-10-02 20:11 IST, `8f9f04c` + `41f7438` — owner asked for all four kinds)
 Deployed after hours (last bill 19:54): ff + app_hooks drop + HUP + website cache; workers need no restart (RQ forks a
 fresh child per job). Anchor `/root/predeploy_20261002_staff_bulk/` (HEAD before `26904ad`). Read-only check on live
@@ -459,6 +481,11 @@ Home / tab bar / More (1.14.0, 2026-10-20): `check_home_browser.py` 65/65 (po_wa
 purchase-only and stock-only Homes; tabs per role, badge, filtered Papers, More, Sign out, Continue transfer, no sideways
 scroll, zero-padded times); the older suites updated to the new Home and re-run: staff API 63/63, paper API 161/161,
 staff browser 22/22, paper browser 84/84, Receipt/Bill browser 48/48 (paper.local), short-stock browser 20/20.
+Loading screen + logo (1.14.1, 2026-10-21): `check_home_browser.py` 88/88 — the app bundle is HELD by a Playwright route to
+prove the page alone shows the loading screen (light background, Loading…, logo), the 12-s "slow" message, the swap to
+Home once released, an aborted bundle → "Couldn't load the app" + Try again → reload into the app, and the logo (loaded,
+at the bottom, not under the tab bar / Save bar) on sign-in, Home, More and Settings. Re-run: staff browser 22/22, bulk
+browser 18/18 (needs a `long` worker), paper browser 84/84, Receipt/Bill browser 48/48, short-stock browser 20/20.
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.
 Receipts and Bills (1.13.0, 2026-10-20): `check_paper_purchase.py` 77/77 on a throwaway site with India Compliance

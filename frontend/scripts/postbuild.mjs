@@ -79,6 +79,16 @@ for (const v of ["staff_enabled", "staff_sw", "staff_allowed", "staff_user"]) {
 }
 // frappe safe_render rejects a template containing ".__" (dunder guard).
 if (html.includes(".__")) fail('".__" found in staff.html — frappe safe_render would refuse it')
+// The shell goes through Jinja: only our four {{ staff_* }} placeholders may use
+// its syntax (a stray "{%" or "{#" in the loading screen's CSS/JS breaks the page).
+{
+  const jinja = (html.match(/\{\{|\{%|\{#/g) || []).length
+  if (jinja !== 4) fail(`staff.html has ${jinja} Jinja openers, expected the 4 staff_* placeholders only`)
+}
+// The loading screen (index.html) must reach the shell, and the app must exist for it to hand over to
+for (const needle of ['id="kgs-splash"', "trustbit-logo.png", 'id="app"']) {
+  if (!html.includes(needle)) fail(`loading screen missing from staff.html: ${needle}`)
+}
 fs.writeFileSync(path.join(WWW, "staff.html"), html)
 fs.rmSync(builtIndex) // never ship the raw shell under /assets
 
@@ -99,7 +109,7 @@ fs.mkdirSync(iconDst, { recursive: true })
 for (const f of fs.readdirSync(path.join(FRONTEND, "icons"))) {
   fs.copyFileSync(path.join(FRONTEND, "icons", f), path.join(iconDst, f))
 }
-for (const f of ["icon-192.png", "icon-512.png", "icon-512-maskable.png", "apple-touch-icon-180.png", "favicon-32.png"]) {
+for (const f of ["icon-192.png", "icon-512.png", "icon-512-maskable.png", "apple-touch-icon-180.png", "favicon-32.png", "trustbit-logo.png"]) {
   if (!fs.existsSync(path.join(iconDst, f))) fail(`required icon missing: ${f}`)
 }
 

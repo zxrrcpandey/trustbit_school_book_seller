@@ -1,4 +1,6 @@
-/* KGS Staff — design tokens. The ONLY file with colour hex values.
+/* KGS Staff — design tokens. The ONLY file with colour hex values, except the
+   loading screen in ../index.html, which must draw before this file arrives and
+   copies page / brand / line / ink — change both together.
    Text pairings meet WCAG AA on their backgrounds. Light only. */
 :root {
   --kgs-brand: #0f7a5f;

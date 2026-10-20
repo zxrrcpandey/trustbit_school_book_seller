@@ -6,6 +6,13 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.14.1] - 2026-10-21 (Staff app — loading screen + Trustbit logo; not deployed yet)
+
+### Added
+- **Loading screen** (owner: "when we open the page it shows a blank, black page while loading"). The page itself now carries a light screen with the KGS icon, "KGS Staff", a spinner and "Loading…" — drawn before any app code arrives (inline styles in the page, no download needed), replaced by the app when the first screen is ready (the app now mounts after the sign-in check, so there is no empty frame in between). After 12 s it says "Still loading. The internet seems slow." with **Try again**; if the app's code fails to download it says "Couldn't load the app. Check the internet, then try again." at once. The installed app's launch colour (manifest `background_color`) is the page grey `#f4f6f5` instead of white, so launch → loading screen → app has no colour jump
+- **"Powered by Trustbit"** logo at the bottom of Home, the sign-in page, More (above the version) and Order from paper → Settings, and on the loading screen (`frontend/icons/trustbit-logo.png`, the 150×50 brand file, shown 24 px tall)
+- Build check: the shell may hold only the four `{{ staff_* }}` Jinja placeholders (the loading screen's CSS / JS must never contain `{{`, `{%` or `{#`), and must carry the loading screen and the logo
+
 ## [1.14.0] - 2026-10-20 (Staff app — new Home, bottom tab bar, More screen; built from the mockup https://claude.ai/artifact/MQutYJjoaazcXjnUDxRazs; live on splashbox.in 22:41 IST `bd50547`)
 
 ### Changed

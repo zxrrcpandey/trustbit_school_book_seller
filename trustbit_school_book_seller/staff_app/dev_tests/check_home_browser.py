@@ -268,6 +268,82 @@ try:
 		ok("stock: the bar opens the same transfer", lambda: expect(page.locator("div.font-semibold", has_text="Test Blue Pen").first).to_be_visible(timeout=10000))
 		ctx.close()
 
+		# ── 4. Loading screen + "Powered by Trustbit" (1.14.1) ────────────────
+		# Hold the app's JS bundle: the page alone must show the loading screen,
+		# never a blank one; releasing it must swap in the app.
+		BUNDLE = "**/staff/assets/index-*.js"
+
+		def logo_loaded(page):
+			try:
+				page.wait_for_function("[...document.querySelectorAll('img[alt=Trustbit]')].filter(i => i.offsetParent).every(i => i.complete && i.naturalWidth === 150)", timeout=5000)
+				return True
+			except Exception:
+				return False
+
+		def to_bottom(page):
+			page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+			page.wait_for_timeout(200)
+
+		def footer(page):
+			return page.locator("div", has=page.get_by_text("Powered by", exact=True)).filter(has=page.get_by_role("img", name="Trustbit")).last
+
+		ctx = browser.new_context(**PHONE)
+		page = ctx.new_page()
+		watch(page)
+		page.goto(f"{BASE}/staff/login")
+		ok("login: Powered by Trustbit at the bottom", lambda: expect(footer(page)).to_be_visible(timeout=10000))
+		check("login: logo image loaded", logo_loaded(page))
+		box = footer(page).bounding_box()
+		check("login: logo sits at the bottom of the screen", box and box["y"] + box["height"] > 844 - 80, box)
+		page.screenshot(path=S + "shot_login.png")
+		login(page, OWNER)
+
+		held = []
+		page.route(BUNDLE, lambda route: held.append(route))
+		page.goto(f"{BASE}/staff/home", wait_until="commit")
+		splash = page.locator("#kgs-splash")
+		ok("splash: shown while the app's code is still downloading", lambda: expect(splash).to_be_visible(timeout=10000))
+		ok("splash: says Loading…", lambda: expect(splash.get_by_role("status")).to_have_text("Loading…"))
+		ok("splash: KGS Staff + Powered by Trustbit", lambda: (expect(splash.get_by_text("KGS Staff")).to_be_visible(), expect(splash.get_by_role("img", name="Trustbit")).to_be_visible()))
+		ok("splash: no Try again yet", lambda: expect(splash.get_by_role("button", name="Try again")).to_be_hidden())
+		check("splash: light page, not blank / black", page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(244, 246, 245)", page.evaluate("getComputedStyle(document.body).backgroundColor"))
+		page.wait_for_function("[...document.querySelectorAll('#kgs-splash img')].every(i => i.complete)")
+		page.screenshot(path=S + "shot_splash.png")
+		ok("splash: after 12 s says the internet seems slow + Try again", lambda: (expect(splash.get_by_role("status")).to_have_text("Still loading. The internet seems slow.", timeout=16000), expect(splash.get_by_role("button", name="Try again")).to_be_visible()))
+		page.screenshot(path=S + "shot_splash_slow.png")
+		check("splash: the bundle request was held", len(held) >= 1, len(held))
+		for r in held:
+			r.continue_()
+		page.unroute(BUNDLE)
+		ok("splash: replaced by Home once the code arrives", lambda: (expect(page.get_by_text(re.compile(r"^Good (morning|afternoon|evening), Saransh$"))).to_be_visible(timeout=15000), expect(splash).to_have_count(0)))
+		ok("home: Powered by Trustbit at the end of Home", lambda: (to_bottom(page), expect(footer(page)).to_be_visible()))
+		check("home: logo image loaded", logo_loaded(page))
+		box, navbox = footer(page).bounding_box(), nav(page).bounding_box()
+		check("home: logo not hidden under the tab bar", box and navbox and box["y"] + box["height"] <= navbox["y"], (box, navbox))
+		page.screenshot(path=S + "shot_home_footer.png")
+		page.wait_for_timeout(1000)
+		ok("splash: never comes back once the app is up", lambda: expect(splash).to_have_count(0))
+
+		page.route(BUNDLE, lambda route: route.abort())
+		page.goto(f"{BASE}/staff/home", wait_until="commit")
+		ok("splash: code that fails to download → message + Try again at once", lambda: (expect(splash.get_by_role("status")).to_have_text("Couldn't load the app. Check the internet, then try again.", timeout=5000), expect(splash.get_by_role("button", name="Try again")).to_be_visible()))
+		ok("splash: no spinner after a failure", lambda: expect(splash.locator(".kgs-spin")).to_be_hidden())
+		page.screenshot(path=S + "shot_splash_failed.png")
+		page.unroute(BUNDLE)
+		splash.get_by_role("button", name="Try again").click()
+		ok("splash: Try again reloads into the app", lambda: expect(page.get_by_text(re.compile(r"^Good (morning|afternoon|evening), Saransh$"))).to_be_visible(timeout=15000))
+
+		page.goto(f"{BASE}/staff/more")
+		ok("more: Powered by Trustbit above the version", lambda: (expect(footer(page)).to_be_visible(timeout=10000), expect(page.get_by_text(f"KGS Staff · version {VERSION}")).to_be_visible()))
+		check("more: logo before the version line", footer(page).bounding_box()["y"] < page.get_by_text(f"KGS Staff · version {VERSION}").bounding_box()["y"])
+		page.goto(f"{BASE}/staff/settings")
+		ok("settings: Powered by Trustbit at the bottom", lambda: (expect(page.get_by_text("Order from paper is on")).to_be_visible(timeout=10000), to_bottom(page), expect(footer(page)).to_be_visible()))
+		box, bar = footer(page).bounding_box(), page.get_by_role("button", name="Save settings").bounding_box()
+		check("settings: logo not hidden under the Save bar", box and bar and box["y"] + box["height"] <= bar["y"], (box, bar))
+		check("settings: logo image loaded", logo_loaded(page))
+		page.screenshot(path=S + "shot_settings_footer.png")
+		ctx.close()
+
 		check("no page errors or server errors", not errors, "; ".join(errors[:5]))
 		browser.close()
 finally:

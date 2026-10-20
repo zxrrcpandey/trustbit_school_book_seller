@@ -39,7 +39,10 @@
         Sign out
       </button>
 
-      <p class="text-center text-[13px] text-ink-faint">KGS Staff · version {{ version }}</p>
+      <div class="flex flex-col items-center gap-1.5 pt-2">
+        <BrandFooter />
+        <p class="text-center text-[13px] text-ink-faint">KGS Staff · version {{ version }}</p>
+      </div>
     </main>
   </div>
 </template>
@@ -48,6 +51,7 @@
 import { computed, onMounted, ref } from "vue"
 
 import AppHeader from "@/components/AppHeader.vue"
+import BrandFooter from "@/components/BrandFooter.vue"
 import Icon from "@/components/Icon.vue"
 import ListRow from "@/components/ListRow.vue"
 import { boot } from "@/data/api.js"

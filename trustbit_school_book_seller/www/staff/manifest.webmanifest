@@ -6,7 +6,7 @@
   "scope": "/staff/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#ffffff",
+  "background_color": "#f4f6f5",
   "theme_color": "#0b5d48",
   "lang": "en-IN",
   "icons": [

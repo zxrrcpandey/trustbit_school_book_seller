@@ -37,12 +37,15 @@
       </button>
       <p class="text-center text-[14px] text-ink-faint">Same email, password and code as the ERP.</p>
     </form>
+
+    <BrandFooter class="safe-bottom mt-auto pt-10" />
   </div>
 </template>
 
 <script setup>
 import { ref } from "vue"
 
+import BrandFooter from "@/components/BrandFooter.vue"
 import { login, loginOtp } from "@/data/session.js"
 
 const icon = "/assets/trustbit_school_book_seller/staff/icons/icon-192.png"

@@ -149,6 +149,7 @@
       </section>
       <p v-if="error" class="rounded-lg bg-danger-bg p-3 font-semibold text-danger-text">{{ error }}</p>
       <p v-if="saved" class="rounded-lg bg-ok-bg p-3 font-semibold text-ok-text">Saved. The next paper uses these settings.</p>
+      <BrandFooter class="pt-4" />
     </main>
 
     <div v-if="data" class="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-surface-line bg-surface px-4 pt-3">
@@ -163,6 +164,7 @@
 import { onMounted, reactive, ref } from "vue"
 
 import AppHeader from "@/components/AppHeader.vue"
+import BrandFooter from "@/components/BrandFooter.vue"
 import { getPaperSettings, savePaperSettings, searchReceivers } from "@/data/paper.js"
 
 const data = ref(null)
