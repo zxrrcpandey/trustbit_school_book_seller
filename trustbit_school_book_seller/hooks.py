@@ -168,6 +168,7 @@ scheduler_events = {
 # Every new top-level app route needs its own rule here.
 website_route_rules = [
 	{"from_route": "/staff/home", "to_route": "staff"},
+	{"from_route": "/staff/more", "to_route": "staff"},
 	{"from_route": "/staff/login", "to_route": "staff"},
 	{"from_route": "/staff/transfer", "to_route": "staff"},
 	{"from_route": "/staff/transfers", "to_route": "staff"},

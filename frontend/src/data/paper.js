@@ -48,6 +48,10 @@ export const PURPOSE = {
   pr: { doctype: "Purchase Receipt", party: "Supplier", partyLower: "supplier", short: "PR", title: "Receipt", slug: "purchase-receipt" },
   pi: { doctype: "Purchase Invoice", party: "Supplier", partyLower: "supplier", short: "PI", title: "Bill", slug: "purchase-invoice" },
 }
+// A paper's state as staff read it, with its chip colours (lists, Home)
+const STATUS_LABEL = { Uploaded: "Reading", Reading: "Reading", Ready: "To check", Saved: "Saved", Failed: "Not read", Discarded: "Discarded" }
+const STATUS_LOOK = { Ready: "bg-warn-bg text-warn-text", Saved: "bg-ok-bg text-ok-text", Failed: "bg-danger-bg text-danger-text" }
+export const paperStatus = (status) => ({ label: STATUS_LABEL[status] || status, look: STATUS_LOOK[status] || "bg-surface-line text-ink-muted" })
 export const purposeKey = (doctype) => Object.keys(PURPOSE).find((k) => PURPOSE[k].doctype === doctype) || "po"
 
 // match % colours: 90+ sure, 60–89 to check, below 60 not found

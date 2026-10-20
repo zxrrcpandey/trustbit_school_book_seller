@@ -3,7 +3,7 @@
     <span class="min-w-0">
       <span class="block truncate font-semibold">{{ short(t.from_warehouse) }} → {{ short(t.to_warehouse) }}</span>
       <span class="block text-[13px] text-ink-faint">
-        {{ t.name }} · {{ fmtDate(t.posting_date) }} {{ String(t.posting_time || "").slice(0, 5) }}<template v-if="showOwner"> · {{ t.owner }}</template>
+        {{ t.name }} · {{ fmtDate(t.posting_date) }} {{ hhmm(t.posting_time) }}<template v-if="showOwner"> · {{ t.owner }}</template>
       </span>
     </span>
     <span class="flex-none text-right">
@@ -16,7 +16,7 @@
 </template>
 
 <script setup>
-import { fmtDate, shortWarehouse as short } from "@/data/format.js"
+import { fmtDate, hhmm, shortWarehouse as short } from "@/data/format.js"
 
 defineProps({ t: { type: Object, required: true }, showOwner: { type: Boolean, default: false } })
 </script>

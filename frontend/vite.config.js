@@ -1,7 +1,13 @@
+import fs from "node:fs"
 import { fileURLToPath, URL } from "node:url"
 
 import vue from "@vitejs/plugin-vue"
 import { defineConfig } from "vite"
+
+// The app's release number is kept in CHANGELOG.md only (the Python metadata
+// still says 1.0.0): the first "## [x.y.z]" heading is the version shown on More.
+const changelog = fs.readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8")
+const VERSION = (changelog.match(/^## \[(\d+\.\d+\.\d+)\]/m) || [])[1] || "dev"
 
 // Built assets are committed under trustbit_school_book_seller/public/staff/
 // and served from /assets/trustbit_school_book_seller/staff/ (bench symlinks
@@ -10,6 +16,7 @@ import { defineConfig } from "vite"
 // Pattern copied from the Betul exec PWA (trustbit_ethanol, /exec).
 export default defineConfig({
   plugins: [vue()],
+  define: { __KGS_VERSION__: JSON.stringify(VERSION) },
   base: "/assets/trustbit_school_book_seller/staff/",
   resolve: {
     alias: {

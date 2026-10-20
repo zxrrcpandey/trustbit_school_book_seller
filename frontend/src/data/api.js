@@ -9,9 +9,18 @@ async function call(name, args, opts) {
 }
 
 let bootCache = null
+let bootInflight = null
 export async function boot(force = false) {
-  if (!bootCache || force) bootCache = await call("boot", {})
-  return bootCache
+  if (bootCache && !force) return bootCache
+  // Home and the tab bar both ask on the first screen: one request serves both
+  if (!bootInflight) {
+    bootInflight = call("boot", {})
+      .then((r) => (bootCache = r))
+      .finally(() => {
+        bootInflight = null
+      })
+  }
+  return bootInflight
 }
 
 export const lookupItem = (code, from, to) => call("lookup_item", { code, from_warehouse: from, to_warehouse: to })
@@ -21,6 +30,8 @@ export const stockLevels = (codes, from, to) => call("stock_levels", { item_code
 // Submitting can take a while on the shop's 1-CPU server with many lines.
 export const createTransfer = (args) => call("create_transfer", args, { timeoutMs: 90000 })
 export const myTransfers = (scope = "mine", days = 30) => call("my_transfers", { scope, days })
+// Home: POs waiting for the owners' approval ({approve} for a Shop Owner, {mine} for anyone else)
+export const poWaiting = () => call("po_waiting", {})
 export const getTransfer = (name) => call("get_transfer", { name })
 
 // Bulk: load many lines into the draft, and move more than max_lines in the background.

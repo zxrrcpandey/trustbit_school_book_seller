@@ -12,6 +12,25 @@ Print Format dumps), log `/root/predeploy_20261002_staff_app.log`. Verified: all
 registered, job `touch_staff_sessions` (*/10) created, `kgs_staff_session_days` = 7, 0 new Error Log / 5xx.
 **Not yet done:** a real phone sign-in + one real transfer with the owner (runbook step 9).
 
+## Home, bottom tab bar and More (1.14.0, built 2026-10-20 — NOT yet deployed)
+Built from the owner-approved mockup https://claude.ai/artifact/MQutYJjoaazcXjnUDxRazs (owner / purchase staff / stock
+staff / More artboards; the "before" board is the old Home).
+- **Home** (`pages/Home.vue`): greeting + date · Continue transfer (draft on this phone) · **Waiting for you**
+  (`ListRow`s, only when non-empty): POs to approve (Shop Owner) → `/app/purchase-order?workflow_state=Pending%20Approval`,
+  papers to check / not read (1 → that paper, more → `/papers?status=Ready|Failed`), "N of your POs wait for approval"
+  (others) → the same desk list `&owner=<me>` · **Start** tiles by role (`/paper?for=po|pr|pi|so`, `/transfer`) ·
+  **Recent** = papers + transfers merged, newest 5 by `creation`.
+- **Tab bar** (`components/BottomNav.vue`, in `App.vue`): on routes with `meta.tab` only (home, papers, transfers, more).
+  Tabs follow `boot` (Papers if any of po/so/pr/pi, Transfers if `can_transfer`). Badge = my Ready + Failed papers of 30
+  days from the shared store `data/home.js` (one `my_papers` call, reused ≤ 60 s by the bar, ≤ 5 s by Home).
+- **More** (`pages/More.vue`): profile, Remembered names / Settings, Add to home screen (`data/install.js` catches
+  `beforeinstallprompt` at start-up WITHOUT `preventDefault`, so Chrome's own install bar still shows), Sign out, version
+  (`__KGS_VERSION__` = first `## [x.y.z]` of CHANGELOG.md, set in `vite.config.js`).
+- Shared bits: `components/Icon.vue` (inline Lucide shapes), `components/ListRow.vue` (router link / ERP link / button),
+  CSS `.rows` (dividers after the icon), `.pb-nav`, `.safe-nav`, token `--kgs-mute`.
+- **Deploy needs:** pull + graceful HUP of the web workers (`po_waiting` is new Python) + drop `app_hooks` and the website
+  cache (new route rule `/staff/more`) — no migrate, build or flush. Phones pick up the new bundle on their next launch.
+
 ## Bulk transfers (LIVE 2026-10-02 20:11 IST, `8f9f04c` + `41f7438` — owner asked for all four kinds)
 Deployed after hours (last bill 19:54): ff + app_hooks drop + HUP + website cache; workers need no restart (RQ forks a
 fresh child per job). Anchor `/root/predeploy_20261002_staff_bulk/` (HEAD before `26904ad`). Read-only check on live
@@ -319,7 +338,7 @@ Rebuild after any frontend change: `cd frontend && yarn install && set -o pipefa
 `public/staff/`, `www/staff.html`, `www/staff/*` together.
 
 ## Routes
-`/staff/home` (home + manifest start_url) · `/staff/login` · `/staff/transfer` · `/staff/transfers` · `/staff/t/<Stock Entry>` · `/staff/bulk/<ref>`
+`/staff/home` (home + manifest start_url) · `/staff/more` (1.14.0) · `/staff/login` · `/staff/transfer` · `/staff/transfers` · `/staff/t/<Stock Entry>` · `/staff/bulk/<ref>`
 · `/staff/paper` · `/staff/paper/<Order Paper>` · `/staff/papers` · `/staff/names` · `/staff/settings` (Order from Paper).
 **Never make `/staff/` a page the app depends on:** production nginx 301s every trailing-slash URL (`/staff/` → `/staff`),
 and `/staff` is outside the PWA scope `/staff/` — Android then won't offer install / shows a browser bar (found on
@@ -336,6 +355,7 @@ screen needs a new rule, or a hard refresh on it 404s.
 | `get_item`, `search_items(txt, from)` | search: every word must match name/code/ISBN, 15 rows, in-stock first |
 | `stock_levels(item_codes, from, to)` | one call to refresh all lines after a warehouse change |
 | `create_transfer(from, to, items, client_ref, remarks)` | builds AND submits the Material Transfer |
+| `po_waiting()` | Home's approval rows: `{approve: {count, by, since_days, since_time, url}}` for a Shop Owner, `{mine: {…}}` for anyone else, `{}` when nothing waits / workflow off / no PO read (any app user) |
 | `my_transfers(scope, days)`, `get_transfer(name)` | lists (Stock Manager may see everyone) / detail + slip PDF URL |
 | `trustbit_school_book_seller.staff_app.paper.*` | Order from Paper (upload, get/update paper, parties/items search, save, names, settings) — see that section |
 
@@ -428,6 +448,10 @@ re-run safety, stop mid-way, shop-hours + manager gates) · `check_staff_bulk_br
 `bench worker --queue long` (set + CSV merge, Stock User blocked >150, all stock there and back in the background).
 Option B (2026-10-03): `check_staff_reco.py` 43/43 (all six examples) · `check_staff_reco_browser.py` 20/20. All suites now
 make fresh items per run (fixed test items drifted as suites moved stock around).
+Home / tab bar / More (1.14.0, 2026-10-20): `check_home_browser.py` 65/65 (po_waiting per role incl. 403s; owner,
+purchase-only and stock-only Homes; tabs per role, badge, filtered Papers, More, Sign out, Continue transfer, no sideways
+scroll, zero-padded times); the older suites updated to the new Home and re-run: staff API 63/63, paper API 161/161,
+staff browser 22/22, paper browser 84/84, Receipt/Bill browser 48/48 (paper.local), short-stock browser 20/20.
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.
 Receipts and Bills (1.13.0, 2026-10-20): `check_paper_purchase.py` 77/77 on a throwaway site with India Compliance

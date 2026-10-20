@@ -35,6 +35,31 @@ textarea {
   padding-top: env(safe-area-inset-top);
 }
 
+/* Bottom tab bar (Home / Papers / Transfers / More) and the room it needs */
+.safe-nav {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pb-nav {
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+}
+
+/* Rows inside one card: a thin line between them, starting after the icon */
+.rows > * + * {
+  position: relative;
+}
+.rows > * + *::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 64px;
+  height: 1px;
+  background: var(--kgs-mute);
+}
+.rows.rows-flat > * + *::before {
+  left: 16px;
+}
+
 :focus-visible {
   outline: 2px solid var(--kgs-brand);
   outline-offset: 2px;

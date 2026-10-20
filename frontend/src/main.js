@@ -2,6 +2,8 @@ import { createApp } from "vue"
 
 import App from "./App.vue"
 import "./index.css"
+// catches Chrome's one-time install offer for More → "Add to home screen"
+import "./data/install.js"
 import { router } from "./router.js"
 
 // Service worker: scope /staff/ only — it never controls /app (the desk).

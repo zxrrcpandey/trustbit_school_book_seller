@@ -44,7 +44,7 @@ with sync_playwright() as p:
 	page.fill("input[type=email]", "staff1@example.com")
 	page.fill("input[type=password]", "Kgs-Test-2026!x")
 	page.click("button[type=submit]")
-	ok("login lands on home", lambda: expect(page.get_by_text("Recent transfers")).to_be_visible(timeout=15000))
+	ok("login lands on home", lambda: expect(page.get_by_role("heading", name="Your recent transfers")).to_be_visible(timeout=15000))
 	page.screenshot(path=S + "shot_home.png")
 	native = page.evaluate("'BarcodeDetector' in window")
 	print("native BarcodeDetector in this browser:", native)

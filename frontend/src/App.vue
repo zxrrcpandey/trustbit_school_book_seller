@@ -14,12 +14,19 @@
     </div>
     <template v-else>
       <OfflineBanner />
-      <router-view />
+      <div :class="showNav ? 'pb-nav' : ''">
+        <router-view />
+      </div>
+      <BottomNav v-if="showNav" />
     </template>
   </div>
 </template>
 
 <script setup>
+import { computed } from "vue"
+import { useRoute } from "vue-router"
+
+import BottomNav from "./components/BottomNav.vue"
 import OfflineBanner from "./components/OfflineBanner.vue"
 import { logout } from "./data/session.js"
 
@@ -28,4 +35,8 @@ import { logout } from "./data/session.js"
 const env = window.staffEnv || {}
 const disabled = Number(env.enabled ?? 1) === 0
 const notAllowed = Number(env.allowed ?? 1) === 0
+
+// The tab bar belongs to the four top screens (route meta.tab), not to task screens
+const route = useRoute()
+const showNav = computed(() => !!route.meta.tab)
 </script>

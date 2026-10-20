@@ -236,10 +236,8 @@ def _pdf_url(name):
 # ── endpoints ────────────────────────────────────────────────────────────────
 
 
-@frappe.whitelist(methods=["POST"])
-def boot():
-	"""Home screen data for whoever may open the app; the tiles follow the roles
-	(transfers: stock staff; Order from Paper: purchase / sales staff)."""
+def _app_guard():
+	"""Anyone who may open the app (boot / home), whatever their role."""
 	if frappe.session.user in (None, "", "Guest"):
 		raise frappe.PermissionError(_("Please sign in again."))
 	if not app_enabled():
@@ -247,6 +245,14 @@ def boot():
 	if not app_user_allowed():
 		raise frappe.PermissionError(_("Your account has no role for the staff app."))
 	_rate_limit()
+
+
+@frappe.whitelist(methods=["POST"])
+def boot():
+	"""Home screen data for whoever may open the app; the tiles follow the roles
+	(transfers: stock staff; Order from Paper: purchase / sales staff)."""
+	_app_guard()
+	from trustbit_school_book_seller.po_approval import SHOP_OWNER
 	from trustbit_school_book_seller.staff_app.paper import boot_info
 
 	can_transfer = user_allowed()
@@ -258,12 +264,65 @@ def boot():
 		"full_name": frappe.utils.get_fullname(frappe.session.user),
 		"can_transfer": 1 if can_transfer else 0,
 		"is_manager": 1 if _is_manager() else 0,
+		"shop_owner": 1 if SHOP_OWNER in frappe.get_roles() else 0,
 		"warehouses": warehouses,
 		"default_from": default_from if default_from in names else None,
 		"max_lines": MAX_LINES,
 		"reco_reasons": RECO_REASONS,
 		"paper": boot_info(),
 	}
+
+
+@frappe.whitelist(methods=["POST"])
+def po_waiting():
+	"""Home's "Waiting for you" rows for Purchase Orders in the owners' approval.
+	A Shop Owner gets every PO waiting for approval (who sent them, the oldest);
+	anyone else gets only the POs they made themselves. Counts only: the list
+	itself opens in the ERP. Empty when the approval workflow is off or the user
+	may not read Purchase Orders."""
+	_app_guard()
+	from urllib.parse import quote
+
+	from trustbit_school_book_seller.po_approval import PENDING, SHOP_OWNER, _approval_active
+
+	if not _approval_active() or not frappe.has_permission("Purchase Order", "read"):
+		return {}
+	owner = SHOP_OWNER in frappe.get_roles()
+	filters = {"docstatus": 0, "workflow_state": PENDING}
+	if not owner:
+		filters["owner"] = frappe.session.user
+	# get_list, not get_all: user permissions decide what may be counted
+	rows = frappe.get_list("Purchase Order", filters=filters, fields=["name", "owner", "modified"], limit_page_length=500)
+	if not rows:
+		return {}
+	# "since" = when it was sent for approval (the open Workflow Action), else last change
+	sent = {}
+	for r in frappe.db.sql(
+		"""select reference_name, min(creation) from `tabWorkflow Action`
+		where reference_doctype = 'Purchase Order' and status = 'Open' and reference_name in %(names)s
+		group by reference_name""",
+		{"names": [r.name for r in rows]},
+	):
+		sent[r[0]] = r[1]
+	since = min(sent.get(r.name) or r.modified for r in rows)
+	url = "/app/purchase-order?workflow_state=" + quote(PENDING)
+	out = {
+		"count": len(rows),
+		"since_days": (frappe.utils.getdate() - since.date()).days,
+		"since_time": since.strftime("%H:%M"),
+	}
+	if owner:
+		by = {}
+		for r in rows:
+			by[r.owner] = by.get(r.owner, 0) + 1
+		out["by"] = [
+			{"name": (frappe.utils.get_fullname(u) or u).split(" ")[0], "n": n}
+			for u, n in sorted(by.items(), key=lambda x: (-x[1], x[0]))
+		]
+		out["url"] = url
+		return {"approve": out}
+	out["url"] = url + "&owner=" + quote(frappe.session.user)
+	return {"mine": out}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -618,7 +677,7 @@ def my_transfers(scope="mine", days=30):
 	owner_cond = "" if everyone else "and se.owner = %(user)s"
 	return frappe.db.sql(
 		f"""
-		select se.name, se.posting_date, se.posting_time, se.from_warehouse, se.to_warehouse,
+		select se.name, se.creation, se.posting_date, se.posting_time, se.from_warehouse, se.to_warehouse,
 			se.docstatus, se.owner, count(d.name) as line_count, sum(d.transfer_qty) as stock_qty,
 			(se.remarks like '%%[Staff app%%') as from_app
 		from `tabStock Entry` se

@@ -6,6 +6,20 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
+## [1.14.0] - 2026-10-20 (Staff app — new Home, bottom tab bar, More screen; built from the mockup https://claude.ai/artifact/MQutYJjoaazcXjnUDxRazs; NOT yet deployed)
+
+### Changed
+- **Home redesigned** (owner: "Home doesn't look good, it's very messy"). Top to bottom: KGS mark + "Good evening, <first name>" and the date; **Continue transfer** (green bar, only when a transfer is left on the phone); **Waiting for you** (only when something waits): Purchase Orders to approve (Shop Owners: count, who sent them, oldest — opens the ERP's list of POs waiting for approval), papers to check, papers that could not be read (one paper opens it, more open the Papers list filtered), and for everyone else "N of your POs wait for approval" (opens their own pending POs in the ERP); **Start** tiles in two columns, by role: Purchase Order, Receipt, Bill (separate tiles now, was one "Receipt or Bill" tile), Sales Order, Transfer — a lone tile or the last of an odd number runs the full width; **Recent**: papers and transfers in ONE list of 5 (Discarded papers left out), "kind · time" per row. A user with only papers or only transfers gets "Your recent papers / transfers" + See all
+- **Bottom tab bar** Home · Papers · Transfers · More (tabs follow the roles; Papers carries a red badge = my papers to check + not read, last 30 days). Shown on those four screens only — never while scanning, checking a paper or reading, where the bottom of the screen holds that screen's own buttons. Papers and Transfers lost their Back arrow (they are tabs now)
+- **More** (new screen `/staff/more`): name + what the person can do (Shop Owner · Purchase · Sales · Stock), Remembered names + Settings (moved off Home), "Add to home screen" (Chrome's install dialog in one tap when the browser offers it, else how-to for Android / iPhone; hidden once installed — replaces the install card that sat on Home), Sign out (moved off Home), app version (read from this changelog at build time)
+- Papers list takes `?status=Ready|Failed` ("Only To check · Show all")
+
+### Added
+- Endpoint `staff_app.api.po_waiting` (any app user): POs in "Pending Approval" — a Shop Owner gets all of them (count, per-sender counts, since when: the open Workflow Action, else last change); anyone else only their own. `frappe.get_list` (User Permissions apply), empty when the workflow is off or the user may not read Purchase Orders. `boot` gains `shop_owner`; `my_transfers` returns `creation`
+
+### Fixed
+- Transfer times before 10:00 showed as "5:56:" in the lists and on the transfer screen (Frappe sends "5:56:06"); now "05:56"
+
 ## [1.13.1] - 2026-10-20 (Order from Paper — Sonnet 5.5 / Opus 5.5 can read papers again; live on splashbox.in 18:51 IST `ba44307`)
 
 ### Fixed

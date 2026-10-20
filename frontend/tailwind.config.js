@@ -9,7 +9,7 @@ export default {
       colors: {
         brand: { DEFAULT: "var(--kgs-brand)", deep: "var(--kgs-brand-deep)", soft: "var(--kgs-brand-soft)" },
         ink: { DEFAULT: "var(--kgs-ink)", muted: "var(--kgs-ink-muted)", faint: "var(--kgs-ink-faint)" },
-        surface: { DEFAULT: "var(--kgs-surface)", page: "var(--kgs-page)", line: "var(--kgs-line)" },
+        surface: { DEFAULT: "var(--kgs-surface)", page: "var(--kgs-page)", line: "var(--kgs-line)", mute: "var(--kgs-mute)" },
         ok: { text: "var(--kgs-ok-text)", bg: "var(--kgs-ok-bg)" },
         warn: { text: "var(--kgs-warn-text)", bg: "var(--kgs-warn-bg)" },
         danger: { text: "var(--kgs-danger-text)", bg: "var(--kgs-danger-bg)" },

@@ -134,8 +134,10 @@ try:
 
 		# ── 1. Receipt from the paper, linked to the PO ──────────────────────
 		login(page, DOLLY)
-		ok("Dolly: 'Receipt or Bill from paper' tile", lambda: expect(page.get_by_text("Receipt or Bill from paper")).to_be_visible(timeout=15000))
-		page.get_by_text("Receipt or Bill from paper").click()
+		pr_tile = page.get_by_role("link", name=re.compile(r"^Receipt\s+Goods have arrived"))
+		ok("Dolly: Receipt and Bill tiles", lambda: (expect(pr_tile).to_be_visible(timeout=15000),
+			expect(page.get_by_role("link", name=re.compile(r"^Bill\s+Supplier's bill"))).to_be_visible()))
+		pr_tile.click()
 		ok("new paper: PO / Receipt / Invoice to choose from", lambda: (expect(page.get_by_role("button", name=re.compile("^Purchase Receipt"))).to_be_visible(),
 			expect(page.get_by_role("button", name=re.compile("^Purchase Invoice"))).to_be_visible()))
 		ok("Receipt preselected", lambda: expect(page.get_by_role("button", name=re.compile("^Purchase Receipt"))).to_have_attribute("aria-pressed", "true"))
@@ -231,7 +233,8 @@ print(json.dumps({{"docstatus": d.docstatus, "supplier": d.supplier, "dn": d.sup
 		page.on("pageerror", lambda e: errors.append(str(e)))
 		page.on("response", lambda r: errors.append(f"{r.status} {r.url}") if r.status >= 400 else None)
 		login(page, OWNER)
-		ok("owner home", lambda: expect(page.get_by_role("link", name="Settings")).to_be_visible(timeout=15000))
+		page.get_by_role("navigation", name="Main").get_by_role("link", name="More").click()
+		ok("owner: Settings row on More", lambda: expect(page.get_by_role("link", name=re.compile(r"^Settings"))).to_be_visible(timeout=15000))
 		page.goto(f"{BASE}/staff/settings")
 		ok("settings: Receipts and Bills section", lambda: expect(page.get_by_text("Receipts and Bills from paper")).to_be_visible(timeout=15000))
 		ok("settings: Dolly on the list", lambda: expect(page.get_by_text(DOLLY)).to_be_visible())

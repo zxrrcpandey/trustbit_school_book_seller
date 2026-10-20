@@ -17,17 +17,10 @@
 import { computed } from "vue"
 
 import { fmtDate } from "@/data/format.js"
+import { paperStatus } from "@/data/paper.js"
 
 const SHORT = { "Purchase Order": "PO", "Sales Order": "SO", "Purchase Receipt": "PR", "Purchase Invoice": "PI" }
 const props = defineProps({ p: { type: Object, required: true }, showOwner: { type: Boolean, default: false } })
-const LABEL = { Uploaded: "Reading", Reading: "Reading", Ready: "To check", Saved: "Saved", Failed: "Not read", Discarded: "Discarded" }
-const label = computed(() => LABEL[props.p.status] || props.p.status)
-const look = computed(
-  () =>
-    ({
-      Ready: "bg-warn-bg text-warn-text",
-      Saved: "bg-ok-bg text-ok-text",
-      Failed: "bg-danger-bg text-danger-text",
-    })[props.p.status] || "bg-surface-line text-ink-muted"
-)
+const label = computed(() => paperStatus(props.p.status).label)
+const look = computed(() => paperStatus(props.p.status).look)
 </script>

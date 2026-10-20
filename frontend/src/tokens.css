@@ -8,6 +8,8 @@
   --kgs-page: #f4f6f5;
   --kgs-surface: #ffffff;
   --kgs-line: #dde3e0;
+  /* row dividers inside a card, neutral icon squares */
+  --kgs-mute: #eef1ef;
 
   --kgs-ink: #17201c;
   --kgs-ink-muted: #46524d;

@@ -21,7 +21,7 @@
             <span class="min-w-0 flex-1">{{ doc.from_warehouse }}</span><span>→</span><span class="min-w-0 flex-1 text-right">{{ doc.to_warehouse }}</span>
           </div>
           <div class="mt-1 text-[14px] text-ink-muted">
-            {{ fmtDate(doc.posting_date) }} {{ doc.posting_time.slice(0, 5) }} · by {{ doc.owner_name }}
+            {{ fmtDate(doc.posting_date) }} {{ hhmm(doc.posting_time) }} · by {{ doc.owner_name }}
             <span v-if="doc.docstatus === 2" class="font-semibold text-danger-text"> · Cancelled</span>
             <span v-if="doc.docstatus === 0" class="font-semibold text-warn-text"> · Draft</span>
           </div>
@@ -61,7 +61,7 @@ import { useRoute } from "vue-router"
 
 import AppHeader from "@/components/AppHeader.vue"
 import { getTransfer } from "@/data/api.js"
-import { fmt, fmtDate } from "@/data/format.js"
+import { fmt, fmtDate, hhmm } from "@/data/format.js"
 
 const props = defineProps({ name: { type: String, required: true } })
 const route = useRoute()
