@@ -6,7 +6,17 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
-## [1.11.1] - 2026-10-20 (Order from Paper — net-rate fix after the first real papers)
+## [1.12.0] - 2026-10-20 (Order from Paper — the lines appear while the AI reads)
+
+### New Features
+- **Reading screen shows the paper's lines as they are read** (mockup option 4, "page strip", real PDF pages): every line the AI writes appears as a card with its title, quantity and rate exactly as printed and its page; the pages sit in a strip — ticked when read, outlined while being read — with the current page large above the cards; who sent the paper and its number show as soon as they are read. After the last line: "Matching with our items…", then a tick with the real number of lines, then the check screen. Our matched item, the colours and the rate after discount still come on the check screen
+- When the totals do not add up and the better model reads the paper again, the cards start over under "Reading again more carefully…" with the reason
+- PDF pages are drawn on the phone with pdf.js 4.10.38 (legacy build, about 1.8 MB, downloaded only the first time a PDF is shown; plain sheets stand in if it cannot load); pages just sent are shown from the phone's memory, a paper opened later loads the stored copy
+
+### Changed
+- The AI reading is streamed (Anthropic server-sent events): the read job pulls each finished line out of the arriving JSON (`paper_read.LineStream`) and keeps the lines so far in Redis (`kgs_paper_live:<paper>`, never the database, removed when the reading ends); the 2-second poll returns only the lines the phone does not have yet. Same model, same tokens, same cost. A stream that breaks half-way is asked for once more (the cards start over)
+
+## [1.11.1] - 2026-10-20 (Order from Paper — net-rate fix after the first real papers; live on splashbox.in 05:35 IST, `de8bcc8`)
 
 ### Fixed
 - **Purchase Orders from a paper were priced at the LIST price when the paper printed the discount in its own column or at the bottom** (Selina PDF: 605/580 instead of 484/464; Progress photo: 40 instead of 28). The AI copies the column labelled "Rate", which is often the price before discount; the order rate trusted it. The net rate is now worked out from the printed numbers (amount ÷ qty, list price less discount), never from the label

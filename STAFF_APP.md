@@ -90,7 +90,7 @@ of being blocked (Stock Users still get the red "Only X in …" and must ask a m
 - Production context (2026-10-02): SBGD has 1,440 negative items (−97,115 units) and 2,749 at zero; 1,408 of them have
   no valuation and only 93 of those a last purchase rate — expect managers to type rates often.
 
-## Order from Paper (DEPLOYED 2026-10-20 03:40 IST, `0c103da` — ON since 03:44 IST; net-rate fix = CHANGELOG 1.11.1)
+## Order from Paper (DEPLOYED 2026-10-20 03:40 IST, `0c103da` — ON since 03:44 IST; net-rate fix 1.11.1 live 05:35 IST `de8bcc8`; live lines while reading = 1.12.0)
 Deployed after hours (0 bills in the last 10 min; last bill 19:26 the evening before) by the runbook below: niced DB
 backup `20261020_033814-splashbox_in-database.sql.gz` (96 s), anchor `/root/predeploy_20261020_order_from_paper/`
 (HEAD before `8867aa7`, apps.txt, reload logs), ff-merge, `reload_doc` × 4, Order Paper Settings saved with
@@ -122,6 +122,22 @@ OpenAI and Google Gemini shown as "Coming soon" behind a provider interface. Sal
 20 pages; magic-byte check; private Files `OP-…-N.jpg/pdf`; Order Paper "Uploaded") → read job on the **default**
 queue (`job_id` per paper, deduplicated, after commit) → AI reading (forced tool `record_paper`) → matching →
 "Ready" → the check screen polls every 2 s → person checks lines → `save_order` → draft PO/SO → names learned.
+
+**Reading screen (1.12.0).** The reading is streamed (`stream: true`; the forced tool's input arrives as
+`input_json_delta` fragments). `paper_read.LineStream` pulls out each finished object of the top-level `lines` array
+(and the fields written before it: who sent the paper, its number); `paper.LiveReading` keeps the cleaned lines so far
+(`text, qty, unit, rate, mrp, amount, page` — as printed, no matching) in Redis `kgs_paper_live:<paper>` (30 min TTL,
+written ≤ once per 0.8 s, deleted when the job ends — never the DB). `get_paper(light=1, since, run)` returns only the
+lines the phone lacks; `run` changes when the lines start over (fallback model → `attempt` 2 + the reason in `note`;
+a stream broken half-way is retried once). Phases: reading → matching (build_state + AI double-check) → Ready.
+Phone (`components/PaperReading.vue`): page strip (✓ read / outlined = being read; a page counts as read when a line
+of a later page arrives — the AI writes in page order), the current page large with a sweep band (WHERE on the page is
+not known), the last 3 lines as cards (played 90–450 ms apart behind the polls), "Photo/Page n of N · k lines so far",
+then "Matching with our items…" and a tick with the real line count (from the Ready payload). Pages just sent come from
+the phone's memory (`rememberSent`, last 2 papers); a paper opened later loads the stored files. PDFs are drawn by
+pdf.js 4.10.38 (`data/pdfPages.js`, legacy build, lazy chunks ≈ 406 KB + a 1.36 MB worker emitted as `.js` — nginx
+1.18 serves `.mjs` without a JavaScript type; `isEvalSupported: false`); if it fails, plain sheets stand in.
+`frontend/.yarnrc` has `ignore-engines true` because pdfjs-dist 4 declares Node ≥ 20 and this build Mac runs 18.
 If the reading looks wrong (lines don't add up to the printed total, or ≥ 2 unclear lines) it is read once more
 with the fallback model, inside the monthly page cap.
 
@@ -331,7 +347,11 @@ Option B (2026-10-03): `check_staff_reco.py` 43/43 (all six examples) · `check_
 make fresh items per run (fixed test items drifted as suites moved stock around).
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.
-Order from Paper (2026-10-20; counts after the 1.11.1 net-rate fix): `check_paper_api.py` 135/135 (net rate from the
+Order from Paper (2026-10-20; counts after 1.12.0 — live lines): `check_paper_api.py` 150/150 (+ the stream scanner
+over random fragment sizes / a cut-off answer, live lines per poll + new run on restart, the fallback starting over,
+streamed SSE from the mock incl. a stream broken half-way) · `check_paper_browser.py` 83/83 (+ cards with the printed
+text while the fake AI writes slowly, progress text, photo from memory, tick, a 2-page PDF drawn by pdf.js from memory
+and after a reload from the stored copy, page 1 ticked when page 2 starts). Earlier (1.11.1): 135/135 (net rate from the
 two real papers, bottom-of-paper discount, normalising, class guard, MRP twins, alias ladder,
 upload refusals, fallback read, version conflicts, save PO + approval, idempotency, duplicate paper, learning,
 SO + copies, roles, long-session rule, settings, page cap, rate limit; the real Anthropic code path against a local

@@ -150,7 +150,12 @@ class Provider:
 	Content blocks are provider-neutral:
 	  {"type": "text", "text": ...}
 	  {"type": "image", "media_type": "image/jpeg", "data": <base64>}
-	  {"type": "pdf", "data": <base64>}"""
+	  {"type": "pdf", "data": <base64>}
+
+	on_progress(kind, payload), when given, is called while the answer is still
+	arriving: ("header", {top-level fields written before the lines}),
+	("lines", [raw line dicts just finished]), ("tick", None) and
+	("restart", None) when a broken answer is asked for again."""
 
 	name = ""
 	label = ""
@@ -158,8 +163,94 @@ class Provider:
 	def configured(self):
 		raise NotImplementedError
 
-	def call_tool(self, model, system, content, tool, max_tokens, timeout=READ_TIMEOUT):
+	def call_tool(self, model, system, content, tool, max_tokens, timeout=READ_TIMEOUT, on_progress=None):
 		raise NotImplementedError
+
+
+class _StreamBroke(Exception):
+	"""A streamed answer stopped half-way (connection lost, overloaded) — worth one retry."""
+
+	def __init__(self, detail):
+		super().__init__(detail)
+		self.detail = detail
+
+
+class LineStream:
+	"""Finds each finished object of the top-level "lines" array while the tool
+	input is still arriving as JSON fragments, so the phone can show the lines
+	as they are read. Only a scanner: the reading itself is the whole JSON,
+	parsed once at the end."""
+
+	def __init__(self):
+		self.text = ""
+		self.pos = 0
+		self.depth = 0
+		self.in_str = False
+		self.esc = False
+		self.str_start = 0
+		self.last_str, self.last_str_start = None, 0
+		self.key, self.key_start = None, 0
+		self.in_lines = False
+		self.obj_start = None
+		self.header = None  # top-level fields written before "lines"
+		self.lines = []
+
+	def feed(self, chunk):
+		"""Add a fragment; returns the line objects it completed."""
+		self.text += chunk
+		t, i, new = self.text, self.pos, []
+		while i < len(t):
+			c = t[i]
+			if self.in_str:
+				if self.esc:
+					self.esc = False
+				elif c == "\\":
+					self.esc = True
+				elif c == '"':
+					self.in_str = False
+					if self.depth == 1:
+						self.last_str, self.last_str_start = t[self.str_start + 1 : i], self.str_start
+			elif c == '"':
+				self.in_str, self.str_start = True, i
+			elif c == ":":
+				if self.depth == 1:
+					self.key, self.key_start = self.last_str, self.last_str_start
+			elif c in "{[":
+				if c == "[" and self.depth == 1 and self.key == "lines" and self.header is None:
+					self.in_lines = True
+					self.header = self._head(t[: self.key_start])
+				elif c == "{" and self.in_lines and self.depth == 2:
+					self.obj_start = i
+				self.depth += 1
+			elif c in "}]":
+				self.depth -= 1
+				if c == "}" and self.in_lines and self.depth == 2 and self.obj_start is not None:
+					try:
+						obj = json.loads(t[self.obj_start : i + 1])
+					except ValueError:
+						obj = None
+					if isinstance(obj, dict):
+						new.append(obj)
+					self.obj_start = None
+				elif c == "]" and self.in_lines and self.depth == 1:
+					self.in_lines = False
+			i += 1
+		self.pos = i
+		self.lines.extend(new)
+		return new
+
+	@staticmethod
+	def _head(prefix):
+		s = prefix.rstrip().rstrip(",").rstrip()
+		try:
+			out = json.loads(s + "}") if s != "{" else {}
+		except ValueError:
+			return {}
+		return out if isinstance(out, dict) else {}
+
+	def partial(self):
+		"""What was written before the answer was cut off (max_tokens)."""
+		return dict(self.header or {}, lines=list(self.lines))
 
 
 class AnthropicProvider(Provider):
@@ -191,7 +282,7 @@ class AnthropicProvider(Provider):
 			return {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b["data"]}}
 		raise ValueError(b["type"])
 
-	def call_tool(self, model, system, content, tool, max_tokens, timeout=READ_TIMEOUT):
+	def call_tool(self, model, system, content, tool, max_tokens, timeout=READ_TIMEOUT, on_progress=None):
 		import requests
 
 		key = self._key()
@@ -205,17 +296,31 @@ class AnthropicProvider(Provider):
 			"tools": [tool],
 			"tool_choice": {"type": "tool", "name": tool["name"]},
 		}
+		if on_progress:
+			body["stream"] = True  # the lines reach the phone while the AI is still writing
 		headers = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"}
 		last = ""
 		for attempt in range(2):
 			try:
-				res = requests.post(self._url(), headers=headers, data=json.dumps(body), timeout=(10, timeout))
+				res = requests.post(self._url(), headers=headers, data=json.dumps(body), timeout=(10, timeout), stream=bool(on_progress))
 			except requests.RequestException as e:
 				last = f"{type(e).__name__}"
 				if attempt == 0:
 					time.sleep(3)
 					continue
 				raise PaperReadError(_("Could not reach the AI service. Please try again."), last)
+			if res.status_code == 200 and on_progress:
+				try:
+					return self._parse_stream(res, tool["name"], model, on_progress, time.monotonic() + timeout)
+				except _StreamBroke as e:
+					last = e.detail
+					if attempt == 0:
+						on_progress("restart", None)
+						time.sleep(3)
+						continue
+					raise PaperReadError(_("The AI service is busy. Please try again in a minute."), last)
+				finally:
+					res.close()
 			if res.status_code == 200:
 				return self._parse(res, tool["name"], model)
 			msg = _error_text(res)
@@ -248,6 +353,81 @@ class AnthropicProvider(Provider):
 			# answer with a dated id such as claude-haiku-5-5-2026xxxx
 			"model": model,
 			"served_model": str(data.get("model") or "")[:80],
+		}
+
+	@staticmethod
+	def _parse_stream(res, tool_name, model, on_progress, deadline):
+		"""Server-sent events → the same dict as _parse(), calling on_progress
+		as lines finish. The forced tool's input arrives as input_json_delta
+		fragments; the scanner hands over each finished line."""
+		import requests
+
+		scan, parts, usage = LineStream(), [], {}
+		stop, served, block, finished, header_sent = "", "", None, False, False
+		try:
+			for raw in res.iter_lines():
+				if time.monotonic() > deadline:
+					raise PaperReadError(_("Reading took too long. Send fewer pages at a time."), "stream deadline passed")
+				if not raw or not raw.startswith(b"data:"):
+					continue  # "event:" lines repeat the type that is inside the data
+				try:
+					ev = json.loads(raw[5:].decode("utf-8", "replace"))
+				except ValueError:
+					continue
+				kind = ev.get("type")
+				if kind == "message_start":
+					msg = ev.get("message") or {}
+					usage.update(msg.get("usage") or {})
+					served = str(msg.get("model") or "")
+				elif kind == "content_block_start":
+					cb = ev.get("content_block") or {}
+					if block is None and cb.get("type") == "tool_use" and cb.get("name") == tool_name:
+						block = ev.get("index")
+				elif kind == "content_block_delta":
+					d = ev.get("delta") or {}
+					if block is not None and ev.get("index") == block and d.get("type") == "input_json_delta":
+						chunk = d.get("partial_json") or ""
+						parts.append(chunk)
+						new = scan.feed(chunk)
+						if scan.header is not None and not header_sent:
+							header_sent = True
+							on_progress("header", scan.header)
+						if new:
+							on_progress("lines", new)
+						else:
+							on_progress("tick", None)
+				elif kind == "message_delta":
+					stop = (ev.get("delta") or {}).get("stop_reason") or stop
+					usage.update({k: v for k, v in (ev.get("usage") or {}).items() if v is not None})
+				elif kind == "message_stop":
+					finished = True
+					break
+				elif kind == "error":
+					err = ev.get("error") or {}
+					raise _StreamBroke(f"stream error {err.get('type')}: {str(err.get('message') or '')[:200]}")
+		except requests.RequestException as e:
+			raise _StreamBroke(f"stream broke: {type(e).__name__}")
+		if not finished:
+			raise _StreamBroke(f"stream ended early; stop_reason={stop}")
+		data = None
+		if block is not None:
+			text = "".join(parts)
+			try:
+				data = json.loads(text) if text.strip() else {}
+			except ValueError:
+				data = scan.partial() if stop == "max_tokens" else None
+		if not isinstance(data, dict):
+			raise PaperReadError(
+				_("The paper could not be read. If it is very long, send fewer pages at a time."),
+				f"no tool_use; stop_reason={stop}",
+			)
+		return {
+			"input": data,
+			"input_tokens": cint(usage.get("input_tokens")) + cint(usage.get("cache_creation_input_tokens")) + cint(usage.get("cache_read_input_tokens")),
+			"output_tokens": cint(usage.get("output_tokens")),
+			"stop_reason": stop,
+			"model": model,
+			"served_model": served[:80],
 		}
 
 
@@ -288,7 +468,7 @@ class FakeProvider(Provider):
 	def configured(self):
 		return True
 
-	def call_tool(self, model, system, content, tool, max_tokens, timeout=READ_TIMEOUT):
+	def call_tool(self, model, system, content, tool, max_tokens, timeout=READ_TIMEOUT, on_progress=None):
 		spec = frappe.conf.get("kgs_paper_ai_fake")
 		if isinstance(spec, str):
 			with open(spec) as f:
@@ -300,6 +480,14 @@ class FakeProvider(Provider):
 			ans = (spec.get("by_model") or {}).get(model) or spec.get("reading") or spec
 		if isinstance(ans, dict) and ans.get("_fail"):
 			raise PaperReadError(_(ans["_fail"]), "fake failure")
+		if on_progress and isinstance(ans, dict):
+			# the browser test sets "_stream_delay" (seconds per line) to watch lines arrive
+			delay = flt(spec.get("_stream_delay"))
+			on_progress("header", {k: v for k, v in ans.items() if k != "lines"})
+			for ln in ans.get("lines") or []:
+				if delay:
+					time.sleep(delay)
+				on_progress("lines", [ln])
 		pages = sum(1 for b in content if b["type"] in ("image", "pdf"))
 		return {"input": json.loads(json.dumps(ans)), "input_tokens": 1500 * max(1, pages), "output_tokens": 800,
 			"stop_reason": "tool_use", "model": model}
@@ -507,26 +695,10 @@ def clean_reading(raw):
 	raw = raw if isinstance(raw, dict) else {}
 	lines = []
 	for ln in (raw.get("lines") or [])[: MAX_LINES * 2]:
-		if not isinstance(ln, dict):
+		ln = clean_line(ln, len(lines) + 1)
+		if not ln:
 			continue
-		text, code, isbn = _txt(ln.get("text"), 200), _txt(ln.get("code"), 40), _txt(ln.get("isbn"), 40)
-		if not (text or code or isbn):
-			continue
-		lines.append({
-			"idx": len(lines) + 1,
-			"page": max(1, min(cint(ln.get("page")) or 1, 999)),
-			"text": text or code or isbn,
-			"code": code,
-			"isbn": isbn,
-			"class_hint": _txt(ln.get("class_hint"), 20),
-			"qty": _num(ln.get("qty")),
-			"unit": _txt(ln.get("unit"), 20),
-			"mrp": _num(ln.get("mrp")),
-			"discount_percent": (lambda d: d if d is not None and d <= 100 else None)(_num(ln.get("discount_percent"))),
-			"rate": _num(ln.get("rate")),
-			"amount": _num(ln.get("amount")),
-			"unclear": 1 if ln.get("unclear") is True else 0,
-		})
+		lines.append(ln)
 		if len(lines) >= MAX_LINES:
 			break
 	gstin = re.sub(r"[^0-9A-Z]", "", str(raw.get("party_gstin") or "").upper())
@@ -547,6 +719,31 @@ def clean_reading(raw):
 		"total_qty": _num(raw.get("total_qty")),
 		"warnings": [_txt(w, 200) for w in (raw.get("warnings") or [])[:10] if _txt(w, 200)],
 		"truncated": 1 if len(raw.get("lines") or []) > MAX_LINES else 0,
+	}
+
+
+def clean_line(ln, idx):
+	"""One line of the tool input → a typed dict, or None when it has no text."""
+	if not isinstance(ln, dict):
+		return None
+	text, code, isbn = _txt(ln.get("text"), 200), _txt(ln.get("code"), 40), _txt(ln.get("isbn"), 40)
+	if not (text or code or isbn):
+		return None
+	disc = _num(ln.get("discount_percent"))
+	return {
+		"idx": idx,
+		"page": max(1, min(cint(ln.get("page")) or 1, 999)),
+		"text": text or code or isbn,
+		"code": code,
+		"isbn": isbn,
+		"class_hint": _txt(ln.get("class_hint"), 20),
+		"qty": _num(ln.get("qty")),
+		"unit": _txt(ln.get("unit"), 20),
+		"mrp": _num(ln.get("mrp")),
+		"discount_percent": disc if disc is not None and disc <= 100 else None,
+		"rate": _num(ln.get("rate")),
+		"amount": _num(ln.get("amount")),
+		"unclear": 1 if ln.get("unclear") is True else 0,
 	}
 
 
@@ -629,9 +826,9 @@ def looks_wrong(data):
 	return ""
 
 
-def read(provider, model, blocks):
+def read(provider, model, blocks, on_progress=None):
 	note = {"type": "text", "text": f"The paper has {sum(1 for b in blocks if b['type'] != 'text')} file(s). Record every item line."}
-	res = provider.call_tool(model, READ_SYSTEM, blocks + [note], READ_TOOL, READ_MAX_TOKENS)
+	res = provider.call_tool(model, READ_SYSTEM, blocks + [note], READ_TOOL, READ_MAX_TOKENS, on_progress=on_progress)
 	data = clean_reading(res["input"])
 	if res.get("stop_reason") == "max_tokens":
 		data["truncated"] = 1

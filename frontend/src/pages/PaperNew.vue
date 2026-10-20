@@ -87,7 +87,7 @@ import { useRoute, useRouter } from "vue-router"
 import AppHeader from "@/components/AppHeader.vue"
 import { boot } from "@/data/api.js"
 import { newRef } from "@/data/draft.js"
-import { PURPOSE, prepareFile, uploadPaper } from "@/data/paper.js"
+import { PURPOSE, prepareFile, rememberSent, uploadPaper } from "@/data/paper.js"
 
 const route = useRoute()
 const router = useRouter()
@@ -166,6 +166,8 @@ async function send() {
       clientRef,
       purpose.value === "so" ? copies.value : null
     )
+    rememberSent(res.name, pages.value)
+    pages.value = [] // the previews now belong to the reading screen (not revoked on leaving)
     router.replace(`/paper/${encodeURIComponent(res.name)}`)
   } catch (e) {
     error.value = e.display ? e.display() : "The paper could not be uploaded. Please try again."

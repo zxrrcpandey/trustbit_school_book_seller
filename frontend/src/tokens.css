@@ -22,4 +22,13 @@
 
   /* dims the page behind a bottom sheet */
   --kgs-scrim: rgba(23, 32, 28, 0.45);
+
+  /* reading screen: page strip, the sweep over the page being read, shadows */
+  --kgs-strip: #e4e9e7;
+  --kgs-sheet-bar: #dfe5e2;
+  --kgs-scan: rgba(25, 192, 143, 0.26);
+  --kgs-scan-edge: rgba(15, 122, 95, 0.6);
+  --kgs-shadow: rgba(23, 32, 28, 0.18);
+  --kgs-badge: rgba(23, 32, 28, 0.72);
+  --kgs-pdf: #c0392b;
 }

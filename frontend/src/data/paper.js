@@ -12,7 +12,9 @@ async function call(name, args, opts) {
 
 export const uploadPaper = (purpose, files, clientRef, copies) =>
   call("upload_paper", { purpose, files, client_ref: clientRef, copies: copies || null }, { timeoutMs: 120000 })
-export const getPaper = (name, light = 0) => call("get_paper", { name, light })
+// light = the 2-second poll while the AI reads: since/run = the live lines this phone already has
+export const getPaper = (name, light = 0, since = 0, run = null) =>
+  call("get_paper", light ? { name, light, since, run } : { name, light })
 export const setParty = (name, party, version) => call("set_party", { name, party, version })
 export const updateLines = (name, changes, version, copies) =>
   call("update_lines", { name, changes, version, ...(copies === undefined ? {} : { copies }) })
@@ -92,6 +94,19 @@ async function shrinkPhoto(file) {
     URL.revokeObjectURL(url)
   }
 }
+
+// Pages this phone has just sent, so the reading screen shows them without
+// downloading them again. Only the last two papers are kept.
+const justSent = new Map()
+export function rememberSent(name, pages) {
+  justSent.set(name, pages.map((p) => ({ kind: p.kind, preview: p.preview, data: p.kind === "pdf" ? p.data : "" })))
+  while (justSent.size > 2) {
+    const [oldest, old] = justSent.entries().next().value
+    old.forEach((p) => p.preview && URL.revokeObjectURL(p.preview))
+    justSent.delete(oldest)
+  }
+}
+export const sentPages = (name) => justSent.get(name) || null
 
 // → {kind: "image" | "pdf", name, size, data (base64), preview (object URL or "")}
 export async function prepareFile(file) {

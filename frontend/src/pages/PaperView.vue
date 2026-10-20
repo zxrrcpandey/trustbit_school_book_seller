@@ -12,13 +12,17 @@
     </div>
     <div v-else-if="!paper" class="space-y-3 p-4"><div class="skeleton h-24" /><div class="skeleton h-40" /><div class="skeleton h-40" /></div>
 
-    <!-- Reading -->
-    <main v-else-if="reading" class="flex flex-col items-center gap-4 px-6 py-16 text-center">
-      <div class="h-14 w-14 animate-spin rounded-full border-4 border-surface-line border-t-brand-deep" aria-hidden="true" />
-      <div class="text-[20px] font-bold">Reading the paper…</div>
-      <p class="text-ink-muted">{{ paper.page_count || 1 }} page{{ paper.page_count === 1 ? "" : "s" }} · usually under a minute{{ elapsed > 5 ? ` · ${elapsed} s` : "" }}</p>
-      <p class="text-[14px] text-ink-faint">You can leave this screen — the paper waits under <router-link to="/papers" class="font-semibold text-brand-deep">Papers</router-link>.</p>
-    </main>
+    <!-- Reading: the lines appear as the AI writes them -->
+    <PaperReading
+      v-else-if="reading"
+      :files="paper.files || []"
+      :local="sentPages(paper.name)"
+      :pages="paper.page_count || 1"
+      :live="live"
+      :elapsed="elapsed"
+      :finished="finishing"
+      :found="found"
+    />
 
     <!-- Failed -->
     <main v-else-if="paper.status === 'Failed'" class="space-y-3 p-4">
@@ -277,10 +281,11 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import AppHeader from "@/components/AppHeader.vue"
 import ChooseItemSheet from "@/components/ChooseItemSheet.vue"
 import PaperLine from "@/components/PaperLine.vue"
+import PaperReading from "@/components/PaperReading.vue"
 import PartySheet from "@/components/PartySheet.vue"
 import { newRef } from "@/data/draft.js"
 import { fmt, fmtDate } from "@/data/format.js"
-import { discardPaper, getPaper, money, rereadPaper, saveOrder, searchSchools, setParty, updateLines } from "@/data/paper.js"
+import { discardPaper, getPaper, money, rereadPaper, saveOrder, searchSchools, sentPages, setParty, updateLines } from "@/data/paper.js"
 
 const props = defineProps({ name: { type: String, required: true } })
 
@@ -291,6 +296,9 @@ const busy = ref(false)
 const busyIdx = ref(null)
 const flash = ref(null)
 const elapsed = ref(0)
+const live = ref(null) // the lines read so far, while the AI is still writing
+const finishing = ref(false)
+const found = ref(0)
 const partyOpen = ref(false)
 const choosing = ref(null)
 const viewing = ref(false)
@@ -447,15 +455,26 @@ const msg = (e, fallback) => (e && e.display ? e.display() : fallback)
 
 // ── loading + polling while the job reads ───────────────────────────────────
 let pollTimer = null
+let finishTimer = null
 let started = Date.now()
 async function load() {
   loadError.value = ""
   try {
     paper.value = await getPaper(props.name)
-    if (reading.value) schedulePoll()
+    finishing.value = false
+    if (reading.value) {
+      mergeLive(paper.value.live)
+      schedulePoll()
+    }
   } catch (e) {
     loadError.value = msg(e, "Could not load the paper.")
   }
+}
+// a poll brings only the lines added since the last one (same run); a new run = start over
+function mergeLive(l) {
+  if (!l) return
+  const had = live.value
+  live.value = !had || had.run !== l.run ? { ...l, lines: [...(l.lines || [])] } : { ...l, lines: had.lines.slice(0, l.since).concat(l.lines || []) }
 }
 function schedulePoll() {
   clearTimeout(pollTimer)
@@ -464,9 +483,20 @@ function schedulePoll() {
 async function poll() {
   elapsed.value = Math.round((Date.now() - started) / 1000)
   try {
-    const r = await getPaper(props.name, 1)
-    if (["Uploaded", "Reading"].includes(r.status)) schedulePoll()
-    else await load()
+    const r = await getPaper(props.name, 1, live.value?.lines.length || 0, live.value?.run || null)
+    if (["Uploaded", "Reading"].includes(r.status)) {
+      mergeLive(r.live)
+      schedulePoll()
+    } else if (r.status === "Ready") {
+      // the poll returned the whole paper: the tick with the real line count, then the check screen
+      found.value = (r.lines || []).length
+      finishing.value = true
+      clearTimeout(finishTimer)
+      finishTimer = setTimeout(() => {
+        paper.value = r
+        finishing.value = false
+      }, 1300)
+    } else await load()
   } catch {
     schedulePoll() // a dropped connection must not stop the wait
   }
@@ -550,6 +580,8 @@ async function reread(model) {
     await rereadPaper(props.name, model)
     started = Date.now()
     elapsed.value = 0
+    live.value = null
+    finishing.value = false
     paper.value.status = "Reading"
     schedulePoll()
   } catch (e) {
@@ -638,11 +670,13 @@ async function save(send, allowDuplicate = false) {
 watch(() => props.name, () => {
   saveRef = newRef()
   started = Date.now()
+  live.value = null
   load()
 })
 onMounted(load)
 onBeforeUnmount(() => {
   clearTimeout(pollTimer)
+  clearTimeout(finishTimer)
   clearTimeout(flashTimer)
   clearTimeout(copiesTimer)
   clearTimeout(schoolTimer)

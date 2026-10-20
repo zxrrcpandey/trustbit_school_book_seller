@@ -18,6 +18,7 @@ import base64
 import binascii
 import json
 import re
+import time
 
 import frappe
 from frappe import _
@@ -322,6 +323,86 @@ def _enqueue_read(name, model, reason):
 	)
 
 
+# ── the lines so far, while the AI is still writing ──────────────────────────
+
+LIVE_TTL = 1800  # seconds; the job removes it as soon as the reading ends
+LIVE_FIELDS = ("text", "qty", "unit", "rate", "mrp", "amount", "page")
+
+
+def _live_key(name):
+	return f"kgs_paper_live:{name}"
+
+
+class LiveReading:
+	"""What the phone shows during a reading: the lines read so far (cleaned
+	like the final reading, as printed — no matching yet) in Redis, never in
+	the database. Written about once a second; the phone polls every 2 s.
+	"run" changes whenever the lines start over (fallback model, retried
+	stream), so the phone knows to drop the cards it has."""
+
+	EVERY = 0.8  # seconds between writes
+
+	def __init__(self, name):
+		self.name = name
+		self.s = {"run": "", "attempt": 0, "phase": "reading", "model": "", "note": "", "party": "", "no": "", "lines": []}
+		self.last = 0.0
+		self.dirty = False
+
+	def begin(self, model_label, note=""):
+		self.s.update({"run": frappe.generate_hash(length=10), "attempt": self.s["attempt"] + 1, "phase": "reading",
+			"model": model_label, "note": note, "lines": []})
+		self.put()
+
+	def phase(self, phase):
+		self.s["phase"] = phase
+		self.put()
+
+	def __call__(self, kind, payload):
+		s = self.s
+		if kind == "restart":
+			s["run"], s["lines"] = frappe.generate_hash(length=10), []
+			self.dirty = True
+		elif kind == "header" and isinstance(payload, dict):
+			s["party"], s["no"] = pr._txt(payload.get("party_name"), 140), pr._txt(payload.get("paper_no"), 60)
+			self.dirty = True
+		elif kind == "lines":
+			for raw in payload or []:
+				ln = pr.clean_line(raw, len(s["lines"]) + 1) if len(s["lines"]) < pr.MAX_LINES else None
+				if ln:
+					s["lines"].append({k: ln[k] for k in LIVE_FIELDS})
+					self.dirty = True
+		if self.dirty and time.monotonic() - self.last >= self.EVERY:
+			self.put()
+
+	def put(self):
+		self.last, self.dirty = time.monotonic(), False
+		try:
+			frappe.cache.set_value(_live_key(self.name), self.s, expires_in_sec=LIVE_TTL)
+		except Exception:
+			pass  # the phone then shows the reading screen without cards
+
+	def end(self):
+		try:
+			frappe.cache.delete_value(_live_key(self.name))
+		except Exception:
+			pass
+
+
+def _live(name, since=0, run=None):
+	"""The live reading for the phone: only the lines it does not have yet
+	(since = how many it has from the same run)."""
+	# expires=True: always from Redis (a plain get_value keeps a per-request copy,
+	# which set_value with an expiry never updates)
+	s = frappe.cache.get_value(_live_key(name), expires=True)
+	if not isinstance(s, dict):
+		return None
+	lines = s.get("lines") or []
+	since = max(0, min(cint(since), len(lines))) if run and run == s.get("run") else 0
+	out = {k: s.get(k) for k in ("run", "attempt", "phase", "model", "note", "party", "no")}
+	out.update({"count": len(lines), "since": since, "lines": lines[since:]})
+	return out
+
+
 # ── the read job ─────────────────────────────────────────────────────────────
 
 
@@ -337,18 +418,23 @@ def run_read_job(name, model=None, reason="first"):
 	frappe.db.set_value("Order Paper", name, {"status": "Reading", "error": None}, update_modified=False)
 	frappe.db.commit()
 
+	live = LiveReading(name)
 	status, error, state, data, used_model = "Failed", None, None, None, model
 	try:
 		blocks = pr.content_blocks(name)
 		pages = cint(paper.page_count) or 1
-		data, res = pr.read(provider, model, blocks)
+		label = _model_label(settings, model)
+		live.begin(label, _("Reading again with {0}.").format(label) if reason != "first" else "")
+		data, res = pr.read(provider, model, blocks, on_progress=live)
 		usage.append(pr.usage_entry(settings, res, reason, pages, provider.name))
 		notes = []
 		if reason == "first" and settings.auto_fallback and settings.fallback_model and settings.fallback_model != model:
 			why = pr.looks_wrong(data)
 			if why and _pages_left(settings) - pages >= 0:
 				try:
-					data2, res2 = pr.read(provider, settings.fallback_model, blocks)
+					label2 = _model_label(settings, settings.fallback_model)
+					live.begin(label2, _("Reading again with {0} because {1}.").format(label2, why))
+					data2, res2 = pr.read(provider, settings.fallback_model, blocks, on_progress=live)
 					usage.append(pr.usage_entry(settings, res2, "fallback", pages, provider.name))
 					if data2["lines"]:
 						data, used_model = data2, settings.fallback_model
@@ -357,6 +443,7 @@ def run_read_job(name, model=None, reason="first"):
 					frappe.log_error(title=f"Order Paper {name}: fallback read failed", message=e.detail)
 		if not data["lines"]:
 			raise pr.PaperReadError(_("No item lines were found on this paper. Take a clearer photo of the whole page."), "0 lines")
+		live.phase("matching")
 		state = build_state(paper, data, settings, provider, usage, notes)
 		if old_state:
 			_carry_decisions(old_state, state)
@@ -395,6 +482,7 @@ def run_read_job(name, model=None, reason="first"):
 			})
 	frappe.db.set_value("Order Paper", name, values)
 	frappe.db.commit()
+	live.end()
 
 
 def _model_label(settings, model):
@@ -749,12 +837,20 @@ def _duplicate(paper, party):
 
 
 @frappe.whitelist(methods=["POST"])
-def get_paper(name, light=0):
+def get_paper(name, light=0, since=0, run=None):
+	"""light = the 2-second poll during a reading: status + the lines read since
+	the last poll (since/run = what the phone already has)."""
 	paper = _load(name)
 	settings = _guard(paper.purpose)
-	if cint(light) and paper.status in ("Uploaded", "Reading"):
-		return {"name": paper.name, "status": paper.status, "purpose": paper.purpose, "page_count": paper.page_count}
-	return _paper_payload(paper, settings)
+	reading = paper.status in ("Uploaded", "Reading")
+	if cint(light) and reading:
+		out = {"name": paper.name, "status": paper.status, "purpose": paper.purpose, "page_count": paper.page_count}
+	else:
+		out = _paper_payload(paper, settings)
+	if reading:
+		out["file_kind"] = paper.file_kind
+		out["live"] = _live(paper.name, since, run)
+	return out
 
 
 def _check_version(paper, version):

@@ -16,6 +16,9 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  // pdf.js's worker is an ES module with exports (an iife build cannot hold it);
+  // it is emitted as a .js file — nginx serves .mjs without a JavaScript type
+  worker: { format: "es" },
   build: {
     outDir: "../trustbit_school_book_seller/public/staff",
     emptyOutDir: true,

@@ -22,6 +22,7 @@ SUP, CUST = "Paper Test Agency", "PT RDPS 3"
 PRINTED = "PAPER TEST AGENCY, BETUL (M.P.)"
 SPEC = S + "paper_fake_reading.json"
 SAMPLE = S + "paper_sample.jpg"
+SAMPLE_PDF = S + "paper_sample.pdf"  # 2 pages, made in the setup below
 PHONE = dict(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
 RESULTS = []
 
@@ -49,9 +50,11 @@ def bench_py(code):
 	return json.loads(out[-1]) if out else None
 
 
-def write_spec(reading):
+def write_spec(reading, delay=0):
+	"""delay = seconds per line: the fake AI then writes its lines slowly, so the
+	reading screen can be watched filling up."""
 	with open(SPEC, "w") as f:
-		json.dump({"reading": reading, "rerank": {"choices": []}}, f)
+		json.dump({"reading": reading, "rerank": {"choices": []}, "_stream_delay": delay}, f)
 
 
 PO_READING = {
@@ -68,11 +71,11 @@ PO_READING = {
 # the same paper again, now with list rates and a final total that is lower (a
 # discount the AI did not put in the rates) → the save screen must warn
 PO_READING2 = dict(PO_READING, grand_total=4800, lines=[
-	{"text": "Sunshine Eng. Reader Class III", "qty": 12, "rate": 250},
-	{"text": "Maths Maniya Golden Maple-3", "qty": 8, "rate": 275},
-	{"text": "Reynolds pen blue", "code": "KGS-PT-PEN", "qty": 3, "unit": "Pkt", "rate": 80},
-	{"text": "Koncept Intellect G.K. book five", "qty": 4, "rate": 199},
-	{"text": "Mystery gadget qqx", "qty": 2, "rate": 40},
+	{"page": 1, "text": "Sunshine Eng. Reader Class III", "qty": 12, "rate": 250},
+	{"page": 1, "text": "Maths Maniya Golden Maple-3", "qty": 8, "rate": 275},
+	{"page": 1, "text": "Reynolds pen blue", "code": "KGS-PT-PEN", "qty": 3, "unit": "Pkt", "rate": 80},
+	{"page": 2, "text": "Koncept Intellect G.K. book five", "qty": 4, "rate": 199},
+	{"page": 2, "text": "Mystery gadget qqx", "qty": 2, "rate": 40},
 ])
 SO_READING = {"paper_kind": "school_book_list", "school_or_class": "R.D. Public School — Class III",
 	"lines": [{"text": "Sunshine English Reader 3"}, {"text": "Golden Maple Maths Maniya 3"}]}
@@ -85,6 +88,9 @@ d = ImageDraw.Draw(img)
 for i, t in enumerate(["QUOTATION", {PRINTED!r}] + [ln["text"] for ln in {PO_READING["lines"]!r}]):
 	d.text((80, 80 + i * 60), t, fill="black")
 img.save({SAMPLE!r}, "JPEG", quality=85)
+img2 = Image.new("RGB", (1240, 1754), "white")
+ImageDraw.Draw(img2).text((80, 80), "PAGE 2 — CARRIED OVER", fill="black")
+img.save({SAMPLE_PDF!r}, "PDF", save_all=True, append_images=[img2], resolution=150)
 s = frappe.get_doc("Order Paper Settings")
 s.enabled, s.so_enabled, s.ai_model, s.rerank, s.auto_fallback, s.month_page_limit, s.peak_month_page_limit = 1, 1, "claude-haiku-5-5", 1, 1, 0, 0
 s.save(ignore_permissions=True)
@@ -97,7 +103,7 @@ from frappe.installer import update_site_config
 update_site_config("kgs_paper_ai_fake", {SPEC!r})
 print(json.dumps(1))
 """)
-write_spec(PO_READING)
+write_spec(PO_READING, delay=0.9)
 
 
 def login(page, email):
@@ -146,6 +152,15 @@ try:
 		page.get_by_role("button", name="Read the paper (1 page)").click()
 		ok("upload → paper page", lambda: expect(page).to_have_url(re.compile(r"/staff/paper/OP-\d{4}-\d+$"), timeout=20000))
 		po_paper = page.url.rsplit("/", 1)[1]
+		card = page.locator(".lc", has_text="Sunshine Eng. Reader Class III")
+		ok("reading: each line appears as a card while the AI is still writing", lambda: expect(card).to_be_visible(timeout=30000))
+		ok("reading: the card shows quantity + MRP as printed", lambda: expect(card).to_contain_text("12 · MRP 250.00"))
+		ok("reading: real progress under the title", lambda: expect(page.get_by_text(re.compile(r"^Photo 1 of 1 · \d+ lines? so far"))).to_be_visible())
+		ok("reading: who sent the paper, as printed", lambda: expect(page.get_by_text(PRINTED + " · PT-B-", exact=False)).to_be_visible())
+		check("reading: the photo comes from this phone (not downloaded again)", (page.locator(".th img").first.get_attribute("src") or "").startswith("blob:"))
+		check("reading: no sideways scroll", no_sideways(page))
+		page.screenshot(path=S + "shot_paper_reading.png")
+		ok("reading: tick + line count before the check screen", lambda: expect(page.get_by_text(re.compile(r"5 lines found\s*on 1 photo"))).to_be_visible(timeout=30000))
 		ok("read by the worker → check screen", lambda: expect(page.get_by_text("Check the lines")).to_be_visible(timeout=60000))
 		ok("supplier not sure → 'Choose the supplier'", lambda: expect(page.get_by_text("Choose the supplier", exact=True)).to_be_visible())
 		ok("'Next' blocked until the supplier is chosen", lambda: expect(page.get_by_text("Choose the supplier first")).to_be_visible())
@@ -242,10 +257,22 @@ print(json.dumps({{"state": po.workflow_state, "owner": po.owner, "remark": po.c
 		check("4 names remembered for the supplier", got["aliases"] >= 4, got["aliases"])
 
 		# ── 2. same paper again: remembered → Sure, supplier same as last time ─
-		write_spec(PO_READING2)
+		write_spec(PO_READING2, delay=2.5)  # slow enough to reload half-way and still see page 2 arrive
 		page.get_by_role("link", name="Read another paper").click()
-		page.locator("input[type=file][multiple]").set_input_files(SAMPLE)
-		page.get_by_role("button", name="Read the paper (1 page)").click()
+		page.locator("input[type=file][multiple]").set_input_files(SAMPLE_PDF)
+		ok("2-page PDF added", lambda: expect(page.get_by_text("PDF added")).to_be_visible(timeout=10000))
+		page.get_by_role("button", name="Read the PDF").click()
+		ok("PDF reading: both pages drawn by pdf.js in the strip", lambda: expect(page.locator(".th img[src^='data:image/jpeg']")).to_have_count(2, timeout=30000))
+		pdf_gets = []
+		page.on("response", lambda r: pdf_gets.append(r.status) if "/private/files/" in r.url and r.url.endswith(".pdf") else None)
+		page.reload()  # = opening the paper again later: the pages come from the stored copy
+		ok("PDF reading after a reload: pages drawn from the stored PDF", lambda: expect(page.locator(".th img[src^='data:image/jpeg']")).to_have_count(2, timeout=30000))
+		check("PDF reading after a reload: the stored PDF was fetched (200)", pdf_gets[:1] == [200], pdf_gets)
+		ok("PDF reading: page 1 ticked once the lines reach page 2", lambda: (
+			expect(page.get_by_text(re.compile(r"^Page 2 of 2 · \d+ lines so far"))).to_be_visible(timeout=30000),
+			expect(page.locator(".th.done")).to_have_count(1)))
+		ok("PDF reading: card carries its page", lambda: expect(page.locator(".lc", has_text="Koncept Intellect").locator("em")).to_have_text("p2"))
+		page.screenshot(path=S + "shot_paper_reading_pdf.png")
 		ok("2nd paper read", lambda: expect(page.get_by_text("Check the lines")).to_be_visible(timeout=60000))
 		ok("2nd paper: supplier same as last time", lambda: expect(page.get_by_text(re.compile("Same as last time for"))).to_be_visible())
 		ok("2nd paper: remembered lines Sure", lambda: (expect(line_card(page, "Sunshine Eng. Reader").get_by_text("Remembered from an earlier paper")).to_be_visible(),

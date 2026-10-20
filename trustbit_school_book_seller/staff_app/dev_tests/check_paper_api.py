@@ -329,10 +329,29 @@ for n in (n_pdf, n_png, a1):
 frappe.db.commit()
 by_model = {"claude-sonnet-5-5": dict(READING1, items_total=None, warnings=["page edge cut"])}
 fake(dict(READING1, items_total=99999.0), rerank={"choices": [{"line": 5, "candidate": "c1"}, {"line": 1, "candidate": "zz"}]}, by_model=by_model)
+SNAP = []
+_put = paper.LiveReading.put
+
+
+def _spy_put(self):
+	SNAP.append({"attempt": self.s["attempt"], "phase": self.s["phase"], "n": len(self.s["lines"]), "note": self.s["note"], "run": self.s["run"]})
+	_put(self)
+
+
+paper.LiveReading.put, paper.LiveReading.EVERY = _spy_put, 0  # write every line
 p1 = upload()
 p = read(p1)
+paper.LiveReading.put, paper.LiveReading.EVERY = _put, 0.8
 check("read: Ready", p["status"] == "Ready", p.get("error"))
 check("auto-fallback: total off → read again with Sonnet", p["model"] == "claude-sonnet-5-5" and p["notes"] and "Sonnet" in p["notes"][0], p["notes"])
+ns = [s["n"] for s in SNAP if s["attempt"] == 1]
+check("live: the first reading reached the phone line by line",
+	[n for i, n in enumerate(ns) if i == 0 or n != ns[i - 1]] == list(range(0, 7)), [(s["attempt"], s["n"]) for s in SNAP])
+s2 = [s for s in SNAP if s["attempt"] == 2]
+check("live: the fallback starts over as attempt 2 (new run) with the reason",
+	s2 and s2[0]["n"] == 0 and s2[0]["run"] != SNAP[0]["run"] and "Sonnet" in s2[0]["note"] and "add up" in s2[0]["note"], s2[:1])
+check("live: 'matching' after the last line, gone once Ready", SNAP[-1]["phase"] == "matching" and SNAP[-1]["n"] == 6
+	and paper._live(p1) is None and "live" not in p)
 calls = json.loads(frappe.db.get_value("Order Paper", p1, "usage_json"))
 check("usage: first + fallback (+ double-check) recorded with cost", [c["purpose"] for c in calls][:2] == ["first", "fallback"]
 	and all("usd" in c for c in calls) and frappe.db.get_value("Order Paper", p1, "pages_read") == 2)
@@ -531,9 +550,88 @@ check("owner changes the model + adds a newer one", st["values"]["ai_model"] == 
 check("next read uses the new model", pr.get_settings().ai_model == "claude-sonnet-5-5")
 check("usage this month counted", st["usage"]["pages"] >= 5 and st["usage"]["inr_gst"] >= 0)
 
+# ── lines while the AI is still writing: the scanner + the phone's poll ──────
+import random  # noqa: E402
+
+HEAD = {"paper_kind": "quotation", "party_name": 'Pal "Books" {Betul}', "paper_no": "Q-[7]"}
+LIVE_LINES = [{"page": 1, "text": 'A "quoted" {brace} [x] \\ back', "qty": 2, "rate": 40},
+	{"page": 2, "text": "lines", "code": "]}", "qty": 1, "rate": 5}, {"page": 2, "text": "Ünïcode ₹ line", "qty": 3}]
+full = json.dumps(dict(HEAD, lines=LIVE_LINES, items_total=95, warnings=["w [1]"]), ensure_ascii=False)
+rnd, ok, got = random.Random(7), True, []
+for _trial in range(30):
+	ls, got, i = pr.LineStream(), [], 0
+	while i < len(full):
+		k = rnd.randint(1, 9)
+		got += ls.feed(full[i : i + k])
+		i += k
+	if got != LIVE_LINES or ls.header != HEAD:
+		ok = False
+		break
+check("stream scanner: every line once, in order, whatever the fragment sizes (quotes, braces, escapes, unicode)", ok, got)
+ls = pr.LineStream()
+ls.feed(full[: full.index("Ünïcode") + 5])
+check("stream scanner: a cut-off answer keeps the header + the finished lines",
+	ls.partial() == dict(HEAD, lines=LIVE_LINES[:2]), ls.partial())
+ls = pr.LineStream()
+ls.feed('{"lines": [{"text": "x"}], "paper_kind": "bill"}')
+check("stream scanner: lines written first → empty header", ls.header == {} and ls.lines == [{"text": "x"}])
+
+as_user(PO_USER)
+lv = upload()
+live = paper.LiveReading(lv)
+check("live: nothing before the job starts", paper.get_paper(lv, 1)["live"] is None)
+live.begin("Claude Haiku 5.5")
+live("header", {"party_name": "Pal Books", "paper_no": "Q-7"})
+live("lines", [{"page": 1, "text": "Book A", "qty": 2, "rate": 40, "isbn": "x", "class_hint": "3"}, {"text": "  "}])
+live.put()
+g = paper.get_paper(lv, 1)
+check("live: the poll carries the lines read so far, as printed, display fields only",
+	g["live"]["count"] == 1 and g["live"]["lines"] == [{"text": "Book A", "qty": 2.0, "unit": "", "rate": 40.0, "mrp": None, "amount": None, "page": 1}]
+	and g["live"]["party"] == "Pal Books" and g["live"]["no"] == "Q-7" and g["live"]["attempt"] == 1 and g["live"]["model"] == "Claude Haiku 5.5", g["live"])
+run = g["live"]["run"]
+live("lines", [{"page": 2, "text": "Book B", "qty": 1}])
+live.put()
+g = paper.get_paper(lv, 1, 1, run)
+check("live: the next poll gets only the new lines", g["live"]["since"] == 1 and g["live"]["count"] == 2 and [x["text"] for x in g["live"]["lines"]] == ["Book B"])
+g = paper.get_paper(lv, 1, 1, "other-run")
+check("live: a phone with another run gets every line", g["live"]["since"] == 0 and len(g["live"]["lines"]) == 2)
+live("restart", None)
+live.put()
+g = paper.get_paper(lv, 1, 2, run)
+check("live: a retried answer starts over with a new run", g["live"]["run"] != run and g["live"]["count"] == 0 and g["live"]["since"] == 0)
+g = paper.get_paper(lv)
+check("live: the full payload of a paper being read carries it too (+ file kind, pages)",
+	g["live"] and g["file_kind"] == "Photos" and g["files"] and g["page_count"] == 1)
+live.end()
+check("live: removed at the end", paper.get_paper(lv, 1)["live"] is None)
+paper.discard_paper(lv)
+frappe.db.commit()
+
 # ── the real Anthropic code path, against a local mock server ────────────────
 SEEN = []
 PLAN = []
+
+
+def sse(payload, cut=None):
+	"""A message as server-sent events, the tool input in small JSON fragments.
+	cut = stop after that many fragments with an overloaded error event."""
+	block = payload["content"][0]
+	text = json.dumps(block["input"])
+	ev = [{"type": "message_start", "message": {"id": payload["id"], "type": "message", "role": "assistant", "model": payload["model"],
+		"content": [], "stop_reason": None, "usage": {"input_tokens": payload["usage"]["input_tokens"], "output_tokens": 1}}},
+		{"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}},
+		{"type": "ping"}]
+	frags = [text[i : i + 11] for i in range(0, len(text), 11)]
+	for j, f in enumerate(frags):
+		if cut is not None and j == cut:
+			ev.append({"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}})
+			break
+		ev.append({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": f}})
+	else:
+		ev += [{"type": "content_block_stop", "index": 0},
+			{"type": "message_delta", "delta": {"stop_reason": payload["stop_reason"], "stop_sequence": None}, "usage": {"output_tokens": payload["usage"]["output_tokens"]}},
+			{"type": "message_stop"}]
+	return "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in ev).encode()
 
 
 class Mock(BaseHTTPRequestHandler):
@@ -544,10 +642,20 @@ class Mock(BaseHTTPRequestHandler):
 		body = json.loads(self.rfile.read(int(self.headers["content-length"])))
 		SEEN.append({"headers": dict(self.headers), "body": body})
 		status, payload = PLAN.pop(0) if PLAN else (200, None)
+		cut = None
+		if status == "cut":
+			status, cut, payload = 200, payload, None
 		if payload is None:
 			payload = {"id": "msg_1", "type": "message", "model": body["model"] + "-20261001", "stop_reason": "tool_use",
 				"content": [{"type": "tool_use", "id": "t1", "name": body["tool_choice"]["name"], "input": READING1}],
 				"usage": {"input_tokens": 6000, "output_tokens": 2500}}
+			if body.get("stream"):
+				raw = sse(payload, cut)
+				self.send_response(200)
+				self.send_header("content-type", "text/event-stream")
+				self.end_headers()
+				self.wfile.write(raw)
+				return
 		raw = json.dumps(payload).encode()
 		self.send_response(status)
 		self.send_header("content-type", "application/json")
@@ -578,6 +686,13 @@ check("anthropic: image block + forced tool", body["messages"][0]["content"][0][
 u = json.loads(frappe.db.get_value("Order Paper", m1, "usage_json"))[0]
 check("anthropic: tokens + cost priced on the requested id", u["input_tokens"] == 6000 and u["output_tokens"] == 2500
 	and abs(u["usd"] - (6000 * 0.10 + 2500 * 0.50) / 1e6) < 1e-9 and u["served_model"].endswith("-20261001"))
+check("anthropic: the reading is streamed, and all 6 lines arrived", body.get("stream") is True and len(q["lines"]) == 6)
+PLAN[:] = [("cut", 9)]
+m4 = upload()
+n0 = len(SEEN)
+q = read(m4)
+check("anthropic: a stream that breaks half-way is asked for once more, then Ready",
+	q["status"] == "Ready" and len(SEEN) - n0 == 2 and len(q["lines"]) == 6, (q["status"], len(SEEN) - n0, q.get("error")))
 PLAN[:] = [(529, {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}})]
 m2 = upload(files=[{"name": "d.pdf", "data": pdf(1)}])
 q = read(m2)
@@ -596,7 +711,7 @@ leaks = frappe.db.sql("select count(*) from `tabError Log` where error like %s",
 leaks += frappe.db.sql("select count(*) from `tabOrder Paper` where concat_ws('|', usage_json, ai_json, lines_json, error) like %s", f"%{SECRET}%")[0][0]
 check("the AI key is in no log and no document", leaks == 0)
 srv.shutdown()
-for n in (m1, m2, m3):
+for n in (m1, m2, m3, m4):
 	paper.discard_paper(n)
 CONF.pop("kgs_paper_ai_key", None)
 CONF.pop("kgs_paper_ai_url", None)
