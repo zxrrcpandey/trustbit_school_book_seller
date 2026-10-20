@@ -108,6 +108,16 @@ matching were right; amounts and totals were read exactly. Fix (1.11.1): the net
 never from the label (see "Saving" below); a discount printed only at the bottom is put on the lines when it explains
 the printed totals exactly; the AI is told to copy rate/amount as printed and never apply a discount itself; the save
 screen warns when the rates do not explain the paper's totals.
+**Deploys of 20-10 (after hours, 0 bills in the last 10 min, no migrate/build/flush; ff + HUP web + app_hooks/website
+cache):** 1.11.1 net-rate fix `de8bcc8` at 05:35 IST (backup `20261020_053339-…`, anchor `/root/predeploy_20261020_rate_fix/`).
+OP-2026-00003 (the user's test photo, read at 04:45 by the old code, waiting Ready) had only its lines' `paper_rate`
+recomputed with the fix: ₹1,36,400 at list → ₹95,480 = the paper's printed net (before-copy of `lines_json` in the anchor,
+timeline comment on the paper). PUR-ORD-2026-00710 (Selina, draft) was NOT touched — still at 605/580.
+1.12.0 live lines `a6cd7d3` at 05:58 IST (backup `20261020_055716-…`, anchor `/root/predeploy_20261020_live_lines/`) and
+the fine-grained streaming fix `5d1986f` at 06:03 IST. Verified: /staff routes 200, new bundle + pdf.js chunks served as
+`application/javascript`, Guest 403, `get_paper(light, since, run)` on the server, 0 Error Log / 0 nginx 5xx,
+`post_deploy_verify_live.sh` passed; a real streamed Haiku read of a typed 30-line text (no paper, no document): lines
+from 1.4 s to 4.6 s. Not yet seen: the new screen on a real phone with a real paper.
 **To switch on:** set the key (runbook step 4), then the owner ticks *Order from paper is on* in `/staff/settings`;
 then one real paper end to end (step 7).
 

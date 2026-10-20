@@ -6,7 +6,7 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
-## [1.12.0] - 2026-10-20 (Order from Paper — the lines appear while the AI reads)
+## [1.12.0] - 2026-10-20 (Order from Paper — the lines appear while the AI reads; live on splashbox.in 05:58 IST `a6cd7d3`, line-by-line streaming `5d1986f` 06:03 IST)
 
 ### New Features
 - **Reading screen shows the paper's lines as they are read** (mockup option 4, "page strip", real PDF pages): every line the AI writes appears as a card with its title, quantity and rate exactly as printed and its page; the pages sit in a strip — ticked when read, outlined while being read — with the current page large above the cards; who sent the paper and its number show as soon as they are read. After the last line: "Matching with our items…", then a tick with the real number of lines, then the check screen. Our matched item, the colours and the rate after discount still come on the check screen
