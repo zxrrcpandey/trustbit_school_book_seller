@@ -88,6 +88,22 @@ check("clean: kind, gstin, numbers, caps", r["paper_kind"] == "other" and r["par
 	and r["lines"][0]["unclear"] == 0 and len(r["lines"]) == 2 and len(r["lines"][1]["text"]) == 200 and r["lines"][1]["qty"] is None)
 check("rate: printed / amount÷qty / MRP−discount", pr.paper_rate({"rate": 90}) == 90 and pr.paper_rate({"amount": 500, "qty": 4}) == 125
 	and pr.paper_rate({"mrp": 200, "discount_percent": 25}) == 150 and pr.paper_rate({"mrp": 200}) is None)
+# real papers (20-10-2026): the AI puts the LIST price in "rate" and the discount in its own field
+check("net rate: list rate + discount + net amount (Selina 6771)",
+	pr.paper_rate({"qty": 30, "mrp": 605, "rate": 605, "discount_percent": 20, "amount": 14520}) == 484)
+check("net rate: list rate + amount before the discount (Progress G-2904)",
+	pr.paper_rate({"qty": 55, "rate": 40, "discount_percent": 30, "amount": 2200}) == 28)
+check("net rate: a net-rate column next to the MRP is kept",
+	pr.paper_rate({"qty": 10, "mrp": 100, "rate": 75, "discount_percent": 25, "amount": 750}) == 75
+	and pr.paper_rate({"mrp": 100, "rate": 75, "discount_percent": 25}) == 75
+	and pr.paper_rate({"mrp": 605, "rate": 605, "discount_percent": 20}) == 484)
+r = pr.clean_reading({"discount_note": "Less: Discount 30%", "items_total": 33275, "grand_total": 23292.5, "lines": [
+	{"text": "Book A", "qty": 55, "rate": 40, "amount": 2200}, {"text": "Book B", "qty": 10, "rate": 3107.5, "amount": 31075}]})
+check("bottom-of-paper discount is put on the lines when it explains the totals",
+	[ln["discount_percent"] for ln in r["lines"]] == [30, 30] and pr.paper_rate(r["lines"][0]) == 28)
+r = pr.clean_reading({"discount_note": "Less 10%", "items_total": 1000, "grand_total": 1180, "lines": [
+	{"text": "Pen", "qty": 100, "rate": 10, "amount": 1000}]})
+check("…but not when the totals do not show it (tax on top)", r["lines"][0]["discount_percent"] is None)
 check("looks wrong: total mismatch / 2 unclear / fine",
 	"add up" in pr.looks_wrong({"items_total": 1000, "lines": [{"rate": 10, "qty": 5}]})
 	and "hard to read" in pr.looks_wrong({"lines": [{"unclear": 1}, {"unclear": 1}]})

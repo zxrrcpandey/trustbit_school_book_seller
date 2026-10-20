@@ -65,6 +65,15 @@ PO_READING = {
 		{"text": "Mystery gadget qqx", "qty": 2, "rate": 40},
 	],
 }
+# the same paper again, now with list rates and a final total that is lower (a
+# discount the AI did not put in the rates) → the save screen must warn
+PO_READING2 = dict(PO_READING, grand_total=4800, lines=[
+	{"text": "Sunshine Eng. Reader Class III", "qty": 12, "rate": 250},
+	{"text": "Maths Maniya Golden Maple-3", "qty": 8, "rate": 275},
+	{"text": "Reynolds pen blue", "code": "KGS-PT-PEN", "qty": 3, "unit": "Pkt", "rate": 80},
+	{"text": "Koncept Intellect G.K. book five", "qty": 4, "rate": 199},
+	{"text": "Mystery gadget qqx", "qty": 2, "rate": 40},
+])
 SO_READING = {"paper_kind": "school_book_list", "school_or_class": "R.D. Public School — Class III",
 	"lines": [{"text": "Sunshine English Reader 3"}, {"text": "Golden Maple Maths Maniya 3"}]}
 
@@ -233,6 +242,7 @@ print(json.dumps({{"state": po.workflow_state, "owner": po.owner, "remark": po.c
 		check("4 names remembered for the supplier", got["aliases"] >= 4, got["aliases"])
 
 		# ── 2. same paper again: remembered → Sure, supplier same as last time ─
+		write_spec(PO_READING2)
 		page.get_by_role("link", name="Read another paper").click()
 		page.locator("input[type=file][multiple]").set_input_files(SAMPLE)
 		page.get_by_role("button", name="Read the paper (1 page)").click()
@@ -242,6 +252,11 @@ print(json.dumps({{"state": po.workflow_state, "owner": po.owner, "remark": po.c
 			expect(line_card(page, "Maths Maniya Golden Maple-3").get_by_text("KGS-PT-MM3-OLD")).to_be_visible()))
 		ok("2nd paper: duplicate paper number warned", lambda: expect(page.get_by_text("Already used?")).to_be_visible())
 		page.screenshot(path=S + "shot_paper_second.png", full_page=True)
+		page.get_by_role("button", name="Next: make the Purchase Order").click()
+		ok("2nd paper: save screen warns the rates miss the paper's final total", lambda: expect(
+			page.get_by_text(re.compile(r"come to ₹6,316\.00, but the paper's final total is only ₹4,800\.00 \(it says \"25% on MRP\"\)"))).to_be_visible(timeout=10000))
+		page.screenshot(path=S + "shot_paper_rate_warning.png", full_page=True)
+		page.get_by_text("Back", exact=True).click()
 		page.get_by_role("button", name="Discard this paper").click()
 		ok("discarded", lambda: expect(page.get_by_text("This paper was discarded")).to_be_visible(timeout=10000))
 

@@ -90,7 +90,7 @@ of being blocked (Stock Users still get the red "Only X in …" and must ask a m
 - Production context (2026-10-02): SBGD has 1,440 negative items (−97,115 units) and 2,749 at zero; 1,408 of them have
   no valuation and only 93 of those a last purchase rate — expect managers to type rates often.
 
-## Order from Paper (DEPLOYED 2026-10-20 03:40 IST, `0c103da` — SWITCHED OFF until the AI key is set)
+## Order from Paper (DEPLOYED 2026-10-20 03:40 IST, `0c103da` — ON since 03:44 IST; net-rate fix = CHANGELOG 1.11.1)
 Deployed after hours (0 bills in the last 10 min; last bill 19:26 the evening before) by the runbook below: niced DB
 backup `20261020_033814-splashbox_in-database.sql.gz` (96 s), anchor `/root/predeploy_20261020_order_from_paper/`
 (HEAD before `8867aa7`, apps.txt, reload logs), ff-merge, `reload_doc` × 4, Order Paper Settings saved with
@@ -98,6 +98,16 @@ backup `20261020_033814-splashbox_in-database.sql.gz` (96 s), anchor `/root/pred
 purchase staff), `app_hooks` + website cache dropped, HUP web. Verified: 8 routes 200 over HTTPS with the new bundle,
 Guest 403 on the paper endpoints, 0 Error Log / 0 nginx 5xx / 0 tracebacks after the deploy, all 18 Stock Users keep
 the app + long session, the 3 Shop Owners open Settings, `post_deploy_verify_live.sh` all passed.
+The user then set `kgs_paper_ai_key` (verified with `GET /v1/models` → 200 and one tiny Haiku call) and switched it ON in
+`/staff/settings` at 03:44 IST.
+
+**First real papers (20-10, 04:00–04:30 IST) found a rate bug.** On both papers (a Progress quotation photo, a Selina
+PDF) the AI put the LIST price in `rate` and the discount in its own field, and the old `paper_rate()` trusted `rate`
+first — PUR-ORD-2026-00710 (Selina, a test draft, never sent) was saved at 605/580 instead of 484/464. Reading and
+matching were right; amounts and totals were read exactly. Fix (1.11.1): the net rate is worked out from the numbers,
+never from the label (see "Saving" below); a discount printed only at the bottom is put on the lines when it explains
+the printed totals exactly; the AI is told to copy rate/amount as printed and never apply a discount itself; the save
+screen warns when the rates do not explain the paper's totals.
 **To switch on:** set the key (runbook step 4), then the owner ticks *Order from paper is on* in `/staff/settings`;
 then one real paper end to end (step 7).
 
@@ -127,9 +137,13 @@ The fuzzy index is built only inside the background job (never in a web worker �
 **What `save_order` enforces** (the phone's checks are only convenience):
 - Refused while any amber line is unchecked; red/left-out lines are listed in the PO remark / SO comment.
 - Never back-dated (transaction date = today); needed-by ≥ today; warehouse = a leaf warehouse of the company.
-- PO rate = the paper's (printed rate, else amount ÷ qty, else MRP − discount) or "our usual buying price"; a line
-  with neither a paper price nor a buying price goes in at ₹0 (the save screen counts those). SO prices always come
-  from our selling list, never from the paper.
+- PO rate = the paper's NET rate (`paper_read.paper_rate`) or "our usual buying price". Net rate: with a discount, the
+  line amount ÷ qty — unless that equals the list price (MRP, else the rate column), then list × (1 − discount); no
+  amount → the rate column when it already equals MRP × (1 − discount), else list × (1 − discount). No discount: amount
+  ÷ qty, else the rate column. The save screen warns when Σ net rate × qty matches neither printed total (before tax,
+  or with 5/12/18/28/40 % GST), and loudly when the final total is BELOW the lines (a discount missing from the
+  rates). A line with neither a paper price nor a buying price goes in at ₹0 (the save screen counts those). SO
+  prices always come from our selling list, never from the paper.
 - Inserted as the user (normal ERPNext permissions); "Send for Approval" via `apply_workflow` inside a savepoint —
   if it fails the PO stays a draft and the screen says why.
 - Idempotent: `client_ref` + Redis lock; a paper no. already used for this party → "Save anyway?".
@@ -317,12 +331,13 @@ Option B (2026-10-03): `check_staff_reco.py` 43/43 (all six examples) · `check_
 make fresh items per run (fixed test items drifted as suites moved stock around).
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.
-Order from Paper (2026-10-20): `check_paper_api.py` 130/130 (normalising, class guard, MRP twins, alias ladder,
+Order from Paper (2026-10-20; counts after the 1.11.1 net-rate fix): `check_paper_api.py` 135/135 (net rate from the
+two real papers, bottom-of-paper discount, normalising, class guard, MRP twins, alias ladder,
 upload refusals, fallback read, version conflicts, save PO + approval, idempotency, duplicate paper, learning,
 SO + copies, roles, long-session rule, settings, page cap, rate limit; the real Anthropic code path against a local
-mock server incl. 529 retry / 401 / credit error; the key in no log or document) · `check_paper_browser.py` 69/69
+mock server incl. 529 retry / 401 / credit error; the key in no log or document) · `check_paper_browser.py` 70/70
 (phone viewport with a real worker: PO paper → choose supplier → Correct / Change twin / search → sent for approval;
-same paper again → remembered + duplicate warning; SO with copies; owner settings + remembered names). Regressions
+same paper again → remembered + duplicate warning + rate-total warning; SO with copies; owner settings + remembered names). Regressions
 after it: check_staff_api 63/63, check_staff_http 37/37, check_staff_bulk 43/43, check_staff_reco 43/43,
 check_staff_browser 22/22, check_staff_reco_browser 20/20, check_staff_bulk_browser 18/18.
 Not proven locally: the owners' approval e-mail (the job runs, but this Mac's wkhtmltopdf is an Intel binary —

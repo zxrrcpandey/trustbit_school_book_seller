@@ -6,7 +6,15 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 
 ---
 
-## [1.11.0] - 2026-10-20 (Order from Paper — live on splashbox.in 03:40 IST, `0c103da`; switched off until the AI key is set)
+## [1.11.1] - 2026-10-20 (Order from Paper — net-rate fix after the first real papers)
+
+### Fixed
+- **Purchase Orders from a paper were priced at the LIST price when the paper printed the discount in its own column or at the bottom** (Selina PDF: 605/580 instead of 484/464; Progress photo: 40 instead of 28). The AI copies the column labelled "Rate", which is often the price before discount; the order rate trusted it. The net rate is now worked out from the printed numbers (amount ÷ qty, list price less discount), never from the label
+- A discount printed only at the bottom of the paper ("Less: Discount 30%") is applied to the lines when it explains the printed totals exactly
+- The AI is told to copy rate and amount exactly as printed and never to apply a discount itself
+- The save screen warns when the order's rates do not add up to the paper's totals, and loudly when the paper's final total is below the lines (a discount missing from the rates)
+
+## [1.11.0] - 2026-10-20 (Order from Paper — live on splashbox.in 03:40 IST, `0c103da`; switched on 03:44 IST after the AI key was set)
 
 ### New Features
 - **Order from Paper in the staff app** (`/staff/paper`): a photo or PDF of a supplier's quotation, price list or order list becomes a draft Purchase Order (optionally sent straight for the owners' approval); a school book list becomes a draft Sales Order (switched off until the owner turns it on). The AI (Claude Haiku 5.5, falling back once to Sonnet 5.5 when a reading looks wrong) reads the paper; nothing is ever submitted by the app

@@ -186,6 +186,7 @@
           <label class="flex min-h-secondary items-center gap-3"><input v-model="form.rate_mode" type="radio" value="paper" class="h-5 w-5 accent-[var(--kgs-brand-deep)]" />The paper's rates{{ paper.paper.discount_note ? ` (${paper.paper.discount_note})` : "" }}</label>
           <label class="flex min-h-secondary items-center gap-3"><input v-model="form.rate_mode" type="radio" value="ours" class="h-5 w-5 accent-[var(--kgs-brand-deep)]" />Our usual buying price</label>
           <template v-if="form.rate_mode === 'paper'">
+            <p v-if="rateTotalWarning" class="mt-2 rounded-lg bg-warn-bg p-2 text-[14px] font-semibold text-warn-text">{{ rateTotalWarning }}</p>
             <p v-for="(w, i) in rateWarnings" :key="i" class="mt-2 rounded-lg bg-warn-bg p-2 text-[14px] text-warn-text">{{ w }}</p>
             <p v-if="noPrice" class="mt-2 text-[14px] text-ink-muted">{{ noPrice }} line{{ noPrice === 1 ? " has" : "s have" }} no price on the paper — the ERP's buying price is used.</p>
           </template>
@@ -415,6 +416,24 @@ const rateWarnings = computed(() =>
     })
     .filter(Boolean)
 )
+// The net rates must explain one of the paper's printed totals (before tax, or
+// with a usual GST rate on top); otherwise a discount was probably missed.
+const rateTotalWarning = computed(() => {
+  const p = paper.value?.paper || {}
+  const all = lines.value
+  if (!all.length || all.some((l) => !l.paper_rate || !l.paper_qty)) return ""
+  const net = all.reduce((s, l) => s + l.paper_rate * Number(l.paper_qty), 0)
+  const near = (a, b) => Math.abs(a - b) <= Math.max(1, b * 0.005)
+  const head = `At the paper's rates the lines come to ₹${money(net)}, but the paper's`
+  // a final total below the lines = a discount that is not in the rates
+  if (p.grand_total && p.grand_total < net - Math.max(1, net * 0.005)) {
+    const note = p.discount_note && !all.some((l) => l.discount_percent) ? ` (it says "${p.discount_note}")` : ""
+    return `${head} final total is only ₹${money(p.grand_total)}${note}. A discount may be missing from the rates — check them before saving.`
+  }
+  const totals = [p.items_total, p.grand_total].filter(Boolean)
+  if (!totals.length || totals.some((t) => [0, 5, 12, 18, 28, 40].some((g) => near(net * (1 + g / 100), t)))) return ""
+  return `${head} total is ₹${money(totals[totals.length - 1])}. Check the rates before saving.`
+})
 const noPrice = computed(() => kept.value.filter((l) => !l.paper_rate).length)
 const learnCount = computed(() => kept.value.filter((l) => l.by_person || !["alias_code", "alias_text"].includes(l.how)).length)
 

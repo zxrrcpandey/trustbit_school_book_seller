@@ -425,7 +425,7 @@ READ_SYSTEM = """You read business papers for KGS, a school-book and stationery 
 Record every item line on every page with the record_paper tool, in the order printed.
 - Copy item text as printed: title, publisher/brand, class, part, edition. Do not translate, correct or complete it.
 - One entry per item line. Skip headings, sub-totals, tax, freight and signature rows.
-- Numbers as plain numbers: "1,250.00" is 1250. A value that is not printed is null - never guess or calculate one.
+- Numbers as plain numbers: "1,250.00" is 1250. A value that is not printed is null - never guess or calculate one. Copy rate and amount exactly as printed; never apply a discount yourself.
 - If a discount is written for the whole paper or a section (e.g. "Less 25% on MRP"), put it in discount_note and in discount_percent of each line it applies to that has no discount of its own.
 - If a class / grade applies to a section ("Class 3" heading, a school list for one class), fill class_hint on every line in that section.
 - party_name / party_gstin = the business or school that ISSUED the paper (letterhead, stamp), not the buyer KGS.
@@ -459,10 +459,10 @@ READ_TOOL = {
 						"class_hint": {"type": "string", "description": "Class / grade for this line, e.g. 3, LKG."},
 						"qty": _NUM,
 						"unit": {"type": "string", "description": "Unit as printed: PCS, PKT, BOX, SET, DOZ ... Empty if none."},
-						"mrp": dict(_NUM, description="MRP / list price per unit."),
+						"mrp": dict(_NUM, description="MRP per unit, if printed in its own column."),
 						"discount_percent": _NUM,
-						"rate": dict(_NUM, description="Price per unit after discount, if printed."),
-						"amount": dict(_NUM, description="Line total, if printed."),
+						"rate": dict(_NUM, description="The unit price exactly as printed in the rate / price column, whether that is before or after discount. Do not calculate it."),
+						"amount": dict(_NUM, description="Line total exactly as printed."),
 						"unclear": {"type": "boolean"},
 					},
 					"required": ["text"],
@@ -531,6 +531,7 @@ def clean_reading(raw):
 			break
 	gstin = re.sub(r"[^0-9A-Z]", "", str(raw.get("party_gstin") or "").upper())
 	kind = str(raw.get("paper_kind") or "other")
+	_whole_paper_discount(lines, _txt(raw.get("discount_note"), 140), _num(raw.get("items_total")), _num(raw.get("grand_total")))
 	return {
 		"paper_kind": kind if kind in READ_TOOL["input_schema"]["properties"]["paper_kind"]["enum"] else "other",
 		"party_name": _txt(raw.get("party_name"), 140),
@@ -549,15 +550,54 @@ def clean_reading(raw):
 	}
 
 
+def _whole_paper_discount(lines, note, items_total, grand_total):
+	"""A discount printed only at the bottom ("Less: Discount 30%") that the AI did
+	not copy onto the lines: apply it when it explains the gap between the item
+	total and the final total exactly."""
+	if not lines or any(ln.get("discount_percent") for ln in lines) or not (items_total and grand_total):
+		return
+	m = re.search(r"(\d{1,2}(?:\.\d+)?)\s*%", note or "")
+	if not m:
+		return
+	p = flt(m.group(1))
+	if 0 < p < 100 and abs(grand_total - items_total * (1 - p / 100)) <= max(1.0, 0.005 * items_total):
+		for ln in lines:
+			ln["discount_percent"] = p
+
+
+def _near(a, b):
+	return abs(flt(a) - flt(b)) <= max(0.01, 0.005 * abs(flt(b)))
+
+
 def paper_rate(line):
-	"""Price per paper unit: printed rate, else line amount ÷ qty, else MRP less
-	the printed discount. None when the paper gives no price."""
-	if line.get("rate"):
-		return flt(line["rate"])
-	if line.get("amount") and line.get("qty"):
-		return round(flt(line["amount"]) / flt(line["qty"]), 4)
-	if line.get("mrp") and line.get("discount_percent") is not None:
-		return round(flt(line["mrp"]) * (1 - flt(line["discount_percent"]) / 100), 4)
+	"""NET price per paper unit (what KGS pays, before tax), worked out from the
+	numbers — never from the AI's label: on real papers the "rate" column is
+	often the list price with the discount in its own column (Selina 6771:
+	rate 605, 20% off, amount 14,520 → 484; Progress G-2904: rate 40, "Less 30%"
+	at the bottom, amount 2,200 → 28). None when the paper gives no price.
+	- A printed discount applies to the list price: the MRP when printed, else
+	  the rate column — unless the line amount (or the rate itself) is already
+	  that list price less the discount.
+	- No discount: the line amount ÷ qty, else the rate."""
+	qty, rate, mrp, amount = flt(line.get("qty")), flt(line.get("rate")), flt(line.get("mrp")), flt(line.get("amount"))
+	disc = line.get("discount_percent")
+	per_unit = round(amount / qty, 4) if amount and qty else 0
+	if disc:
+		off = 1 - flt(disc) / 100
+		gross = mrp or rate
+		if per_unit:
+			if gross and _near(per_unit, gross) and not _near(per_unit, gross * off):
+				return round(gross * off, 4)  # the amount is before the discount
+			return per_unit  # already net (or an odd scheme): trust what is billed on the line
+		if rate and mrp and _near(rate, mrp * off):
+			return rate  # a net-rate column next to the MRP
+		if gross:
+			return round(gross * off, 4)
+		return None
+	if per_unit:
+		return per_unit
+	if rate:
+		return rate
 	return None
 
 
