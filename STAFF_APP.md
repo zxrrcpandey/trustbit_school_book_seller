@@ -124,7 +124,11 @@ queue (`job_id` per paper, deduplicated, after commit) → AI reading (forced to
 "Ready" → the check screen polls every 2 s → person checks lines → `save_order` → draft PO/SO → names learned.
 
 **Reading screen (1.12.0).** The reading is streamed (`stream: true`; the forced tool's input arrives as
-`input_json_delta` fragments). `paper_read.LineStream` pulls out each finished object of the top-level `lines` array
+`input_json_delta` fragments) WITH the `anthropic-beta: fine-grained-tool-streaming-2025-05-14` header — without it
+the API streams a tool's input one whole top-level value at a time, so every line arrives together at the end
+(measured on production 20-10, 30 lines, Haiku: all at 5.1 s; with the header from 1.3 s to 5.0 s; same tokens). That
+mode does not validate the JSON: a final JSON that does not parse keeps the complete lines; a 400 naming the beta
+re-reads without the header (lines then arrive at the end). `paper_read.LineStream` pulls out each finished object of the top-level `lines` array
 (and the fields written before it: who sent the paper, its number); `paper.LiveReading` keeps the cleaned lines so far
 (`text, qty, unit, rate, mrp, amount, page` — as printed, no matching) in Redis `kgs_paper_live:<paper>` (30 min TTL,
 written ≤ once per 0.8 s, deleted when the job ends — never the DB). `get_paper(light=1, since, run)` returns only the
@@ -347,9 +351,9 @@ Option B (2026-10-03): `check_staff_reco.py` 43/43 (all six examples) · `check_
 make fresh items per run (fixed test items drifted as suites moved stock around).
 Not testable locally: the PDF itself (wkhtmltopdf cannot resolve `site1.local`; the HTML render was checked)
 and real phones — do step 9 of the runbook.
-Order from Paper (2026-10-20; counts after 1.12.0 — live lines): `check_paper_api.py` 150/150 (+ the stream scanner
+Order from Paper (2026-10-20; counts after 1.12.0 — live lines): `check_paper_api.py` 152/152 (+ the stream scanner
 over random fragment sizes / a cut-off answer, live lines per poll + new run on restart, the fallback starting over,
-streamed SSE from the mock incl. a stream broken half-way) · `check_paper_browser.py` 83/83 (+ cards with the printed
+streamed SSE from the mock incl. a stream broken half-way, the beta header sent / refused, a broken final JSON) · `check_paper_browser.py` 83/83 (+ cards with the printed
 text while the fake AI writes slowly, progress text, photo from memory, tick, a 2-page PDF drawn by pdf.js from memory
 and after a reload from the stored copy, page 1 ticked when page 2 starts). Earlier (1.11.1): 135/135 (net rate from the
 two real papers, bottom-of-paper discount, normalising, class guard, MRP twins, alias ladder,

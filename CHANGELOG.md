@@ -14,7 +14,7 @@ All notable changes to the **Trustbit School Book Seller** app are documented he
 - PDF pages are drawn on the phone with pdf.js 4.10.38 (legacy build, about 1.8 MB, downloaded only the first time a PDF is shown; plain sheets stand in if it cannot load); pages just sent are shown from the phone's memory, a paper opened later loads the stored copy
 
 ### Changed
-- The AI reading is streamed (Anthropic server-sent events): the read job pulls each finished line out of the arriving JSON (`paper_read.LineStream`) and keeps the lines so far in Redis (`kgs_paper_live:<paper>`, never the database, removed when the reading ends); the 2-second poll returns only the lines the phone does not have yet. Same model, same tokens, same cost. A stream that breaks half-way is asked for once more (the cards start over)
+- The AI reading is streamed (Anthropic server-sent events, with fine-grained tool streaming so the lines arrive one by one — without it they all came at the end, measured on production): the read job pulls each finished line out of the arriving JSON (`paper_read.LineStream`) and keeps the lines so far in Redis (`kgs_paper_live:<paper>`, never the database, removed when the reading ends); the 2-second poll returns only the lines the phone does not have yet. Same model, same tokens, same cost. A stream that breaks half-way is asked for once more (the cards start over); a final JSON that does not parse keeps the complete lines
 
 ## [1.11.1] - 2026-10-20 (Order from Paper — net-rate fix after the first real papers; live on splashbox.in 05:35 IST, `de8bcc8`)
 

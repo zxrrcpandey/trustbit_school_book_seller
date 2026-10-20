@@ -612,11 +612,14 @@ SEEN = []
 PLAN = []
 
 
-def sse(payload, cut=None):
+def sse(payload, cut=None, bad=False):
 	"""A message as server-sent events, the tool input in small JSON fragments.
-	cut = stop after that many fragments with an overloaded error event."""
+	cut = stop after that many fragments with an overloaded error event;
+	bad = the JSON breaks after the lines (fine-grained streaming does not validate it)."""
 	block = payload["content"][0]
 	text = json.dumps(block["input"])
+	if bad:
+		text = text[:-1] + ', "items_total": 1,,}'
 	ev = [{"type": "message_start", "message": {"id": payload["id"], "type": "message", "role": "assistant", "model": payload["model"],
 		"content": [], "stop_reason": None, "usage": {"input_tokens": payload["usage"]["input_tokens"], "output_tokens": 1}}},
 		{"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}},
@@ -642,15 +645,17 @@ class Mock(BaseHTTPRequestHandler):
 		body = json.loads(self.rfile.read(int(self.headers["content-length"])))
 		SEEN.append({"headers": dict(self.headers), "body": body})
 		status, payload = PLAN.pop(0) if PLAN else (200, None)
-		cut = None
+		cut, bad = None, False
 		if status == "cut":
 			status, cut, payload = 200, payload, None
+		elif status == "badjson":
+			status, bad, payload = 200, True, None
 		if payload is None:
 			payload = {"id": "msg_1", "type": "message", "model": body["model"] + "-20261001", "stop_reason": "tool_use",
 				"content": [{"type": "tool_use", "id": "t1", "name": body["tool_choice"]["name"], "input": READING1}],
 				"usage": {"input_tokens": 6000, "output_tokens": 2500}}
 			if body.get("stream"):
-				raw = sse(payload, cut)
+				raw = sse(payload, cut, bad)
 				self.send_response(200)
 				self.send_header("content-type", "text/event-stream")
 				self.end_headers()
@@ -686,13 +691,25 @@ check("anthropic: image block + forced tool", body["messages"][0]["content"][0][
 u = json.loads(frappe.db.get_value("Order Paper", m1, "usage_json"))[0]
 check("anthropic: tokens + cost priced on the requested id", u["input_tokens"] == 6000 and u["output_tokens"] == 2500
 	and abs(u["usd"] - (6000 * 0.10 + 2500 * 0.50) / 1e6) < 1e-9 and u["served_model"].endswith("-20261001"))
-check("anthropic: the reading is streamed, and all 6 lines arrived", body.get("stream") is True and len(q["lines"]) == 6)
+check("anthropic: the reading is streamed line by line (fine-grained beta), and all 6 lines arrived",
+	body.get("stream") is True and h.get("anthropic-beta") == pr.STREAM_BETA and len(q["lines"]) == 6, h.get("anthropic-beta"))
 PLAN[:] = [("cut", 9)]
 m4 = upload()
 n0 = len(SEEN)
 q = read(m4)
 check("anthropic: a stream that breaks half-way is asked for once more, then Ready",
 	q["status"] == "Ready" and len(SEEN) - n0 == 2 and len(q["lines"]) == 6, (q["status"], len(SEEN) - n0, q.get("error")))
+PLAN[:] = [(400, {"type": "error", "error": {"type": "invalid_request_error", "message": "Unexpected value(s) `fine-grained-tool-streaming-2025-05-14` for the `anthropic-beta` header."}})]
+paper.reread(m4)
+n0 = len(SEEN)
+q = read(m4, None, "reread")
+check("anthropic: beta header refused → read again without it, still Ready",
+	q["status"] == "Ready" and len(SEEN) - n0 == 2 and "anthropic-beta" not in SEEN[-1]["headers"] and SEEN[-1]["body"].get("stream") is True,
+	(q["status"], q.get("error")))
+PLAN[:] = [("badjson", None)]
+paper.reread(m4)
+q = read(m4, None, "reread")
+check("anthropic: final JSON broken after the lines → the complete lines are kept", q["status"] == "Ready" and len(q["lines"]) == 6, (q["status"], q.get("error")))
 PLAN[:] = [(529, {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}})]
 m2 = upload(files=[{"name": "d.pdf", "data": pdf(1)}])
 q = read(m2)

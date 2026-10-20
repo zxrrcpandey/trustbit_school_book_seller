@@ -26,6 +26,10 @@ from frappe.utils import cint, flt, get_first_day, now_datetime, nowdate
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
+# Without it a tool's input streams one whole top-level value at a time, so all
+# the lines arrive together at the end (measured on production, 30 lines: all at
+# 5.1 s; with it: from 1.3 s to 5.0 s). Same tokens, same price.
+STREAM_BETA = "fine-grained-tool-streaming-2025-05-14"
 READ_TIMEOUT = 240  # seconds per AI call (the job's own timeout is 600)
 READ_MAX_TOKENS = 16000
 RERANK_MAX_TOKENS = 4000
@@ -299,6 +303,8 @@ class AnthropicProvider(Provider):
 		if on_progress:
 			body["stream"] = True  # the lines reach the phone while the AI is still writing
 		headers = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"}
+		if on_progress:
+			headers["anthropic-beta"] = STREAM_BETA
 		last = ""
 		for attempt in range(2):
 			try:
@@ -325,6 +331,8 @@ class AnthropicProvider(Provider):
 				return self._parse(res, tool["name"], model)
 			msg = _error_text(res)
 			last = f"HTTP {res.status_code}: {msg}"
+			if res.status_code == 400 and headers.pop("anthropic-beta", None) and "beta" in msg.lower():
+				continue  # the beta was withdrawn: read without it (the lines then arrive at the end)
 			if res.status_code in self._RETRY and attempt == 0:
 				time.sleep(min(20, max(2, flt(res.headers.get("retry-after")) or 5)))
 				continue
@@ -415,7 +423,9 @@ class AnthropicProvider(Provider):
 			try:
 				data = json.loads(text) if text.strip() else {}
 			except ValueError:
-				data = scan.partial() if stop == "max_tokens" else None
+				# cut off (max_tokens), or a slip the fine-grained stream does not
+				# catch: keep the lines that were complete
+				data = scan.partial() if stop == "max_tokens" or scan.lines else None
 		if not isinstance(data, dict):
 			raise PaperReadError(
 				_("The paper could not be read. If it is very long, send fewer pages at a time."),
