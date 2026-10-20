@@ -135,8 +135,12 @@ any model that sends that 400, remembered per process) get `tool_choice` `{"type
 true}`, the line `TOOL_ONLY` appended to the system prompt, `max_tokens + THINKING_ROOM` (they always think first — a
 silent ~8 s before the first line) and, when streamed, `eager_input_streaming: true` on the tool instead of the beta
 header. A text answer (`end_turn` without the tool) is asked for once more. "Not available" now means 404 / not found only.
-Settings note: on 20-10 the Better model is Haiku (= the main model), so the automatic second read is OFF — the user's
-choice at 17:55 IST; set Better model = Sonnet 5.5 in `/staff/settings` to turn it back on.
+Settings note: on 20-10 the Better model is Haiku (= the main model), so the automatic second read is OFF — the user
+chose to leave it so; set Better model = Sonnet 5.5 in `/staff/settings` to turn it back on.
+Deployed 2026-10-20 18:51 IST, light (ff-merge `fbbf536`→`ba44307` + HUP web; 0 bills in the 10 min before, 0 papers
+reading). Verified: a Sonnet 5.5 read of OP-2026-00042 through the default queue (nothing saved) — 12 s, 5 lines,
+₹6,744 = the paper; 0 Error Log, 0 nginx 5xx. Anchor `/root/predeploy_20261020_model_fix/`. Rollback: `git reset --hard
+fbbf536` (as frappe_user) + HUP web.
 
 **Flow.** `/staff/paper` → `paper.upload_paper` (≤ 10 photos re-encoded to JPEG ≤ 2000 px, or one PDF ≤ 10 MB /
 20 pages; magic-byte check; private Files `OP-…-N.jpg/pdf`; Order Paper "Uploaded") → read job on the **default**
